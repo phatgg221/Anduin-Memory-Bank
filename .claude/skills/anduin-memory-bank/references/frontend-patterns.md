@@ -210,6 +210,104 @@ export function useArtifactLink() {
 
 The page decides what to do with the URL. For `attachment`, use `window.location.assign(url)` — it downloads without leaving the page. For `inline`, use `window.open(url, "_blank", "noopener")`.
 
+## Data loading — no N+1 from the UI
+
+A screen loads in a **fixed number of requests**: about one per pane, plus the session restore and health. That count must not depend on how many rows are shown.
+
+```tsx
+// ✗ N+1: one request per match card
+const matches = useTriageJob(jobId).data?.result?.matches ?? [];
+const cases = useQueries({
+  queries: matches.map((m) => ({ queryKey: queryKeys.vault.case(m.caseId), queryFn: () => vaultService.getCase(m.caseId) })),
+});
+
+// ✓ One request: the job view already carries everything the match strip, delta matrix and kit render
+const job = useTriageJob(jobId); // GET /api/triage/{id} → { brief, matches: [{ caseId, title, jurisdiction, similarityScore,
+                                 //   author: { name, status } }], report, artifacts: [{ id, name, kind }] }
+```
+
+| Smell | Fix |
+|---|---|
+| `useQueries` / a `.map()` of hooks over IDs | Widen the list/view endpoint, or add a batch endpoint `GET /api/vault/artifacts?ids=a,b,c` (one call) |
+| A row component that "needs one more field" | Add the field to the endpoint that feeds the list. Components can't fetch (ESLint), so the page must not compensate per row |
+| Waterfall: fetch A → use A's result to fetch B → C | Ask the backend for the composed view (one service call, a fixed number of SQL queries) |
+| Re-fetching a case you just saw in a list | Seed the detail cache from the list (below), or use the list row as `placeholderData` |
+| Polling N jobs | Poll one endpoint that returns all active jobs |
+
+```ts
+// Seed detail caches from a list response, so opening a row renders instantly (only when the shapes match).
+queryFn: async () => {
+  const cases = await vaultService.listCases(filters);
+  for (const item of cases) queryClient.setQueryData(queryKeys.vault.case(item.id), item);
+  return cases;
+},
+```
+
+**Review check:** open the network tab on a screen with many rows, and confirm the request count doesn't grow with the rows.
+
+## Mutations — UI first, then the API, roll back on failure
+
+Default for every user action that changes data:
+1. **Update the cache optimistically** in `onMutate`, so the UI reflects the action immediately.
+2. **Send the request.** Transient failures (network or 5xx) on idempotent requests are retried automatically, and the UI stays optimistic meanwhile.
+3. **On final failure, roll back** to the snapshot and tell the user, offering a Retry.
+4. **Re-sync** with the server once the last pending write for that resource settles.
+
+```ts
+// store/vault.ts — e.g. ticking an artifact into the starter kit (pane 03)
+export function useSetKitArtifact(caseId: string) {
+  const queryClient = useQueryClient();
+  const key = queryKeys.vault.case(caseId);
+  const mutationKey = ["vault", "case", caseId, "kit"];
+
+  return useMutation<CaseDetail, ApiRequestError, { artifactId: string; selected: boolean }, { previous?: CaseDetail }>({
+    mutationKey,
+    mutationFn: ({ artifactId, selected }) => vaultService.setKitArtifact(caseId, artifactId, selected), // PUT: idempotent
+    // Same scope → requests go out one at a time, in click order. onMutate still runs instantly for every click.
+    scope: { id: `vault-case:${caseId}` },
+    retry: retryTransient,
+    onMutate: async ({ artifactId, selected }) => {
+      await queryClient.cancelQueries({ queryKey: key }); // an in-flight refetch must not overwrite the optimistic state
+      const previous = queryClient.getQueryData<CaseDetail>(key);
+      queryClient.setQueryData<CaseDetail>(key, (old) =>
+        old && { ...old, artifacts: old.artifacts.map((a) => (a.id === artifactId ? { ...a, selected } : a)) },
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, snapshot) => {
+      if (snapshot?.previous) queryClient.setQueryData(key, snapshot.previous); // roll back
+    },
+    onSettled: () => {
+      // Re-sync once the last write for this case lands (this mutation still counts as pending here).
+      if (queryClient.isMutating({ mutationKey }) === 1) queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
+}
+```
+
+```ts
+// lib/apiError.ts — add with the first optimistic mutation
+export function retryTransient(failureCount: number, error: unknown): boolean {
+  const { status } = toApiRequestError(error);
+  return failureCount < 2 && (status === undefined || status >= 500); // network / 5xx only; 4xx never succeeds on retry
+}
+```
+
+- **Only auto-retry idempotent writes:** `PUT`/`PATCH` with explicit state, `DELETE`, or a `POST` with a client-generated `id` (`crypto.randomUUID()`), which the API dedupes. Otherwise set `retry: false`.
+- **Creating items:** insert the optimistic row with the client-generated `id`. When the server responds, the row is reconciled by the same id: no flicker, no duplicate.
+- **One component showing the result?** You can skip the cache and render `mutation.variables` while `mutation.isPending` (React Query's "optimistic via UI"). Use the cache version above when several components read the data.
+- **Telling the user:** when the shadcn `sonner` toast is added, show `error.message` (the field errors go to the form) with a **Retry** action that calls `mutation.mutate(mutation.variables)`. Never fail silently: a rollback without a message looks like the click didn't register.
+- **Pending state:** keep optimistic UI visually final, but you may dim the affected row slightly (`opacity-70`) while `isPending`.
+
+**Don't** make these optimistic (show a pending state instead):
+
+| Action | Why |
+|---|---|
+| Login, register, logout | The server decides; the session must be real before the UI changes |
+| Starting an analysis (`POST /api/triage`) | Only the server produces the job. Navigate straight to the job's progress view (step labels), not a fake result |
+| Anything the server computes | LLM output, similarity scores, presigned URLs |
+| Irreversible / outward actions | Deleting shared data, sending email. Confirm first; use "undo" instead of optimistic delete if it's added later |
+
 ## `app/providers.tsx` (as committed)
 
 - **Providers:** `QueryClientProvider` (staleTime 30 s, retry 1) wrapping shadcn's `TooltipProvider`.

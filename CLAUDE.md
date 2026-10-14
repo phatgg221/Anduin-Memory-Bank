@@ -37,6 +37,8 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
 
 - The browser reaches the backend only via the Next `/api/*` rewrite. The sole exception is presigned MinIO GETs for raw files.
 - Frontend: `page → store hook (React Query) → service → lib/axiosClient → /api`. Components are presentational. ESLint enforces this.
+- **No N+1 fetching from the UI:** a fixed number of requests per screen, never one per row. The backend serves view-shaped endpoints with a fixed number of SQL queries.
+- **UI first:** mutations are optimistic. Update the cache, send the request, roll back and notify on error (after retrying transient failures), then re-sync. Writes are idempotent. Exceptions: auth, server-computed results, irreversible actions.
 - UI: Dejavu tokens only (no raw hex). Square corners, 1px hairlines, no shadows, light theme. Use the `components/brand/` kit before composing raw classes.
 - Backend: `router → service → SQLAlchemy`, one folder per domain in `backend/app/modules/`, shared infrastructure in `backend/app/core/`. Dependency direction: `triage → intelligence → vault → core`; any module may use `auth.deps.CurrentUser`.
 - Schema changes = an Alembic migration (`bun run db:revision "msg"` → review → `bun run db:migrate`). Tokens never go in URLs, logs, or localStorage.

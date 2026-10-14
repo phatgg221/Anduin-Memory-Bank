@@ -193,6 +193,75 @@ async def get_triage(job_id: str, user: CurrentUser, session: SessionDep) -> Tri
 
 Multipart forms use the `python-multipart` dependency (already installed).
 
+## Serving views without N+1 (backend half of the UI rule)
+
+The frontend loads a screen in a fixed number of requests (frontend-patterns § Data loading). So the API provides **view-shaped endpoints**: one response per screen/pane, containing every field the UI renders, built with a **fixed number of SQL queries** no matter how many rows.
+
+```python
+# models.py — make accidental lazy loads impossible (async would raise MissingGreenlet anyway; this fails clearly)
+class HistoricalCase(Base):
+    artifacts: Mapped[list["Artifact"]] = relationship(back_populates="case", lazy="raise")
+    author: Mapped["Person"] = relationship(lazy="raise")
+
+# service.py — load what the view needs, explicitly
+async def list_cases(session: AsyncSession) -> list[HistoricalCase]:
+    stmt = (
+        select(HistoricalCase)
+        .options(selectinload(HistoricalCase.artifacts), joinedload(HistoricalCase.author))  # 2–3 queries total
+        .order_by(HistoricalCase.created_at.desc())
+    )
+    return list((await session.scalars(stmt)).unique())
+
+# Counts/aggregates in SQL, never len(case.artifacts) over a loop of loads
+artifact_counts = select(Artifact.case_id, func.count()).group_by(Artifact.case_id)
+```
+
+| Never | Instead |
+|---|---|
+| `await session.get(...)` / a query inside a `for` loop | One `select … where id in (…)` (or `selectinload`) and a dict lookup |
+| Client calling `GET /items/{id}` N times | A batch endpoint: `ids: Annotated[list[uuid.UUID], Query(max_length=100)]` → `where(Model.id.in_(ids))` |
+| A detail endpoint the list page needs per row | Put those fields in the list response (a lean `…ListItem` schema) |
+| Python-side counting/filtering of loaded rows | `func.count`, `group by`, `where`, `exists` in SQL |
+
+### Writes that make optimistic UI safe
+
+- **Return the updated resource** (or the created one), so the client reconciles without a refetch.
+- **Idempotent by design**, because the client retries transient failures:
+  - `PUT`/`PATCH` carry explicit target state (`{"selected": true}`), not toggles.
+  - `DELETE` returns 204 even if the row is already gone.
+  - Creates accept a client-generated `id` (UUID) and dedupe on it (`INSERT … ON CONFLICT (id) DO NOTHING`, then return the existing row).
+- **Status codes drive the client's retry:** 4xx means retrying won't help (validation 422, conflict 409, not found 404), and the UI rolls back. 5xx is reserved for transient or server faults, and the client retries.
+
+### Test it: constant query count
+
+```python
+# tests/conftest.py — add with the first view endpoint
+from contextlib import contextmanager
+from sqlalchemy import event
+from app.core.db import engine
+
+@contextmanager
+def count_queries():
+    statements: list[str] = []
+    def record(conn, cursor, statement, *args):
+        statements.append(statement)
+    event.listen(engine.sync_engine, "before_cursor_execute", record)
+    try:
+        yield statements
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", record)
+
+# tests/test_vault.py
+def test_case_list_query_count_does_not_grow_with_rows(client, auth_headers, make_cases):
+    make_cases(2)
+    with count_queries() as few:
+        client.get("/api/vault/cases", headers=auth_headers)
+    make_cases(20)
+    with count_queries() as many:
+        client.get("/api/vault/cases", headers=auth_headers)
+    assert len(many) == len(few)
+```
+
 ## Tests
 
 - **Running:** `bun run test [pytest args]` runs `pytest` inside the backend container against the real Postgres and MinIO.

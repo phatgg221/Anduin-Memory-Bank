@@ -33,6 +33,17 @@ This is an operational workbench, not a chatbot. The product is branded **Dejavu
 - **One HTTP client.** `lib/axiosClient.ts` with `baseURL: "/api"`. No `fetch`, no absolute backend URLs, no second axios instance. The base URL is relative, so services only work in the browser. Pages that use store hooks are client components (`"use client"`).
 - **Polling.** While a triage job is `QUEUED` or `PROCESSING`, poll about every 2 s via `refetchInterval`. Return `false` once the job is `COMPLETED` or `FAILED`, or if the query errors.
 - **Query keys** live in `store/queryKeys.ts`. Never write inline key arrays.
+- **No N+1 fetching from the UI.** A screen loads its data in a fixed number of requests (ideally one per pane), never one per row.
+  - No `useQuery` per list item, and no `useQueries` over a list of IDs hitting a single-item endpoint. Components can't fetch anyway (ESLint), so rows render from data their page passes down.
+  - If the UI needs more fields for a list, **widen the list/view endpoint** or add a batch endpoint (`?ids=a,b,c`). Don't chain requests (A → then B with A's result → then C) either; ask the API for the composed view.
+  - Reuse what you already have: seed detail caches from list/view responses (`setQueryData`) instead of refetching on navigation.
+- **UI first: optimistic mutations by default.**
+  1. Update the React Query cache immediately (`onMutate`: cancel in-flight queries for that key → snapshot → `setQueryData`).
+  2. Send the request.
+  3. **On error, roll back** to the snapshot and show the error. Transient failures (network / 5xx) on idempotent requests are retried automatically first.
+  4. Always re-sync afterwards (`onSettled` → `invalidateQueries`).
+  - **Exceptions:** auth (login/register/logout), anything whose result only the server can produce (LLM analysis, similarity scores, presigned URLs), and irreversible actions. Those show a pending state instead.
+  - Template + rules → `references/frontend-patterns.md` § Mutations.
 - **Auth on the client:**
   - The access token lives only in memory (`lib/accessToken.ts`) — never localStorage. `lib/axiosClient.ts` attaches it, and on a 401 runs one shared `/auth/refresh` and retries.
   - Session state: `useSession()` in `store/auth.ts`.
@@ -44,7 +55,7 @@ This is an operational workbench, not a chatbot. The product is branded **Dejavu
   - **Cache Components are on.** Every dynamic segment (`[jobId]`, `[caseId]`) needs a `loading.tsx`, or `next build` fails on the `params` access. `next dev` won't warn you, so run `bun run build` in `frontend/` before calling a route done.
   - `params` / `searchParams` are Promises — use `use(params)` in client pages.
   - Turbopack is the default bundler; Tailwind 4 loads via `@tailwindcss/turbopack`.
-  - `middleware.ts` is now `proxy.ts` (not needed yet).
+  - `middleware.ts` is now `proxy.ts` — ours is the page-level auth gate.
 - **ESLint enforces the layering** (`no-restricted-imports` per folder, no `fetch`). Fix violations; never disable the rule.
 - **Design system — Anduin's Swiss grid** (full rules: `references/design-system.md`):
   - **Look:** white + cool-slate surfaces, navy `#0F2547` structure, cyan `#2998FF` accent, 1px `#D6DCE5` hairlines. **Square corners, no shadows** (both enforced globally), light theme only.
@@ -72,6 +83,14 @@ Templates → `references/frontend-patterns.md` (data flow) and `references/desi
   - Cross-module calls go through the other module's `service.py`, never its router.
   - Only the owning module writes its tables, so `intelligence` returns results and the `triage` worker persists them.
 - **Every route lives under `/api`.** The Next rewrite forwards the path unchanged; Swagger is at `/api/docs`.
+- **View-shaped endpoints, no N+1 queries** (the backend half of "no N+1 from the UI"):
+  - Each screen/pane gets an endpoint that returns everything it renders, built with a **fixed number of SQL queries**.
+  - Use `selectinload`/`joinedload`, SQL aggregates (`count`, `group by`), and `IN (…)` batches — never a query inside a Python loop.
+  - Relationships are declared `lazy="raise"` so an accidental lazy load fails loudly.
+- **Mutations support the optimistic UI:**
+  - Return the updated resource, so the client can reconcile without a refetch.
+  - Make writes **idempotent**: `PUT`/`PATCH` with explicit state, `DELETE` that tolerates "already gone", and creates that accept a client-generated UUID, so retries never duplicate.
+  - Use 4xx for "won't succeed on retry" and 5xx only for transient failures.
 - **Idempotent startup**, safe on every container start:
   1. The container CMD runs `alembic upgrade head`, then uvicorn. pgvector comes from the first migration.
   2. Lifespan: ensure the MinIO bucket — **non-fatal**: log the failure and let `/api/health` report it.
@@ -151,7 +170,7 @@ Postgres is published on host port **5433** (not 5432). Every host port is set i
 | File | Read when |
 |---|---|
 | `references/design-system.md` | Any UI work: styling, colours, layout, shadcn components, brand components, empty/loading states |
-| `references/frontend-patterns.md` | Adding a page, hook, service, or component; touching `next.config.ts` or types |
-| `references/backend-patterns.md` | Adding a module or route; touching lifespan, DB session, jobs/worker/sweeper, MinIO, settings |
+| `references/frontend-patterns.md` | Adding a page, hook, service, or component; **any data loading (no N+1) or mutation (optimistic template)**; auth/proxy; `next.config.ts`; types |
+| `references/backend-patterns.md` | Adding a module or route; **list/view endpoints (no N+1 queries) and writes (idempotent, retry-safe)**; migrations; auth; lifespan, jobs/worker/sweeper, MinIO, settings |
 | `references/intelligence-pipeline.md` | Changing extraction, retrieval, delta prompts, LLM schemas, guard, or providers |
 | `references/seed-data.md` | Writing or extending `seed.py`, demo inputs, or retrieval tests |

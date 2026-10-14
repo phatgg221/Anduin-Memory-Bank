@@ -104,7 +104,13 @@ lib/axiosClient.ts     baseURL "/api"
 
 `components/` is purely presentational: props in, callbacks out. It never imports `store/`, `services/`, or axios.
 
-### 5.2 Polling
+### 5.2 Data loading & mutations
+
+- **No N+1:** a screen loads in a fixed number of requests (≈ one per pane), never one per row. Rows render from the data their page passes down; endpoints are widened or batched rather than called per item (D23).
+- **UI first:** mutations update the cache optimistically, then call the API. On failure they roll back and tell the user (transient errors are retried first), and they re-sync on settle (D24).
+- Templates: `.claude/skills/anduin-memory-bank/references/frontend-patterns.md` § Data loading / § Mutations. The backend counterpart (view-shaped endpoints, idempotent writes) is in backend-patterns.md.
+
+### 5.2a Polling
 
 While a triage job is `QUEUED` or `PROCESSING`, its query polls about every 2 s (`refetchInterval`). Polling stops as soon as the job reaches `COMPLETED` or `FAILED`, or the request errors. The job also reports its current pipeline step, so the UI can show real progress ("Retrieving precedents…") instead of a spinner.
 
@@ -409,6 +415,8 @@ Container dev notes:
 | D20 | `/` redirects to `/workbench`; job results at `/workbench/[jobId]` | Proposed | Matches DESIGN.md routes; results stay linkable |
 | D21 | Auth: short-lived JWT access token (memory) + rotating, DB-backed refresh token (httpOnly cookie, `Path=/`, `SameSite=Lax`) with family revocation and reuse detection; Next.js `proxy.ts` gates pages optimistically on that cookie | Accepted | Revocable sessions without server-side session lookups on every request; tokens unreadable by injected scripts |
 | D22 | `app/core/` holds shared infrastructure (config, db, security, storage, migrations); domain modules live in `app/modules/` | Accepted | Team convention |
+| D23 | No N+1 fetching: a screen loads in a fixed number of requests (≈ one per pane); the API serves view-shaped endpoints built with a fixed number of SQL queries (`selectinload`, aggregates, `IN` batches; relationships `lazy="raise"`) | Accepted | Snappy screens regardless of row count; one round trip through the Next proxy instead of N |
+| D24 | Optimistic UI by default: update the React Query cache first, send the request, roll back + notify on failure (transient errors retried first), re-sync on settle. Writes are idempotent (explicit-state PUT/PATCH, tolerant DELETE, client-generated UUIDs on create) | Accepted | The workbench must feel instant; idempotency makes retries safe. Exceptions: auth, server-computed results (LLM, scores, presigned URLs), irreversible actions |
 
 ## 15. Known Gotchas
 
