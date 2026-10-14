@@ -1,25 +1,191 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/*
+ * Dejavu design tokens — see DESIGN.md §2.
+ * Light theme only. `dark:` stays class-based so shadcn's dark: utilities never fire from the OS setting.
+ */
+@custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Anduin palette */
+  --white: #ffffff;
+  --cool-grey: #eceff3; /* background secondary */
+  --steel: #cbd2dc; /* background tertiary: wells, hover, skeletons */
+  --navy: #0f2547; /* primary brand: banners, structural headers, ■ bullets */
+  --brand-cyan: #2998ff; /* logo accent: similarity bars, selection ring. Not for text (2.99:1 on white) */
+  --ink: #111315; /* text + primary CTA */
+  --muted-slate: #525866; /* body copy, timestamps, metadata */
+  --hairline: #d6dce5; /* 1px architectural borders */
+
+  /* shadcn semantic roles → palette */
+  --background: var(--white);
+  --foreground: var(--ink);
+  --card: var(--white);
+  --card-foreground: var(--ink);
+  --popover: var(--white);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--white);
+  --secondary: var(--cool-grey);
+  --secondary-foreground: var(--ink);
+  --muted: var(--cool-grey);
+  --muted-foreground: var(--muted-slate);
+  --accent: var(--steel);
+  --accent-foreground: var(--ink);
+  --destructive: #991b1b;
+  --border: var(--hairline);
+  --input: var(--hairline);
+  --ring: var(--brand-cyan);
+  --radius: 0rem;
+
+  --chart-1: var(--navy);
+  --chart-2: var(--brand-cyan);
+  --chart-3: var(--muted-slate);
+  --chart-4: var(--steel);
+  --chart-5: var(--ink);
+
+  --sidebar: var(--cool-grey);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--navy);
+  --sidebar-primary-foreground: var(--white);
+  --sidebar-accent: var(--steel);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--hairline);
+  --sidebar-ring: var(--brand-cyan);
+
+  /* Delta Matrix + memory status */
+  --reusable: #065f46;
+  --reusable-bg: #ecfdf5;
+  --reusable-border: #a7f3d0;
+  --reusable-dot: #10b981;
+  --modified: #92400e;
+  --modified-bg: #fffbeb;
+  --modified-border: #fde68a;
+  --modified-dot: #f59e0b;
+  --net-new: #991b1b;
+  --net-new-bg: #fef2f2;
+  --net-new-border: #fecaca;
+  --net-new-dot: #ef4444;
+  --alumni: #0f2547;
+  --alumni-bg: #e0f2fe;
+  --alumni-border: #7dd3fc;
+  --alumni-dot: #0f2547;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Brand utilities: bg-navy, text-brand-cyan, bg-surface-2, bg-surface-3, text-ink, border-hairline */
+  --color-navy: var(--navy);
+  --color-brand-cyan: var(--brand-cyan);
+  --color-surface-2: var(--cool-grey);
+  --color-surface-3: var(--steel);
+  --color-ink: var(--ink);
+  --color-hairline: var(--hairline);
+
+  /* Status utilities: text-reusable, bg-reusable-bg, border-reusable-border, bg-reusable-dot (etc.) */
+  --color-reusable: var(--reusable);
+  --color-reusable-bg: var(--reusable-bg);
+  --color-reusable-border: var(--reusable-border);
+  --color-reusable-dot: var(--reusable-dot);
+  --color-modified: var(--modified);
+  --color-modified-bg: var(--modified-bg);
+  --color-modified-border: var(--modified-border);
+  --color-modified-dot: var(--modified-dot);
+  --color-net-new: var(--net-new);
+  --color-net-new-bg: var(--net-new-bg);
+  --color-net-new-border: var(--net-new-border);
+  --color-net-new-dot: var(--net-new-dot);
+  --color-alumni: var(--alumni);
+  --color-alumni-bg: var(--alumni-bg);
+  --color-alumni-border: var(--alumni-border);
+  --color-alumni-dot: var(--alumni-dot);
+
+  /* Square corners everywhere (the base layer below also enforces it for hard-coded radii). */
+  --radius-sm: 0rem;
+  --radius-md: 0rem;
+  --radius-lg: 0rem;
+  --radius-xl: 0rem;
+  --radius-2xl: 0rem;
+  --radius-3xl: 0rem;
+  --radius-4xl: 0rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Flat surfaces: elevation comes from 1px hairlines, not shadows. */
+@theme {
+  --shadow-2xs: 0 0 #0000;
+  --shadow-xs: 0 0 #0000;
+  --shadow-sm: 0 0 #0000;
+  --shadow-md: 0 0 #0000;
+  --shadow-lg: 0 0 #0000;
+  --shadow-xl: 0 0 #0000;
+  --shadow-2xl: 0 0 #0000;
+}
+
+/* `■ 01 / INCOMING REQUEST` — tracked monospace micro-label. */
+@utility micro-label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
+  /* The design rule is border-radius: 0. !important in the base layer beats every utility, including the
+     rounded-full / rounded-[4px] that some shadcn components hard-code. */
+  *,
+  ::before,
+  ::after {
+    border-radius: 0 !important;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--brand-cyan) 25%, transparent);
+  }
 }

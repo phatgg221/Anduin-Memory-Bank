@@ -81,7 +81,7 @@ export function printUrls(): void {
   const env = readEnv();
   const port = (key: string, fallback: string) => env[key] || fallback;
   console.log(`
-  Workbench      http://localhost:${port("FRONTEND_PORT", "3000")}
+  Workbench      http://localhost:${port("FRONTEND_PORT", "3000")}/workbench
   API docs       http://localhost:${port("FRONTEND_PORT", "3000")}/api/docs
   MinIO console  http://localhost:${port("MINIO_CONSOLE_PORT", "9001")}
   Mailpit        http://localhost:${port("MAILPIT_UI_PORT", "8025")}

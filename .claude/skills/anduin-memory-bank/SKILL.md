@@ -1,9 +1,9 @@
 ---
 name: anduin-memory-bank
-description: Architecture rules, domain knowledge, and implementation patterns for the Anduin Memory Bank hackathon project — a trigger-first case triage & delta workbench (Next.js 16 + FastAPI + PostgreSQL/pgvector + MinIO, Docker Compose, bun scripts). Use whenever creating or editing anything under frontend/ or backend/ — routes, pages, components, React Query hooks, services, FastAPI routers/services, background jobs, the intelligence pipeline, LLM prompts or Pydantic contracts, MinIO/presigned links, docker-compose or bun scripts — or when generating seed data, even if the request doesn't mention the Memory Bank by name.
+description: Architecture rules, design system, domain knowledge, and implementation patterns for Dejavu (repo name Anduin Memory Bank) — a trigger-first case triage & delta workbench (Next.js 16 + shadcn/ui + FastAPI + PostgreSQL/pgvector + MinIO, Docker Compose, bun scripts). Use whenever creating or editing anything under frontend/ or backend/ — pages, layouts, UI components, styling, colors, Tailwind classes, shadcn components, React Query hooks, services, FastAPI routers/services, background jobs, the intelligence pipeline, LLM prompts or Pydantic contracts, MinIO/presigned links, docker-compose or bun scripts — or when generating seed data, even if the request doesn't mention Dejavu or the Memory Bank by name.
 ---
 
-# Anduin Memory Bank Builder
+# Dejavu (Anduin Memory Bank) Builder
 
 **What we're building:**
 1. A new fund-onboarding request arrives.
@@ -13,10 +13,11 @@ description: Architecture rules, domain knowledge, and implementation patterns f
 5. It diffs **what's different this time** (REUSABLE / MODIFIED / NET_NEW).
 6. It offers **1-click reuse** of past artifacts.
 
-This is an operational workbench, not a chatbot.
+This is an operational workbench, not a chatbot. The product is branded **Dejavu** (`▲ Dejavu // by Anduin`).
 
 - Domain, persona, glossary → `CONTEXT.md` (repo root)
 - Services, flows, module layout, decisions, gotchas → `ARCHITECTURE.md` (repo root)
+- Brand, tokens, views, signature components → `DESIGN.md` (repo root)
 
 ## 0. Before writing code
 
@@ -38,15 +39,22 @@ This is an operational workbench, not a chatbot.
   - Turbopack is the default bundler; Tailwind 4 loads via `@tailwindcss/turbopack`.
   - `middleware.ts` is now `proxy.ts` (not needed yet).
 - **ESLint enforces the layering** (`no-restricted-imports` per folder, no `fetch`). Fix violations; never disable the rule.
-- **UI aesthetic — workbench, not chatbot:**
-  - split-pane comparison (incoming vs. historical);
-  - similarity badges (`94% Match`);
-  - green / amber / red delta rows (REUSABLE / MODIFIED / NET_NEW);
-  - an `Alumni Knowledge` badge on insights from people who left;
-  - clickable source citations;
-  - step-by-step job progress instead of a bare spinner.
+- **Design system — Anduin's Swiss grid** (full rules: `references/design-system.md`):
+  - **Look:** white + cool-slate surfaces, navy `#0F2547` structure, cyan `#2998FF` accent, 1px `#D6DCE5` hairlines. **Square corners, no shadows** (both enforced globally), light theme only.
+  - **Tokens, not hex:** `bg-surface-2`, `bg-surface-3`, `bg-navy`, `bg-brand-cyan`, `text-muted-foreground`, `border`, plus status tokens. Never `bg-[#…]`.
+  - **Primitives:** shadcn/ui (Radix, Nova) in `components/ui/`. Signature pieces live in `components/brand/`; use them first:
+    - `SectionLabel` (`■ 01 / INCOMING REQUEST`) opens every pane;
+    - `ActionButton` (ink fill + boxed `↗`) for primary CTAs;
+    - `StatusBadge` (REUSABLE / MODIFIED / NET_NEW) and `AlumniBadge` (`[■ ALUMNI ARCHIVE]`);
+    - `SimilarityMeter` (`#01 · 94% MATCH`);
+    - `IsometricStack` for empty states.
+  - **Workbench, not chatbot:**
+    - a 3-pane grid divided by hairlines (01 request · 02 precedent & delta · 03 reusable kit & source);
+    - clickable source citations;
+    - step-by-step job progress instead of a bare spinner.
+  - **Cyan is never text** (2.99:1 contrast). Status always carries its label, never colour alone.
 
-Templates → `references/frontend-patterns.md`.
+Templates → `references/frontend-patterns.md` (data flow) and `references/design-system.md` (UI).
 
 ## 2. Golden rules — Backend (`backend/app/`)
 
@@ -126,6 +134,7 @@ Postgres is published on host port **5433** (not 5432). Every host port is set i
 
 | File | Read when |
 |---|---|
+| `references/design-system.md` | Any UI work: styling, colours, layout, shadcn components, brand components, empty/loading states |
 | `references/frontend-patterns.md` | Adding a page, hook, service, or component; touching `next.config.ts` or types |
 | `references/backend-patterns.md` | Adding a module or route; touching lifespan, DB session, jobs/worker/sweeper, MinIO, settings |
 | `references/intelligence-pipeline.md` | Changing extraction, retrieval, delta prompts, LLM schemas, guard, or providers |

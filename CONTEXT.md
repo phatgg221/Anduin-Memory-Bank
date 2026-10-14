@@ -1,6 +1,9 @@
-# Project Context — Anduin Memory Bank
+# Project Context — Dejavu (Anduin Memory Bank)
 
-> Product & domain background. System design lives in [ARCHITECTURE.md](ARCHITECTURE.md); coding rules live in the `anduin-memory-bank` skill (`.claude/skills/anduin-memory-bank/`).
+> Product & domain background. The product is branded **Dejavu** (`DEJAVU // Institutional Memory Engine`); "Anduin Memory Bank" is the repo/working name.
+> - System design: [ARCHITECTURE.md](ARCHITECTURE.md)
+> - Brand & UI: [DESIGN.md](DESIGN.md)
+> - Coding rules: the `anduin-memory-bank` skill (`.claude/skills/anduin-memory-bank/`)
 
 ## 1. Hackathon & Domain Background
 
@@ -44,7 +47,7 @@ We are building a **Trigger-First Case Triage & Delta Intelligence Workbench**:
 3. The Top 3 precedents appear with `% Match` badges. The #1 case was built by an engineer who left 8 months ago (`ALUMNI`).
 4. "How it went": a 9-day UAT delay caused by W-8BEN-E Chapter 4 FATCA validation conflicts on joint subscriptions, with the Slack thread cited.
 5. The Delta Matrix shows green (reuse the FATCA validation schema), amber (ERISA 25% tracking exists, but for a different structure), and red (SFDR questionnaire: no precedent).
-6. One click downloads `cayman_fatca_validation_schema.json` from the past case.
+6. One click exports `cayman_fatca_v2.json` (and the `joint_lp_routing.ts` hook) from the past case.
 
 ## 6. Glossary
 

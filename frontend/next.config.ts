@@ -4,17 +4,26 @@ import type { NextConfig } from "next";
 // Rewrites are resolved at build time for production builds, so pass this as a Docker build arg too.
 const backend = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:8000";
 
+// This app is its own root. Without pinning it, the repo-root bun.lock (for the bun scripts) makes Next treat
+// the whole monorepo as the workspace, and standalone output nests under .next/standalone/frontend/.
+const projectRoot = __dirname;
+
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingRoot: projectRoot,
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
+    root: projectRoot,
     rules: {
       "*.css": {
         loaders: ["@tailwindcss/turbopack"],
         as: "*.css",
       },
     },
+  },
+  async redirects() {
+    return [{ source: "/", destination: "/workbench", permanent: false }];
   },
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${backend}/api/:path*` }];

@@ -1,6 +1,8 @@
-# Anduin Memory Bank
+# Dejavu — Institutional Memory Engine
 
-A trigger-first case triage workbench for private-markets onboarding. Drop in a new fund-onboarding request and see:
+*Stop solving the same problem twice. Every past project, instantly recalled.*
+
+Dejavu (repo: Anduin Memory Bank) is a trigger-first case triage workbench for private-markets onboarding. Drop in a new fund-onboarding request and see:
 - the most similar past cases;
 - how those cases went, including knowledge from people who have since left;
 - what's different this time.
@@ -9,6 +11,7 @@ Built for the Anduin "Agent in the Shell" challenge (KNOWLEDGE — The Memory Ba
 
 - Product & domain: [CONTEXT.md](CONTEXT.md)
 - System design: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Brand & UI: [DESIGN.md](DESIGN.md)
 
 ## Prerequisites
 
@@ -26,7 +29,7 @@ This creates `.env` from `.env.example`, builds the images, starts the stack, an
 
 | | URL |
 |---|---|
-| Workbench | http://localhost:3000 |
+| Workbench | http://localhost:3000/workbench |
 | API docs (Swagger) | http://localhost:3000/api/docs |
 | MinIO console | http://localhost:9001 |
 | Mailpit | http://localhost:8025 |
@@ -51,7 +54,7 @@ Ports clash with something already running? Change them in `.env`.
 ## Layout
 
 ```text
-frontend/   Next.js 16.4 · React Query · Axios · Tailwind 4
+frontend/   Next.js 16.4 · React Query · Axios · Tailwind 4 · shadcn/ui (Dejavu theme)
 backend/    FastAPI · SQLAlchemy 2 (async) · pgvector · MinIO SDK · uv
 docker/     Postgres init SQL
 scripts/    Bun scripts behind the commands above

@@ -6,24 +6,31 @@ Screens, components, and type shapes below are **illustrative** — the feature 
 
 ```text
 frontend/
-├── next.config.ts
+├── next.config.ts                  # / → /workbench redirect, /api rewrite, standalone, Cache Components
+├── components.json                 # shadcn config (radix base, nova style)
 ├── app/
-│   ├── layout.tsx                  # wraps children in <Providers>
-│   ├── providers.tsx               # "use client" — QueryClientProvider
-│   ├── page.tsx                    # Intake workbench
-│   ├── triage/[jobId]/page.tsx     # Progress → Top 3, how-it-went, Delta Matrix
-│   └── vault/
-│       ├── page.tsx                # Browse historical cases
-│       └── [caseId]/page.tsx       # Case detail
-├── components/                     # presentational only
-│   ├── triage/                     # IntakeDropzone, BriefChips, MatchCard, DeltaMatrix, PitfallList, JobProgress
-│   ├── vault/                      # CaseHeader, ArtifactList, PersonTag
-│   └── ui/                         # SimilarityBadge, StatusPill, AlumniBadge, SplitPane
-├── store/                          # queryKeys.ts, triage.ts, vault.ts
-├── services/                       # triageService.ts, vaultService.ts
-├── lib/axiosClient.ts
-└── types/                          # triage.ts, vault.ts
+│   ├── layout.tsx                  # fonts, <Providers>, Suspense-wrapped RoutedTopNav, <main>
+│   ├── providers.tsx               # "use client" — QueryClientProvider + TooltipProvider
+│   ├── globals.css                 # Dejavu tokens (see design-system.md)
+│   ├── workbench/page.tsx          # ✓ 3-pane frame (01 request · 02 precedent & delta · 03 kit & source)
+│   ├── workbench/[jobId]/          # proposed: the same 3 panes, filled from a triage job (+ loading.tsx)
+│   ├── vault/page.tsx              # proposed: stats strip + case table
+│   ├── vault/[caseId]/             # proposed: case detail (+ loading.tsx)
+│   └── ingest/page.tsx             # proposed: Ingest Archive (needs product sign-off)
+├── components/                     # presentational only (ESLint-enforced)
+│   ├── ui/                         # ✓ shadcn/ui primitives (owned code)
+│   ├── brand/                      # ✓ SectionLabel, ActionButton, StatusBadge/AlumniBadge, SimilarityMeter, BrandMark, IsometricStack
+│   ├── shell/                      # ✓ TopNav, RoutedTopNav
+│   ├── system/                     # ✓ SystemStatus (status bar)
+│   ├── triage/                     # IntakeForm, BriefParams, MatchStrip, HowItWent, DeltaMatrix, JobProgress
+│   └── vault/                      # VaultStats, CaseTable, ArtifactList, CitationInspector
+├── store/                          # queryKeys.ts, system.ts ✓, triage.ts, vault.ts
+├── services/                       # systemService.ts ✓, triageService.ts, vaultService.ts
+├── lib/                            # axiosClient.ts ✓, utils.ts (cn) ✓
+└── types/                          # system.ts ✓, delta.ts ✓ (DeltaStatus), triage.ts, vault.ts
 ```
+
+✓ = exists today. Route and component names for unbuilt features are proposals.
 
 ## Import rules
 
@@ -42,12 +49,17 @@ ESLint (`frontend/eslint.config.mjs`) enforces this table and bans `fetch`. `bun
 import type { NextConfig } from "next";
 
 const backend = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:8000";
+const projectRoot = __dirname; // the repo-root bun.lock would otherwise make Next treat the monorepo as root
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingRoot: projectRoot,
   cacheComponents: true,        // keep on (default; mandatory next major) — see dynamic routes below
   partialPrefetching: true,
-  turbopack: { rules: { "*.css": { loaders: ["@tailwindcss/turbopack"], as: "*.css" } } },
+  turbopack: { root: projectRoot, rules: { "*.css": { loaders: ["@tailwindcss/turbopack"], as: "*.css" } } },
+  async redirects() {
+    return [{ source: "/", destination: "/workbench", permanent: false }];
+  },
   async rewrites() {
     // Resolved at build time for production builds — the Dockerfile passes it as a build arg.
     return [{ source: "/api/:path*", destination: `${backend}/api/:path*` }];
@@ -67,8 +79,8 @@ export const axiosClient = axios.create({ baseURL: "/api", timeout: 30_000 });
 ## `types/triage.ts` (illustrative — keep in sync with backend `schemas.py`)
 
 ```ts
+export type { DeltaStatus } from "./delta"; // already exists: "REUSABLE" | "MODIFIED" | "NET_NEW"
 export type TriageStatus = "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
-export type DeltaStatus = "REUSABLE" | "MODIFIED" | "NET_NEW";
 
 export interface TriageJob {
   id: string;
@@ -166,42 +178,36 @@ export function useArtifactLink() {
 
 The page decides what to do with the URL. For `attachment`, use `window.location.assign(url)` — it downloads without leaving the page. For `inline`, use `window.open(url, "_blank", "noopener")`.
 
-## `app/providers.tsx`
+## `app/providers.tsx` (as committed)
 
-```tsx
-"use client";
+`QueryClientProvider` (staleTime 30 s, retry 1) wrapping shadcn's `TooltipProvider`. Add new app-wide providers here, not in `layout.tsx` (which is a Server Component).
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+## `app/layout.tsx` — the shell
 
-export function Providers({ children }: { children: ReactNode }) {
-  const [client] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } }),
-  );
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-}
-```
+- The nav is configured as a `NAV: NavItem[]` array. Items whose route doesn't exist yet get `disabled: true`.
+- `RoutedTopNav` calls `usePathname`, which **suspends on routes with unknown dynamic params** under Cache Components. It is therefore wrapped in `<Suspense fallback={<TopNav items={NAV} />}>`, which keeps the shell prerendered. Keep that wrapper when you touch the layout.
+- Pages render inside `<main className="flex flex-1 flex-col">`, so **pages must not render their own `<main>`**.
 
 ## Page containers
 
 ```tsx
-// app/page.tsx — intake
+// app/workbench/page.tsx — intake (pane 01) wired to a mutation; results live at /workbench/[jobId]
 "use client";
 
 import { useRouter } from "next/navigation";
-import { IntakeDropzone } from "@/components/triage/IntakeDropzone";
+import { IntakeForm } from "@/components/triage/IntakeForm";
 import { useCreateTriage } from "@/store/triage";
 
-export default function IntakePage() {
+export default function WorkbenchPage() {
   const router = useRouter();
   const createTriage = useCreateTriage();
 
   return (
-    <IntakeDropzone
+    <IntakeForm
       isSubmitting={createTriage.isPending}
       error={createTriage.error?.message}
       onSubmit={(input) =>
-        createTriage.mutate(input, { onSuccess: ({ job_id }) => router.push(`/triage/${job_id}`) })
+        createTriage.mutate(input, { onSuccess: ({ job_id }) => router.push(`/workbench/${job_id}`) })
       }
     />
   );
@@ -217,7 +223,7 @@ With Cache Components on, reading `params` outside a Suspense boundary fails `ne
 `next dev` stays silent about this. Every dynamic segment therefore ships a `loading.tsx`. Next wraps the page in a Suspense boundary from it, and it doubles as the skeleton. With it in place, the route builds as a Partial Prerender (◐).
 
 ```tsx
-// app/triage/[jobId]/loading.tsx — required; also the first paint
+// app/workbench/[jobId]/loading.tsx — required; also the first paint
 import { JobProgress } from "@/components/triage/JobProgress";
 
 export default function Loading() {
@@ -226,7 +232,7 @@ export default function Loading() {
 ```
 
 ```tsx
-// app/triage/[jobId]/page.tsx — params is a Promise in Next.js 16
+// app/workbench/[jobId]/page.tsx — params is a Promise in Next.js 16
 "use client";
 
 import { use } from "react";
@@ -250,27 +256,52 @@ export default function TriageJobPage({ params }: { params: Promise<{ jobId: str
 
 ## Presentational component
 
+Feature components compose shadcn primitives with the brand kit. Props in, callbacks out, no data access:
+
 ```tsx
-// components/ui/StatusPill.tsx — props in, nothing else
-import type { DeltaStatus } from "@/types/triage";
+// components/triage/DeltaMatrix.tsx
+import { SectionLabel } from "@/components/brand/SectionLabel";
+import { StatusBadge } from "@/components/brand/StatusBadge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { DeltaStatus } from "@/types/delta";
 
-const TONE: Record<DeltaStatus, "green" | "amber" | "red"> = {
-  REUSABLE: "green",
-  MODIFIED: "amber",
-  NET_NEW: "red",
-};
+interface DeltaRow {
+  category: string;
+  pastApproach: string;
+  currentRequirement: string;
+  status: DeltaStatus;
+}
 
-const LABEL: Record<DeltaStatus, string> = {
-  REUSABLE: "Reusable",
-  MODIFIED: "Modified",
-  NET_NEW: "Net-new risk",
-};
-
-export function StatusPill({ status }: { status: DeltaStatus }) {
-  return <span data-tone={TONE[status]}>{LABEL[status]}</span>;
+export function DeltaMatrix({ rows }: { rows: DeltaRow[] }) {
+  return (
+    <section className="flex flex-col gap-4">
+      <SectionLabel>What&apos;s different this time</SectionLabel>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="micro-label">Dimension</TableHead>
+            <TableHead className="micro-label">Past case</TableHead>
+            <TableHead className="micro-label">This request</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.category}>
+              <TableCell className="font-medium">{row.category}</TableCell>
+              <TableCell className="text-muted-foreground">{row.pastApproach}</TableCell>
+              <TableCell className="flex items-center justify-between gap-3">
+                {row.currentRequirement}
+                <StatusBadge status={row.status} />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </section>
+  );
 }
 ```
 
-Interactive components take callbacks, e.g. `ArtifactList({ artifacts, onOpen, onDownload })`. The page wires those callbacks to `useArtifactLink`.
+Interactive components take callbacks, e.g. `ArtifactList({ artifacts, onPreview, onExport })`. The page wires those callbacks to `useArtifactLink`.
 
-Styling (Tailwind or otherwise, design tokens, layout) will be defined in `DESIGN.md`, which isn't written yet.
+Styling rules, tokens, and the brand kit are in `design-system.md`.

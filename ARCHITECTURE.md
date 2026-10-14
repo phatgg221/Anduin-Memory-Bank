@@ -48,15 +48,16 @@ All host ports can be changed in `.env`. Postgres defaults to host port 5433 so 
 
 ```text
 anduin-memory-bank/
-├── frontend/                     Next.js 16.4 (TypeScript, App Router, React Query, Axios, Tailwind 4)
+├── frontend/                     Next.js 16.4 (TypeScript, App Router, React Query, Axios, Tailwind 4, shadcn/ui)
 │   ├── AGENTS.md / CLAUDE.md     Next's agent rules: read node_modules/next/dist/docs before coding
 │   ├── eslint.config.mjs         enforces the layering below (no-restricted-imports / fetch)
 │   ├── next.config.ts            /api/:path* rewrite → BACKEND_INTERNAL_URL; standalone; Cache Components
-│   ├── app/                      routes (thin client containers) + providers.tsx
-│   ├── components/               presentational only (triage/, vault/, ui/)
+│   ├── components.json           shadcn config (Radix base, Nova style, lucide icons)
+│   ├── app/                      routes (thin client containers), providers.tsx, globals.css (Dejavu tokens)
+│   ├── components/               presentational only: ui/ (shadcn), brand/ (Dejavu kit), shell/ (nav), feature folders
 │   ├── store/                    React Query hooks (queryKeys.ts, triage.ts, vault.ts)
 │   ├── services/                 one typed function per endpoint (triageService.ts, vaultService.ts)
-│   ├── lib/axiosClient.ts        the only HTTP client (baseURL "/api")
+│   ├── lib/                      axiosClient.ts (the only HTTP client, baseURL "/api"), utils.ts (cn)
 │   └── types/                    API contract types (mirror backend Pydantic)
 ├── backend/                      FastAPI (Python 3.12, uv, SQLAlchemy 2.0 async, pgvector)
 │   ├── app/
@@ -75,7 +76,7 @@ anduin-memory-bank/
 ├── docker-compose.yml
 ├── .env.example                  copied to .env by setup (git-ignored)
 ├── package.json                  bun run setup / dev / stop / logs / seed / test / lint / reset
-└── README.md · CLAUDE.md · CONTEXT.md · ARCHITECTURE.md · DESIGN.md (todo) · PLAN.md (todo)
+└── README.md · CLAUDE.md · CONTEXT.md · ARCHITECTURE.md · DESIGN.md · PLAN.md (todo)
 ```
 
 ## 5. Frontend
@@ -98,16 +99,26 @@ lib/axiosClient.ts     baseURL "/api"
 
 While a triage job is `QUEUED` or `PROCESSING`, its query polls about every 2 s (`refetchInterval`). Polling stops as soon as the job reaches `COMPLETED` or `FAILED`, or the request errors. The job also reports its current pipeline step, so the UI can show real progress ("Retrieving precedents…") instead of a spinner.
 
-### 5.3 Screens (proposed — features not final)
+### 5.3 Screens (per DESIGN.md — features not final)
 
-| Route | Purpose |
-|---|---|
-| `/` | Intake workbench: drop or paste a new request |
-| `/triage/[jobId]` | Job progress → extracted brief, Top 3 matches, how-it-went, Delta Matrix, reusable artifacts |
-| `/vault` | Browse historical cases |
-| `/vault/[caseId]` | Case detail: outcome, people (ACTIVE/ALUMNI), artifacts, discussions |
+| Route | Status | Purpose |
+|---|---|---|
+| `/` | Built | Redirects to `/workbench` |
+| `/workbench` | Frame built | 3-pane Swiss grid: 01 incoming request · 02 precedent & delta engine · 03 reusable kit & source |
+| `/workbench/[jobId]` | Proposed | The same 3 panes filled from a triage job, so results are linkable (polls while the job is active) |
+| `/vault` | Proposed | Stats strip (cases · alumni memories · reusable artifacts) + case table |
+| `/vault/[caseId]` | Proposed | Case detail: outcome, people (ACTIVE/ALUMNI), artifacts, discussions |
+| `/ingest` | Needs sign-off | Ingest Archive: add past cases to the vault (DESIGN.md §8) |
 
-### 5.4 Next.js 16.4 specifics
+### 5.4 UI system
+
+The visual language is **Dejavu**, Anduin's Swiss grid (DESIGN.md):
+- **Components:** shadcn/ui, Radix base, Nova style, in `components/ui/`. Dejavu signature components live in `components/brand/`.
+- **Tokens:** every token lives in `app/globals.css`, mapped onto shadcn's semantic roles plus brand and status utilities (`bg-navy`, `bg-surface-2`, `text-reusable`, …).
+- **Square, flat, light-only:** radius and shadows are neutralised globally, and there's no dark mode. The `dark:` variant is class-based so shadcn's dark styles never activate from the OS setting.
+- **Coding rules:** `.claude/skills/anduin-memory-bank/references/design-system.md`.
+
+### 5.5 Next.js 16.4 specifics
 
 - **Read the bundled docs.** This version is newer than most model training data; `frontend/AGENTS.md` points to `node_modules/next/dist/docs/`.
 - **Cache Components + Partial Prefetching are on** (the create-next-app default; both become mandatory in the next major).
@@ -302,6 +313,9 @@ Container dev notes:
 | D15 | Keep Next's Cache Components + Partial Prefetching on; dynamic segments ship a `loading.tsx` | Accepted | create-next-app default; mandatory in the next major |
 | D16 | Storage bootstrap is non-fatal at startup; the database is fatal | Accepted | A MinIO outage shouldn't hang the whole API (§15.12) |
 | D17 | Bun is the package manager only; Next.js runs on Node 22 | Accepted | Cache Components requires the Node.js runtime |
+| D18 | UI kit: shadcn/ui 4.x, Radix base, Nova style (Lucide + Geist); `cn` package replaces clsx + tailwind-merge | Accepted | Radix has the most mature API/docs; Nova matches our existing Geist fonts. `cn` is shadcn's own drop-in |
+| D19 | Dejavu theme: Anduin palette mapped onto shadcn roles; square + flat enforced globally; light only | Accepted | DESIGN.md. Global enforcement keeps future `shadcn add` components on-brand without hand edits |
+| D20 | `/` redirects to `/workbench`; job results at `/workbench/[jobId]` | Proposed | Matches DESIGN.md routes; results stay linkable |
 
 ## 15. Known Gotchas
 
@@ -317,7 +331,13 @@ Container dev notes:
 10. **`minio/minio` no longer exists on Docker Hub,** and Quay has no tags. Use the pinned `pgsty/minio` release (D14). A locally cached `minio/minio:latest` hides this until a teammate tries to pull.
 11. **Raw cosine similarities cluster** (often 0.6–0.85). Decide how `% Match` is displayed before the demo.
 12. **The MinIO SDK retries with backoff by default.** A call to a down MinIO takes about 6 s to fail. Under `uvicorn --reload`, a crash during startup leaves the reloader holding the port, so requests hang instead of failing fast. Health probes use a separate no-retry client with a 1–2 s timeout, and bucket bootstrap is non-fatal (D16).
-13. **Dynamic routes need a `loading.tsx`** under Cache Components, or `next build` fails (§5.4). `next dev` is more forgiving, so always run `next build` before you call a route done.
+13. **Dynamic routes need a `loading.tsx`** under Cache Components, or `next build` fails (§5.5). `next dev` is more forgiving, so always run `next build` before you call a route done.
+14. **`usePathname` in the layout suspends** on any route with an unknown dynamic param (Cache Components). `RoutedTopNav` is therefore wrapped in `<Suspense>`, with a static `TopNav` as the fallback. Keep the wrapper. Verified with a dynamic probe route.
+15. **The repo-root `bun.lock` confuses Next's root detection.** It makes Next treat the monorepo as the workspace, and local standalone output nests under `.next/standalone/frontend/`. `next.config.ts` pins `turbopack.root` and `outputFileTracingRoot` to `frontend/`.
+16. **New frontend dependencies need a container refresh.** After `bun add` or `shadcn add`, run `bun run dev` (rebuild + `--renew-anon-volumes`). The running container keeps its old `node_modules` volume until then.
+17. **`[browser] …` lines in the frontend container log** are browser console output forwarded by Next 16. An old tab replays stale "Module not found" errors after a restart, so reopen the tab before you debug those.
+18. **Don't re-run `shadcn init`.** It overwrites `globals.css` with a generic theme, and its generated `--font-sans: var(--font-sans)` refers to itself.
+19. **Deleting a route can break the next local `next build`.** Stale generated route types (`.next/dev/types/validator.ts`) still reference it ("Cannot find module …/page.js"). Fix with `rm -rf frontend/.next` and rebuild.
 
 ## 16. Open Questions
 

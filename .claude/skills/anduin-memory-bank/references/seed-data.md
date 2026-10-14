@@ -24,7 +24,7 @@
 ### Case 1 — Cayman Islands Master-Feeder LP Onboarding (`Sequoia Heritage Feeder IV`)
 - **Author:** Minh Nguyen — `ALUMNI`, left 8 months ago
 - **How it went:** delayed 9 days in UAT. Non-US institutional LPs signing **jointly** triggered conflicting W-8BEN-E Chapter 4 FATCA status validation rules.
-- **Reusable artifacts:** `cayman_fatca_validation_schema.json`, `slack_thread_uat_fatca_fix.txt`, `lp_sub_agreement_mapping.pdf`
+- **Reusable artifacts:** `cayman_fatca_v2.json` (W-8BEN-E validation schema, v2 = the UAT fix), `joint_lp_routing.ts` (multi-signer hook), `slack_uat_fatca_fix.txt`, `lp_sub_agreement_mapping.pdf` — names match the DESIGN.md mock
 
 ### Case 2 — Delaware Parallel Venture Fund with ERISA 25% Benefit-Plan Limit (`Andreessen Growth VII`)
 - **Author:** Sarah Tran — `ACTIVE`
@@ -49,15 +49,30 @@ With only three cases, "Top 3" returns everything and the ranking proves nothing
 | Delaware co-investment SPV, accelerated 5-day close | Same structure family, a timeline-driven pitfall |
 | Luxembourg SCSp evergreen fund, semi-annual liquidity windows | Same jurisdiction as Case 3, no AML threshold change |
 
-## Suggested demo trigger
+## Demo triggers (the "Load Demo" presets)
 
-The demo trigger is an incoming request that strongly matches Case 1 and exercises all three delta columns:
+The Workbench mock in `DESIGN.md` §4 is the primary demo. Seed it so that the screen can be reproduced exactly.
 
-> **New GP request — Northwind Ventures Fund II.** Cayman Islands master-feeder. Non-US institutional LPs, several subscribing jointly. US tax-exempt investors, including ERISA plans, come in through the offshore feeder. Several EU LPs require an SFDR Article 8 sustainability disclosure questionnaire. MFN side letters expected for anchor LPs.
+**Preset A — "Cayman Feeder IV" (matches the DESIGN.md mock):**
+
+> Onboard a new Cayman master-feeder fund. It must support joint non-US LP signers (W-8BEN-E) and the new 2026 CIMA AML 10% beneficial-ownership look-through rule. Some LPs will hold assets via hardware-wallet custody and need a crypto custody attestation.
 
 Expected outcome:
-- **REUSABLE:** the W-8BEN-E joint-subscriber FATCA validation (`cayman_fatca_validation_schema.json`, from Case 1).
-- **MODIFIED:** ERISA 25% tracking. Case 2's hook tracks Delaware parallel entities; this time it must track at feeder and master level.
-- **NET_NEW:** the SFDR Article 8 questionnaire has no precedent.
+- **Ranking:** #01 Case 1 (Cayman FATCA) · #02 Case 3 (Lux AML tree) · #03 Case 2 (Delaware ERISA).
+- **REUSABLE:** W-8BEN-E joint-signer routing (`cayman_fatca_v2.json` + `joint_lp_routing.ts`, from Case 1).
+- **MODIFIED:** AML/KYC threshold. Case 1 used a 25% look-through; this request needs 10%. **Cross-case insight:** Case 3 already hot-fixed a look-through tree from 25% to 10% (`lux_aml_kyc_tree_schema.json`). The UI should surface that as a second precedent for this row.
+- **NET_NEW:** crypto / hardware custody attestation has no precedent.
+- **"How it went":** Minh Nguyen's (`ALUMNI`) 9-day UAT slip. The cited Slack line explains the Active NFFE + Passive co-signer conflict at step 4, fixed in the v2 schema.
 
-Also store the trigger as a fixture. The opt-in retrieval regression test asserts that Case 1 ranks #1 for it.
+**Preset B — "Northwind Ventures Fund II" (ERISA / SFDR variant):**
+
+> Cayman master-feeder. Non-US institutional LPs, several subscribing jointly. US tax-exempt investors, including ERISA plans, come in through the offshore feeder. EU LPs require an SFDR Article 8 questionnaire.
+
+Expected outcome:
+- **REUSABLE:** W-8BEN-E joint-subscriber validation (Case 1).
+- **MODIFIED:** ERISA 25% tracking. Case 2's hook covers Delaware parallel entities; this request needs feeder and master level.
+- **NET_NEW:** SFDR Article 8.
+
+Store both presets as fixtures. The opt-in retrieval regression test asserts that Case 1 ranks #1 for each.
+
+For the Slack export behind the citation inspector, give the artifact real line numbers. The demo cites `slack_uat_fatca_fix.txt #L42`, so line 42 must be the fix message.
