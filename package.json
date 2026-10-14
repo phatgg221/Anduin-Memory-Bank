@@ -10,7 +10,14 @@
     "seed": "bun scripts/docker.ts seed",
     "test": "bun scripts/docker.ts test",
     "lint": "bun scripts/docker.ts lint",
-    "reset": "bun scripts/docker.ts reset"
+    "reset": "bun scripts/docker.ts reset",
+    "db:revision": "bun scripts/db.ts revision",
+    "db:migrate": "bun scripts/db.ts migrate",
+    "db:downgrade": "bun scripts/db.ts downgrade",
+    "db:current": "bun scripts/db.ts current",
+    "db:history": "bun scripts/db.ts history",
+    "db:check": "bun scripts/db.ts check",
+    "db:reset": "bun scripts/db.ts reset"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11"

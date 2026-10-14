@@ -1,6 +1,9 @@
 # Architecture — Anduin Memory Bank
 
-> **Status (2026-10-14):** the monorepo is scaffolded and the stack runs end to end (`/api/health` goes browser → Next proxy → FastAPI → Postgres + MinIO). **The data model / table schema is deliberately out of scope** until the feature set is concluded (§9), so there are no domain tables, routes, job worker, or seed data yet. Decisions marked *Proposed* in §14 can still change.
+> **Status (2026-10-15):**
+> - **Built:** the stack runs end to end; email/password auth works (JWT access token + rotating, revocable refresh token, §10a); the schema is managed by Alembic migrations.
+> - **Not designed yet:** domain tables for vault/triage, which wait for the feature set (§9). So there are no domain routes, job worker, or seed data yet.
+> - Decisions marked *Proposed* in §14 can still change.
 >
 > Related: [CONTEXT.md](CONTEXT.md) (domain & product) · `.claude/skills/anduin-memory-bank/` (coding rules & code patterns)
 
@@ -53,29 +56,33 @@ anduin-memory-bank/
 │   ├── eslint.config.mjs         enforces the layering below (no-restricted-imports / fetch)
 │   ├── next.config.ts            /api/:path* rewrite → BACKEND_INTERNAL_URL; standalone; Cache Components
 │   ├── components.json           shadcn config (Radix base, Nova style, lucide icons)
-│   ├── app/                      routes (thin client containers), providers.tsx, globals.css (Dejavu tokens)
-│   ├── components/               presentational only: ui/ (shadcn), brand/ (Dejavu kit), shell/ (nav), feature folders
-│   ├── store/                    React Query hooks (queryKeys.ts, triage.ts, vault.ts)
-│   ├── services/                 one typed function per endpoint (triageService.ts, vaultService.ts)
-│   ├── lib/                      axiosClient.ts (the only HTTP client, baseURL "/api"), utils.ts (cn)
+│   ├── app/                      (app)/ signed-in routes · (auth)/ login + register · providers.tsx · globals.css
+│   ├── components/               presentational only: ui/ (shadcn), brand/ (Dejavu kit), shell/ (nav, user menu), auth/, feature folders
+│   ├── store/                    React Query hooks (queryKeys.ts, auth.ts, system.ts, …)
+│   ├── services/                 one typed function per endpoint (authService.ts, systemService.ts, …)
+│   ├── lib/                      axiosClient.ts (only HTTP client + 401→refresh interceptor), accessToken.ts, apiError.ts, utils.ts
 │   └── types/                    API contract types (mirror backend Pydantic)
 ├── backend/                      FastAPI (Python 3.12, uv, SQLAlchemy 2.0 async, pgvector)
+│   ├── pyproject.toml            deps + ruff + pytest + [tool.alembic] config
+│   ├── migrations/               Alembic: env.py, script.py.mako, versions/ (one file per schema change)
 │   ├── app/
 │   │   ├── main.py               app factory + lifespan (idempotent startup)
 │   │   ├── health.py             GET /api/health (database, pgvector version, bucket)
-│   │   ├── core/                 config.py (pydantic-settings), storage.py (MinIO clients)
-│   │   ├── db/                   base.py, session.py, schema.py (extension + create_all)
+│   │   ├── core/                 infrastructure shared by every module:
+│   │   │                           config.py (settings) · db.py (Base, engine, SessionDep) · security.py (Argon2, JWT)
+│   │   │                           storage.py (MinIO clients) · migrations.py (Alembic from code: reset / upgrade)
 │   │   ├── modules/
+│   │   │   ├── auth/             users, refresh tokens: models, schemas, service, router, deps (CurrentUser)
 │   │   │   ├── vault/            historical cases, artifacts, knowledge chunks, ingest, presigned links
 │   │   │   ├── triage/           intake API, job lifecycle, worker.py, sweeper.py
 │   │   │   └── intelligence/     4-step pipeline: service, retrieval, llm_client, prompts, schemas, guard
 │   │   └── seed.py               private-markets scenarios → DB + MinIO
 │   └── tests/
 ├── docker/postgres/              init SQL (CREATE EXTENSION vector)
-├── scripts/                      Bun: setup.ts, dev.ts (--refresh-db), docker.ts (helpers + stop/logs/seed/test/lint/reset)
+├── scripts/                      Bun: setup.ts, dev.ts (--refresh-db), db.ts (migrations), docker.ts (helpers + stop/logs/seed/test/lint/reset)
 ├── docker-compose.yml
 ├── .env.example                  copied to .env by setup (git-ignored)
-├── package.json                  bun run setup / dev / stop / logs / seed / test / lint / reset
+├── package.json                  bun run setup / dev / stop / logs / seed / test / lint / reset / db:*
 └── README.md · CLAUDE.md · CONTEXT.md · ARCHITECTURE.md · DESIGN.md · PLAN.md (todo)
 ```
 
@@ -104,7 +111,8 @@ While a triage job is `QUEUED` or `PROCESSING`, its query polls about every 2 s 
 | Route | Status | Purpose |
 |---|---|---|
 | `/` | Built | Redirects to `/workbench` |
-| `/workbench` | Frame built | 3-pane Swiss grid: 01 incoming request · 02 precedent & delta engine · 03 reusable kit & source |
+| `/login`, `/register` | Built | `(auth)` group: split brand panel + form. Signed-in visitors are redirected to `/workbench` |
+| `/workbench` | Frame built | `(app)` group (signed-in only). 3-pane Swiss grid: 01 incoming request · 02 precedent & delta engine · 03 reusable kit & source |
 | `/workbench/[jobId]` | Proposed | The same 3 panes filled from a triage job, so results are linkable (polls while the job is active) |
 | `/vault` | Proposed | Stats strip (cases · alumni memories · reusable artifacts) + case table |
 | `/vault/[caseId]` | Proposed | Case detail: outcome, people (ACTIVE/ALUMNI), artifacts, discussions |
@@ -126,6 +134,7 @@ The visual language is **Dejavu**, Anduin's Swiss grid (DESIGN.md):
   - We use a `loading.tsx` in each dynamic segment, which doubles as the skeleton. Verified: a client page calling `use(params)` fails the build without it and builds as a Partial Prerender with it.
 - `params` / `searchParams` are Promises. Client pages unwrap them with `use(params)`.
 - Turbopack is the default bundler. Tailwind 4 loads through the `@tailwindcss/turbopack` loader (no PostCSS config). `middleware.ts` is now `proxy.ts`; we don't need one yet.
+- **Layouts must always render `{children}`.** Instant-navigation validation flags any page segment a layout doesn't render ("Could not validate … Dropped segment"). The `(app)` auth gate therefore renders the page *hidden* behind the session splash, rather than swapping it out. `export const instant = false` would only exempt navigations *into* the group, and it can't be exported from a Client Component.
 - `output: "standalone"` for the production image.
 - Rewrites are resolved at **build time** in production builds (they end up in `routes-manifest.json`). Pass `BACKEND_INTERNAL_URL` as a build arg, not only as a runtime env var.
 
@@ -138,11 +147,13 @@ The visual language is **Dejavu**, Anduin's Swiss grid (DESIGN.md):
 ### 6.2 Modules & dependency direction
 
 ```text
-triage ──▶ intelligence ──▶ vault ──▶ core / db
+triage ──▶ intelligence ──▶ vault ──▶ core
+   └───────────┴──────────────┴──▶ auth (CurrentUser) ──▶ core
 ```
 
 | Module | Owns |
 |---|---|
+| `auth` | `users`, `refresh_tokens`; register / login / refresh / logout / me; `deps.CurrentUser` for protecting any route |
 | `vault` | Historical cases, people, artifacts, knowledge chunks; ingestion (chunk + embed); presigned links |
 | `triage` | Intake API, triage job lifecycle (create / get / claim / heartbeat / finish), `worker.py`, `sweeper.py` |
 | `intelligence` | The 4-step pipeline, `llm_client`, prompts, LLM contracts, guard. Reads vault through `vault.service`; owns no tables. |
@@ -153,15 +164,29 @@ Rules:
 - Only the owning module writes its tables.
 - The pipeline therefore *returns* a validated report plus progress callbacks, and the triage worker persists both.
 
-### 6.3 Startup (lifespan) — idempotent, runs on every container start
+### 6.3 Startup — idempotent, runs on every container start
 
-1. `CREATE EXTENSION IF NOT EXISTS vector`
-2. Create tables via `db/schema.py`, which imports every module's `models.py` first.
-3. Ensure the MinIO bucket exists. This step is **non-fatal**: a storage outage is logged and reported by `/api/health` instead of crashing the API.
-4. `sweep_once()` — recover jobs orphaned by a restart. *(Not wired yet: needs the job table.)*
-5. Start the background `worker` and `sweeper` loops (asyncio tasks). *(Not wired yet.)*
+1. **Container CMD:** `alembic upgrade head`, then uvicorn. A failed migration stops the container rather than serving a stale schema. The pgvector extension is created by the first migration.
+2. **Lifespan:** ensure the MinIO bucket. This is **non-fatal**: a storage outage is logged and reported by `/api/health` instead of crashing the API.
+3. **Lifespan:** `sweep_once()` to recover jobs orphaned by a restart. *(Not wired yet: needs the job table.)*
+4. **Lifespan:** start the background `worker` and `sweeper` loops (asyncio tasks). *(Not wired yet.)*
 
-The database is required, so steps 1–2 fail hard. On shutdown: cancel the loops and dispose the engine. A job interrupted mid-run stays `PROCESSING`, and the sweeper recovers it.
+On shutdown: cancel the loops and dispose the engine. A job interrupted mid-run stays `PROCESSING`, and the sweeper recovers it.
+
+### 6.3a Schema migrations (Alembic)
+
+- **Migrations own the schema** (`backend/migrations/`); `create_all` is never used. Config lives in `pyproject.toml` `[tool.alembic]`, and `env.py` takes the URL from app settings and the metadata from `app.core.db.Base`.
+- **Workflow:**
+  1. Change `models.py`.
+  2. `bun run db:revision "describe the change"` autogenerates a file in `migrations/versions/`.
+  3. **Review it.** Autogenerate misses renames, extensions, data moves, and some type changes.
+  4. `bun run db:migrate`.
+  5. Commit the model change and the migration together.
+- **Hand-written migrations** (extensions, data fixes): `bun run db:revision "…" --empty`.
+- **New modules:** add their `models` import to `migrations/env.py`, or autogenerate won't see their tables.
+- **Constraint naming:** `Base.metadata` uses a naming convention (`pk_users`, `uq_users_email`, `fk_<table>_<col>_<ref>`, `ix_…`), so constraints can be altered or dropped reliably later.
+- **Tidy output:** generated files are run through `ruff format` and `ruff check --fix` by post-write hooks.
+- **Guards:** `tests/test_migrations.py` fails if the models drift from the migrations (`alembic check`), and verifies a full downgrade → upgrade round trip.
 
 ### 6.4 Triage job lifecycle
 
@@ -210,7 +235,18 @@ There is one private bucket (`MINIO_BUCKET`, default `memory-bank`), and objects
 | `cases/{case_slug}/artifacts/{filename}` | Historical artifacts (schemas, scripts, post-mortems, Slack exports, PDFs) |
 | `intake/{job_id}/{filename}` | Files uploaded with an incoming request |
 
-## 9. Data Model — TBD
+## 9. Data Model
+
+### 9.1 Built: auth tables (migration `create users and refresh tokens`)
+
+| Table | Columns | Notes |
+|---|---|---|
+| `users` | `id` uuid PK · `email` varchar(320) **unique** · `name` varchar(100) · `password_hash` varchar(255) · `is_active` bool (default true) · `created_at`, `updated_at` timestamptz | Email is stored lowercased, so uniqueness is case-insensitive. The hash is Argon2id |
+| `refresh_tokens` | `id` uuid PK (= the JWT's `jti`) · `user_id` → `users.id` **ON DELETE CASCADE** (indexed) · `family_id` uuid (indexed) · `expires_at` · `created_at` · `revoked_at` (null = live) · `replaced_by_id` uuid | One row per issued refresh token. `family_id` = one login session. Rotation sets `revoked_at` + `replaced_by_id` on the old row |
+
+Expired and revoked token rows are not cleaned up yet. Add a periodic purge (e.g. in the sweeper) once volume matters.
+
+### 9.2 Domain tables — TBD
 
 **Not designed yet, on purpose** — the feature set is still being concluded. The working entity names below are for conversation only: **HistoricalCase, Person** (author; `ACTIVE` / `ALUMNI`), **Artifact, KnowledgeChunk** (text + embedding), and **TriageJob**.
 
@@ -220,21 +256,53 @@ Whatever the schema becomes, the architecture already needs it to support:
 - people with ACTIVE/ALUMNI status, reachable from the knowledge they authored (for badges);
 - a job record that answers the questions in §6.4.
 
-Until a migration tool is chosen, schema changes mean `create_all` plus `bun run dev --refresh-db` (§15.6).
+Schema changes go through Alembic migrations (§6.3a). The domain `Person` (case author, ACTIVE/ALUMNI) is a separate concept from the auth `users` table unless we decide to link them.
 
-## 10. API Surface (proposed)
+## 10. API Surface
 
 All routes live under `/api` on the backend; the frontend rewrite forwards the path unchanged.
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | **Implemented.** `200 {status:"ok", database, pgvector, storage}`, or `503 {status:"degraded", …}` |
+| POST | `/api/auth/register` | **Implemented.** `{email, name, password, confirm_password}` → `201 AuthOut` + refresh cookie. `409` if the email is taken, `422` field errors |
+| POST | `/api/auth/login` | **Implemented.** `{email, password}` → `200 AuthOut` + refresh cookie. `401 "Invalid email or password"` (same for unknown email) |
+| POST | `/api/auth/refresh` | **Implemented.** Refresh cookie → rotated cookie + `200 AuthOut`. `409 refresh_token_rotated` (benign two-tab race: retry once). `401` clears the cookie |
+| POST | `/api/auth/logout` | **Implemented.** Revokes the cookie's whole session (token family) and clears the cookie. Always `204` |
+| GET | `/api/auth/me` | **Implemented.** Bearer access token → current user |
 | POST | `/api/triage` | Multipart (`text` and/or `files[]`) → `202 { job_id }` |
 | GET | `/api/triage/{job_id}` | Status, current step, result, error |
 | GET | `/api/vault/cases` | List / browse historical cases (filters TBD) |
 | GET | `/api/vault/cases/{case_id}` | Case detail: outcome, people, artifacts |
 | GET | `/api/vault/artifacts/{artifact_id}/link?disposition=inline\|attachment` | Fresh presigned URL |
-| GET | `/api/docs`, `/api/openapi.json` | Swagger / OpenAPI (dev) |
+| GET | `/api/docs`, `/api/openapi.json` | Swagger / OpenAPI (dev). The "Authorize" button accepts the bearer token |
+
+Proposed routes (triage, vault) will require `CurrentUser`. `AuthOut` = `{access_token, token_type: "bearer", expires_in, user: {id, email, name, created_at}}`.
+
+### 10a. Authentication flow
+
+```text
+register / login ──▶ 200 AuthOut {access_token (15 min)} + Set-Cookie dejavu_refresh (7 days, httpOnly, SameSite=Strict, Path=/api/auth)
+API call ──▶ Authorization: Bearer <access_token> ──▶ deps.CurrentUser (JWT verified, type=access, user active)
+401 on an API call ──▶ axios interceptor ──▶ POST /api/auth/refresh (cookie) ──▶ new access token + rotated cookie ──▶ retry once
+page reload ──▶ useSession() ──▶ POST /api/auth/refresh ──▶ session restored (or 401 → /login)
+logout ──▶ POST /api/auth/logout ──▶ whole token family revoked, cookie cleared
+```
+
+- **Where tokens live.**
+  - The access token is held in browser memory only (`lib/accessToken.ts`), never in localStorage.
+  - The refresh token is an **httpOnly** cookie, so JavaScript can't read it (verified).
+  - The cookie's path is `/api/auth`, so it isn't sent with ordinary API calls or page loads.
+  - `SameSite=Strict` blocks cross-site use (CSRF) of `/refresh` and `/logout`.
+- **Rotation + reuse detection.**
+  - Every refresh issues a new refresh token and revokes the old one.
+  - If an *already-revoked* token is presented after the 30 s grace window, the whole session (family) is revoked, on the assumption it was stolen.
+  - Within the grace window, a replay is treated as two tabs racing: `409`, and the client retries with the newer cookie.
+  - Concurrent refreshes of one token are serialised with `SELECT … FOR UPDATE`.
+- **Passwords.** Argon2id (pwdlib). Hashing runs in a thread so it doesn't block the event loop. A dummy verify for unknown emails equalises response timing.
+- **JWTs.** PyJWT, HS256, signed with `JWT_SECRET` (generated into `.env` by `bun run setup` / `bun run dev`). Claims: `sub`, `type`, `jti`, `iat`, `exp`. A refresh token is rejected as an access token, and vice versa.
+- **Frontend gate.** The `(app)` layout restores the session and redirects to `/login` when signed out. The `(auth)` layout redirects signed-in users to `/workbench`. The UI gate is UX only: authorisation is enforced by the API.
+- **Not built (yet):** rate limiting on login/register, email verification, password reset, "sign out everywhere", and purging old token rows.
 
 ## 11. Configuration
 
@@ -254,6 +322,9 @@ There is one root `.env`, created from `.env.example` by `bun run setup` and git
 | `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` / `EMBEDDING_DIM` | backend | `gemini` / `gemini-embedding-001` / `768` | Changing model or dim ⇒ re-embed everything |
 | `GEMINI_API_KEY` / `OPENROUTER_API_KEY` | backend | — | Never commit; `.env` is git-ignored |
 | `SMTP_HOST` / `SMTP_PORT` | backend | `mailpit` / `1025` | |
+| `JWT_SECRET` | backend | 64 hex chars | Generated into `.env` by `bun run setup` / `bun run dev` when empty. Min 32 chars, enforced at startup |
+| `ACCESS_TOKEN_TTL_MINUTES` / `REFRESH_TOKEN_TTL_DAYS` | backend | `15` / `7` | |
+| `REFRESH_COOKIE_SECURE` | backend | `false` | Set `true` whenever served over HTTPS |
 | `JOB_MAX_ATTEMPTS` / `JOB_STALE_AFTER_SECONDS` / `SWEEPER_INTERVAL_SECONDS` | backend | `3` / `120` / `30` | Added with the job worker |
 | `FRONTEND_PORT`, `BACKEND_PORT`, `POSTGRES_PORT`, `MINIO_API_PORT`, `MINIO_CONSOLE_PORT`, `MAILPIT_SMTP_PORT`, `MAILPIT_UI_PORT`, `PGWEB_PORT` | compose | `3000`, `8000`, `5433`, `9000`, `9001`, `1025`, `8025`, `8081` | Host-side ports only |
 
@@ -261,9 +332,13 @@ There is one root `.env`, created from `.env.example` by `bun run setup` and git
 
 | Command | Does |
 |---|---|
-| `bun run setup` | Check Docker, create `.env` from `.env.example`, install host deps for editor support, build images, start the stack, wait until healthy |
-| `bun run dev` | `up -d --build`, wait for health, then follow backend + frontend logs. Ctrl-C stops following; containers keep running |
-| `bun run dev --refresh-db` | As above, plus `python -m app.db.schema refresh` (drop + recreate tables) and `python -m app.seed` |
+| `bun run setup` | Check Docker, sync `.env` with `.env.example` (generates `JWT_SECRET`), install host deps for editor support, build images, start the stack, wait until healthy |
+| `bun run dev` | Sync `.env`, `up -d --build`, wait for health, then follow backend + frontend logs. Ctrl-C stops following; containers keep running. Migrations apply on backend start |
+| `bun run dev --refresh-db` | As above, plus `db:reset` (wipe + re-apply every migration) and `python -m app.seed` |
+| `bun run db:revision "msg" [--empty]` | Autogenerate a migration from the models (or a blank one) into `backend/migrations/versions/` |
+| `bun run db:migrate [rev]` / `db:downgrade [rev]` | `alembic upgrade head` / `alembic downgrade -1` (or to `rev`) |
+| `bun run db:current` / `db:history` / `db:check` | Where the DB is / all revisions / fail if models drift from migrations |
+| `bun run db:reset [--yes]` | Wipe the dev DB's public schema and re-apply every migration (asks first) |
 | `bun run stop` / `bun run logs [svc]` | Stop containers / follow logs |
 | `bun run seed` | `docker compose exec backend python -m app.seed` |
 | `bun run test [pytest args]` | `docker compose exec backend pytest …` — note: `bun run test`, **not** `bun test` (Bun's built-in runner) |
@@ -281,11 +356,13 @@ Container dev notes:
 ## 13. Testing Strategy
 
 - `pytest` inside the backend container, with `LLM_PROVIDER=fake` and `EMBEDDING_PROVIDER=fake` (deterministic, no API keys).
-- Existing tests:
-  - `test_health.py` — runs the lifespan, then checks DB, pgvector, and bucket;
+- **Test database:** tests run against `memory_bank_test`, created on demand. Its schema is rebuilt from the migrations once per run, and tables are truncated before each test (`tests/conftest.py`). Dev data is never touched.
+- **Existing tests (13):**
+  - `test_auth.py` — register, duplicate email, validation, login, rotation, two-tab race, reuse → session revoked, logout, token-type checks;
+  - `test_migrations.py` — models ↔ migrations in sync, plus a downgrade/upgrade round trip;
+  - `test_health.py`;
   - `test_storage.py` — presigned URLs are signed for the browser host.
 - Starlette's TestClient uses `httpx2` (plain `httpx` is deprecated there).
-- Tests run against a separate database (`memory_bank_test`) created by a fixture — *Proposed*.
 - Must-have tests:
   - the guard strips foreign artifact IDs and overwrites the score;
   - the sweeper requeues stale jobs and fails them after max attempts;
@@ -300,7 +377,7 @@ Container dev notes:
 | D2 | Browser → backend only via the Next `/api` rewrite; presigned MinIO GETs are the sole exception | Accepted | Brief; same-origin, no CORS |
 | D3 | FastAPI routes mounted under `/api`; the rewrite forwards the path unchanged | Proposed | One URL shape everywhere; Swagger reachable through the proxy |
 | D4 | Async SQLAlchemy 2.0 + asyncpg | Proposed | Matches async FastAPI + async LLM I/O |
-| D5 | `create_all` at startup, no Alembic during the hackathon; `--refresh-db` for changes | Proposed | Schema still moving; migrations add friction |
+| D5 | Alembic migrations own the schema (config in `pyproject.toml`); the container runs `upgrade head` on start; `create_all` is never used | Accepted | Tables now exist (auth). Changes must apply to existing DBs, not just fresh ones |
 | D6 | Postgres as the job queue (`SKIP LOCKED`) + in-process worker & sweeper | Proposed | No Redis/Celery; state survives restarts |
 | D7 | Job states `QUEUED → PROCESSING → COMPLETED \| FAILED` | Proposed | Unifies the brief's `PENDING` vs `QUEUED` wording |
 | D8 | Provider-agnostic `llm_client` (`gemini` / `openrouter` / `fake`) | Proposed | Swap models freely; deterministic tests |
@@ -316,6 +393,8 @@ Container dev notes:
 | D18 | UI kit: shadcn/ui 4.x, Radix base, Nova style (Lucide + Geist); `cn` package replaces clsx + tailwind-merge | Accepted | Radix has the most mature API/docs; Nova matches our existing Geist fonts. `cn` is shadcn's own drop-in |
 | D19 | Dejavu theme: Anduin palette mapped onto shadcn roles; square + flat enforced globally; light only | Accepted | DESIGN.md. Global enforcement keeps future `shadcn add` components on-brand without hand edits |
 | D20 | `/` redirects to `/workbench`; job results at `/workbench/[jobId]` | Proposed | Matches DESIGN.md routes; results stay linkable |
+| D21 | Auth: short-lived JWT access token (memory) + rotating, DB-backed refresh token (httpOnly cookie, path `/api/auth`) with family revocation and reuse detection | Accepted | Revocable sessions without server-side session lookups on every request; tokens unreadable by injected scripts |
+| D22 | `app/core/` holds shared infrastructure (config, db, security, storage, migrations); domain modules live in `app/modules/` | Accepted | Team convention |
 
 ## 15. Known Gotchas
 
@@ -324,8 +403,8 @@ Container dev notes:
 3. **The rewrite proxy has a timeout** (`experimental.proxyTimeout`). Never make a long synchronous LLM call behind `/api` — that's why we have jobs.
 4. **`axiosClient` uses a relative `baseURL`,** so services run only in the browser. Don't call them from Server Components.
 5. **`params` is a Promise** in Next.js 16 pages and layouts.
-6. **`create_all` only sees imported models.** `db/schema.py` must import every module's `models.py`.
-7. **`create_all` never alters existing tables.** After model changes, run `bun run dev --refresh-db`.
+6. **Autogenerate only sees imported models.** `migrations/env.py` must import every module's `models.py`, or new tables won't appear in the generated migration.
+7. **Always review autogenerated migrations.** Alembic can't detect renames (it emits drop + add, losing data), extensions, or data moves, and its type-change detection is limited. `bun run test` fails if the models and migrations drift apart.
 8. **pgvector indexes must match the operator.** `cosine_distance` (`<=>`) needs an index built with `vector_cosine_ops`. HNSW on `vector` supports at most 2,000 dimensions.
 9. **The MinIO SDK blocks.** Network calls go through `asyncio.to_thread`.
 10. **`minio/minio` no longer exists on Docker Hub,** and Quay has no tags. Use the pinned `pgsty/minio` release (D14). A locally cached `minio/minio:latest` hides this until a teammate tries to pull.
@@ -338,6 +417,9 @@ Container dev notes:
 17. **`[browser] …` lines in the frontend container log** are browser console output forwarded by Next 16. An old tab replays stale "Module not found" errors after a restart, so reopen the tab before you debug those.
 18. **Don't re-run `shadcn init`.** It overwrites `globals.css` with a generic theme, and its generated `--font-sans: var(--font-sans)` refers to itself.
 19. **Deleting a route can break the next local `next build`.** Stale generated route types (`.next/dev/types/validator.ts`) still reference it ("Cannot find module …/page.js"). Fix with `rm -rf frontend/.next` and rebuild.
+20. **Dev server 500 with `ENOENT … .next/dev/routes-manifest.json`.** This happened once, after layouts were swapped in a route group mid-session. Recover with `bun run dev`, which renews the frontend's `.next` volume.
+21. **The email validator rejects reserved TLDs** (`.test`, `.local`, `.localhost`, …) with a 422. Use `.example` addresses for test accounts.
+22. **The schema was reset when Alembic was introduced (2026-10-15).** If an old local DB has tables but no `alembic_version`, the backend will fail on `upgrade head` with "relation already exists". Run `bun run db:reset`.
 
 ## 16. Open Questions
 
@@ -346,4 +428,4 @@ Container dev notes:
 - Chunking strategy per source type: post-mortem sections, Slack messages/threads, schema files, PDFs.
 - Delta for the #1 match only, or all three (eager vs. on demand)?
 - Citation model: add `evidence` / `chunk_id` to delta items and pitfall warnings? (see the pipeline reference, "Proposed contract extension")
-- Auth: none assumed for the hackathon.
+- Auth follow-ups: rate limiting, password reset (Mailpit is ready for the emails), and whether vault `Person` records link to `users`.

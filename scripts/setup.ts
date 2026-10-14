@@ -2,9 +2,8 @@
  * One-time (and re-runnable) setup:
  *   prerequisites → .env → host deps for editor support → build images → start stack → wait for health.
  */
-import { copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { ROOT, compose, printUrls, run, waitForHealthy } from "./docker";
+import { ROOT, compose, printUrls, run, syncEnv, waitForHealthy } from "./docker";
 
 async function has(cmd: string[]): Promise<boolean> {
   try {
@@ -23,11 +22,7 @@ if (!(await has(["docker", "compose", "version"]))) {
   process.exit(1);
 }
 
-const envPath = join(ROOT, ".env");
-if (!existsSync(envPath)) {
-  copyFileSync(join(ROOT, ".env.example"), envPath);
-  console.log("Created .env from .env.example");
-}
+syncEnv();
 
 // Host-side installs only power editor IntelliSense; the containers have their own dependencies.
 console.log("Installing host dependencies for editor support…");

@@ -16,12 +16,14 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project
 COPY . .
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Apply pending migrations, then serve. A failed migration stops the container instead of serving a stale schema.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
 
 # Production: runtime dependencies only.
 FROM base AS prod
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 COPY app ./app
+COPY migrations ./migrations
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

@@ -21,7 +21,8 @@ This is an operational workbench, not a chatbot. The product is branded **Dejavu
 
 ## 0. Before writing code
 
-- **The table schema is not decided yet.** Don't create or change tables, columns, or migrations without asking the user, and don't lock in field names. Use the working entity names (HistoricalCase, Person, Artifact, KnowledgeChunk, TriageJob) and keep models in each module's `models.py` so they're cheap to change.
+- **Domain tables are not decided yet.** Don't create vault/triage tables or lock in field names without asking the user. Use the working entity names (HistoricalCase, Person, Artifact, KnowledgeChunk, TriageJob). The auth tables (`users`, `refresh_tokens`) exist.
+- **Every schema change is an Alembic migration:** change `models.py` → `bun run db:revision "msg"` → review the file → `bun run db:migrate`. Never use `create_all`. Details: `references/backend-patterns.md` § Schema changes.
 - **Features are still being concluded.** If a task needs a product decision (CONTEXT.md §7), ask instead of guessing.
 - **Check `ARCHITECTURE.md` §14.** *Proposed* decisions can still change; say so when your change depends on one.
 
@@ -32,6 +33,11 @@ This is an operational workbench, not a chatbot. The product is branded **Dejavu
 - **One HTTP client.** `lib/axiosClient.ts` with `baseURL: "/api"`. No `fetch`, no absolute backend URLs, no second axios instance. The base URL is relative, so services only work in the browser. Pages that use store hooks are client components (`"use client"`).
 - **Polling.** While a triage job is `QUEUED` or `PROCESSING`, poll about every 2 s via `refetchInterval`. Return `false` once the job is `COMPLETED` or `FAILED`, or if the query errors.
 - **Query keys** live in `store/queryKeys.ts`. Never write inline key arrays.
+- **Auth on the client:**
+  - The access token lives only in memory (`lib/accessToken.ts`) — never localStorage. `lib/axiosClient.ts` attaches it, and on a 401 runs one shared `/auth/refresh` and retries.
+  - Session state: `useSession()` in `store/auth.ts`.
+  - Signed-in pages go under `app/(app)/`, which gates on the session and holds the nav. Public auth pages go under `app/(auth)/`.
+  - A layout must always render `{children}`: hide them rather than drop them, or Next's instant-navigation validation complains.
 - **Presigned links are fetched fresh on each click** (a mutation, not a cached query), because they expire.
 - **Next.js 16.4** is newer than your training data. Check `frontend/node_modules/next/dist/docs/` before using an API you're unsure of.
   - **Cache Components are on.** Every dynamic segment (`[jobId]`, `[caseId]`) needs a `loading.tsx`, or `next build` fails on the `params` access. `next dev` won't warn you, so run `bun run build` in `frontend/` before calling a route done.
@@ -59,19 +65,23 @@ Templates → `references/frontend-patterns.md` (data flow) and `references/desi
 ## 2. Golden rules — Backend (`backend/app/`)
 
 - **Modular monolith:** `router → service → SQLAlchemy`, one folder per domain under `app/modules/` (`vault/`, `triage/`, `intelligence/`). Routers do HTTP only; services own logic and transactions.
-- **Dependency direction:** `triage → intelligence → vault → core/db`.
+- **`app/core/` is shared infrastructure** (`config`, `db`, `security`, `storage`, `migrations`); domain code lives in `app/modules/`.
+- **Dependency direction:** `triage → intelligence → vault → core`. Any module may use `auth.deps.CurrentUser`.
   - Never import upward.
   - Cross-module calls go through the other module's `service.py`, never its router.
   - Only the owning module writes its tables, so `intelligence` returns results and the `triage` worker persists them.
 - **Every route lives under `/api`.** The Next rewrite forwards the path unchanged; Swagger is at `/api/docs`.
-- **Idempotent startup** (`main.py` lifespan), safe on every container start:
-  1. `CREATE EXTENSION IF NOT EXISTS vector`
-  2. Create tables via `db/schema.py`.
-  3. Ensure the MinIO bucket — **non-fatal**: log the failure and let `/api/health` report it.
-  4. `sweep_once()` to recover stale jobs.
-  5. Start the worker and `sweeper.py` loops.
+- **Idempotent startup**, safe on every container start:
+  1. The container CMD runs `alembic upgrade head`, then uvicorn. pgvector comes from the first migration.
+  2. Lifespan: ensure the MinIO bucket — **non-fatal**: log the failure and let `/api/health` report it.
+  3. Lifespan: `sweep_once()` to recover stale jobs.
+  4. Lifespan: start the worker and `sweeper.py` loops.
 
-  Steps 4–5 get wired in once the job table exists.
+  Steps 3–4 get wired in once the job table exists.
+- **Auth:**
+  - Protect every new domain route with `user: CurrentUser` (from `app.modules.auth.deps`). Only `/api/health` and `/api/auth/*` are public.
+  - Tokens: a short-lived JWT access token (bearer), plus a rotating refresh token in an httpOnly cookie scoped to `/api/auth`.
+  - Password hashing and JWT helpers live in `app/core/security.py`.
 - **Resilient jobs.** LLM triage never runs inside a request or as a fire-and-forget in-memory task.
   - Persist a job row (`QUEUED → PROCESSING → COMPLETED | FAILED`).
   - Claim it with `FOR UPDATE SKIP LOCKED`.
@@ -119,9 +129,13 @@ Always use the root `bun` scripts:
 
 | Command | Does |
 |---|---|
-| `bun run setup` | Build images, start containers, init pgvector + MinIO bucket |
+| `bun run setup` | Sync `.env` (generates `JWT_SECRET`), build images, start containers (migrations apply on backend start) |
 | `bun run dev` | Run the stack with hot reload |
-| `bun run dev --refresh-db` | Drop + recreate tables, then seed |
+| `bun run dev --refresh-db` | Wipe the DB, re-apply every migration, then seed |
+| `bun run db:revision "msg" [--empty]` | Autogenerate a migration from the models (or a blank one) |
+| `bun run db:migrate [rev]` / `db:downgrade [rev]` | Apply / roll back migrations |
+| `bun run db:current` / `db:history` / `db:check` | DB revision / all revisions / fail on model drift |
+| `bun run db:reset` | Wipe the dev DB and re-apply every migration (asks first) |
 | `bun run stop` / `bun run logs [svc]` | Stop containers / follow logs |
 | `bun run seed` | Load private-markets cases and upload artifacts to MinIO |
 | `bun run test [pytest args]` | `pytest` inside the backend container (use `bun run test`, not `bun test`) |

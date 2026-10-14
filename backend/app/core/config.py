@@ -1,5 +1,6 @@
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +26,16 @@ class Settings(BaseSettings):
     embedding_dim: int = 768
     gemini_api_key: str | None = None
     openrouter_api_key: str | None = None
+
+    # HS256 signing key. `bun run setup` / `bun run dev` generate one into .env.
+    jwt_secret: str = Field(min_length=32)
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 7
+    # Grace period in which reusing a just-rotated refresh token is treated as a benign race (two tabs refreshing
+    # at once) rather than theft.
+    refresh_reuse_grace_seconds: int = 30
+    # Set true whenever the app is served over HTTPS.
+    refresh_cookie_secure: bool = False
 
 
 settings = Settings()

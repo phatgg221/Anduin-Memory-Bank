@@ -43,13 +43,28 @@ Ports clash with something already running? Change them in `.env`.
 | Command | Does |
 |---|---|
 | `bun run dev` | Start / rebuild the stack with hot reload and follow logs (Ctrl-C detaches; containers keep running) |
-| `bun run dev --refresh-db` | Same, plus drop + recreate tables and re-seed |
+| `bun run dev --refresh-db` | Same, plus wipe the DB, re-apply all migrations, and re-seed |
 | `bun run stop` | Stop containers |
 | `bun run logs [service]` | Follow logs |
 | `bun run seed` | Seed the vault |
 | `bun run test [pytest args]` | Backend tests inside the container (`bun run test`, not `bun test`) |
 | `bun run lint` | ESLint (frontend) + ruff (backend) |
 | `bun run reset` | Delete containers **and all local data** (asks first) |
+
+### Database migrations (Alembic)
+
+Change a model → generate → **review** → apply. Commit the model and the migration together.
+
+| Command | Does |
+|---|---|
+| `bun run db:revision "add case tables"` | Autogenerate a migration from the ORM models into `backend/migrations/versions/` |
+| `bun run db:revision "backfill x" --empty` | Blank migration to hand-write (data fixes, extensions) |
+| `bun run db:migrate` / `bun run db:downgrade` | Apply all pending / roll back one |
+| `bun run db:current` / `bun run db:history` | Where the DB is / every revision |
+| `bun run db:check` | Fail if the models changed without a migration (also enforced by `bun run test`) |
+| `bun run db:reset` | Wipe the dev DB and re-apply every migration (asks first) |
+
+The backend applies pending migrations automatically when its container starts.
 
 ## Layout
 

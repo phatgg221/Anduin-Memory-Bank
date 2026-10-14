@@ -4,10 +4,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.core.db import engine
 from app.core.storage import ensure_bucket
-from app.db.schema import init_db
-from app.db.session import engine
 from app.health import router as health_router
+from app.modules.auth.router import router as auth_router
 from app.modules.triage.router import router as triage_router
 from app.modules.vault.router import router as vault_router
 
@@ -16,8 +16,8 @@ logger = logging.getLogger("uvicorn.error")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Idempotent: safe on every container start.
-    await init_db()
+    # Idempotent: safe on every container start. The schema is not created here: Alembic owns it, and the
+    # container runs `alembic upgrade head` before uvicorn starts (Dockerfile CMD).
     try:
         await asyncio.to_thread(ensure_bucket)
     except Exception as exc:
@@ -30,12 +30,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Anduin Memory Bank",
+    title="Dejavu API",
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url=None,
     openapi_url="/api/openapi.json",
 )
 app.include_router(health_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
 app.include_router(vault_router, prefix="/api")
 app.include_router(triage_router, prefix="/api")

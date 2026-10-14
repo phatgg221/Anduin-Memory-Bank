@@ -2,7 +2,8 @@
  * Shared Docker Compose helpers, plus small subcommands:
  *   bun scripts/docker.ts stop | logs | seed | test [pytest args] | lint | reset [--yes]
  */
-import { existsSync, readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const ROOT = join(import.meta.dir, "..");
@@ -75,6 +76,37 @@ export function readEnv(): Record<string, string> {
     if (match) env[match[1]] = match[2];
   }
   return env;
+}
+
+/**
+ * Keep .env in step with .env.example: create it if missing, append keys added to the example since, and generate
+ * a JWT_SECRET if it's empty. Never overwrites values you've set.
+ */
+export function syncEnv(): void {
+  const examplePath = join(ROOT, ".env.example");
+  const envPath = join(ROOT, ".env");
+  if (!existsSync(envPath)) {
+    copyFileSync(examplePath, envPath);
+    console.log("Created .env from .env.example");
+  }
+
+  const current = readEnv();
+  const missing = readFileSync(examplePath, "utf8")
+    .split("\n")
+    .map((line) => line.match(/^\s*([A-Z0-9_]+)\s*=(.*)$/))
+    .filter((match): match is RegExpMatchArray => match !== null && !(match[1] in current))
+    .map((match) => `${match[1]}=${match[2].trim()}`);
+
+  let text = readFileSync(envPath, "utf8");
+  if (missing.length) {
+    text = `${text.replace(/\n*$/, "\n")}\n# Added from .env.example\n${missing.join("\n")}\n`;
+    console.log(`Added to .env: ${missing.map((line) => line.split("=")[0]).join(", ")}`);
+  }
+  if (!/^JWT_SECRET=\S+/m.test(text)) {
+    text = text.replace(/^JWT_SECRET=.*$/m, `JWT_SECRET=${randomBytes(32).toString("hex")}`);
+    console.log("Generated a random JWT_SECRET in .env");
+  }
+  writeFileSync(envPath, text);
 }
 
 export function printUrls(): void {

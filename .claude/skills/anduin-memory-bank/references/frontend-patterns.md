@@ -9,25 +9,30 @@ frontend/
 ├── next.config.ts                  # / → /workbench redirect, /api rewrite, standalone, Cache Components
 ├── components.json                 # shadcn config (radix base, nova style)
 ├── app/
-│   ├── layout.tsx                  # fonts, <Providers>, Suspense-wrapped RoutedTopNav, <main>
-│   ├── providers.tsx               # "use client" — QueryClientProvider + TooltipProvider
-│   ├── globals.css                 # Dejavu tokens (see design-system.md)
-│   ├── workbench/page.tsx          # ✓ 3-pane frame (01 request · 02 precedent & delta · 03 kit & source)
-│   ├── workbench/[jobId]/          # proposed: the same 3 panes, filled from a triage job (+ loading.tsx)
-│   ├── vault/page.tsx              # proposed: stats strip + case table
-│   ├── vault/[caseId]/             # proposed: case detail (+ loading.tsx)
-│   └── ingest/page.tsx             # proposed: Ingest Archive (needs product sign-off)
+│   ├── layout.tsx                  # ✓ fonts + <Providers> only (shells live in the route groups)
+│   ├── providers.tsx               # ✓ QueryClient + TooltipProvider; session-expiry → session null
+│   ├── globals.css                 # ✓ Dejavu tokens (see design-system.md)
+│   ├── (auth)/                     # ✓ public: AuthFrame split layout; signed-in → /workbench
+│   │   ├── login/page.tsx          # ✓
+│   │   └── register/page.tsx       # ✓
+│   └── (app)/                      # ✓ signed-in only: session gate + TopNav/UserMenu + <main>
+│       ├── workbench/page.tsx      # ✓ 3-pane frame (01 request · 02 precedent & delta · 03 kit & source)
+│       ├── workbench/[jobId]/      # proposed: the same 3 panes, filled from a triage job (+ loading.tsx)
+│       ├── vault/page.tsx          # proposed: stats strip + case table
+│       ├── vault/[caseId]/         # proposed: case detail (+ loading.tsx)
+│       └── ingest/page.tsx         # proposed: Ingest Archive (needs product sign-off)
 ├── components/                     # presentational only (ESLint-enforced)
 │   ├── ui/                         # ✓ shadcn/ui primitives (owned code)
 │   ├── brand/                      # ✓ SectionLabel, ActionButton, StatusBadge/AlumniBadge, SimilarityMeter, BrandMark, IsometricStack
-│   ├── shell/                      # ✓ TopNav, RoutedTopNav
+│   ├── shell/                      # ✓ TopNav, RoutedTopNav, UserMenu
+│   ├── auth/                       # ✓ AuthFrame, LoginForm, RegisterForm, FormAlert, SessionSplash
 │   ├── system/                     # ✓ SystemStatus (status bar)
 │   ├── triage/                     # IntakeForm, BriefParams, MatchStrip, HowItWent, DeltaMatrix, JobProgress
 │   └── vault/                      # VaultStats, CaseTable, ArtifactList, CitationInspector
-├── store/                          # queryKeys.ts, system.ts ✓, triage.ts, vault.ts
-├── services/                       # systemService.ts ✓, triageService.ts, vaultService.ts
-├── lib/                            # axiosClient.ts ✓, utils.ts (cn) ✓
-└── types/                          # system.ts ✓, delta.ts ✓ (DeltaStatus), triage.ts, vault.ts
+├── store/                          # queryKeys.ts ✓, auth.ts ✓, system.ts ✓, triage.ts, vault.ts
+├── services/                       # authService.ts ✓, systemService.ts ✓, triageService.ts, vaultService.ts
+├── lib/                            # axiosClient.ts ✓ (+ refresh interceptor), accessToken.ts ✓, apiError.ts ✓, utils.ts ✓
+└── types/                          # auth.ts ✓, system.ts ✓, delta.ts ✓ (DeltaStatus), triage.ts, vault.ts
 ```
 
 ✓ = exists today. Route and component names for unbuilt features are proposals.
@@ -67,14 +72,29 @@ const nextConfig: NextConfig = {
 };
 ```
 
-## `lib/axiosClient.ts`
+## `lib/axiosClient.ts` + auth plumbing (as committed)
 
-```ts
-import axios from "axios";
+- **`axiosClient`:** `baseURL: "/api"` (browser-only). A request interceptor adds `Authorization: Bearer <token>` from `accessTokenStore`.
+- **401 handling:** on a 401 from any request without `skipAuthRefresh`, the response interceptor:
+  1. calls `refreshSession()` — **one shared request** for all concurrent 401s, retried once on `409 refresh_token_rotated`;
+  2. replays the original request once (`authRetried`);
+  3. if the refresh itself returns 401, calls `accessTokenStore.expire()`. Providers listen, set the session to `null`, and the `(app)` gate redirects to `/login`.
+- **`lib/accessToken.ts`:** the access token lives in memory only (`get`/`set`/`expire`/`onExpired`). Never put it in localStorage or a readable cookie.
+- **`lib/apiError.ts`:** services wrap calls in `withApiErrors(...)`, which normalises FastAPI errors into `ApiRequestError { message, status, fieldErrors }`.
+  - `{detail: "…"}` → `message`.
+  - 422 `{detail: [{loc, msg}]}` → `fieldErrors[field]`.
+  - Forms show `fieldErrors` under each field and `message` in a `FormAlert`.
+- **Auth endpoints** (`/auth/login|register|refresh|logout`) pass `{ skipAuthRefresh: true }`: a 401 there means bad credentials, not an expired token.
 
-// Relative base URL: browser-only. Never call services from Server Components.
-export const axiosClient = axios.create({ baseURL: "/api", timeout: 30_000 });
-```
+### Session hooks (`store/auth.ts`)
+
+| Hook | Does |
+|---|---|
+| `useSession()` | `Session \| null`. Restores once per page load via `/auth/refresh` (`staleTime: Infinity`) |
+| `useLogin()` / `useRegister()` | `mutate(input)`; on success the session cache is set, and the `(auth)` layout redirects to `/workbench` |
+| `useLogout()` | Revokes the server session, drops user-scoped caches, sets the session to `null` → `(app)` redirects to `/login` |
+
+New signed-in pages go under `app/(app)/`. They can assume a session, but must not render their own `<main>`.
 
 ## `types/triage.ts` (illustrative — keep in sync with backend `schemas.py`)
 
@@ -180,18 +200,22 @@ The page decides what to do with the URL. For `attachment`, use `window.location
 
 ## `app/providers.tsx` (as committed)
 
-`QueryClientProvider` (staleTime 30 s, retry 1) wrapping shadcn's `TooltipProvider`. Add new app-wide providers here, not in `layout.tsx` (which is a Server Component).
+- **Providers:** `QueryClientProvider` (staleTime 30 s, retry 1) wrapping shadcn's `TooltipProvider`.
+- **Session expiry:** subscribes to `accessTokenStore.onExpired` to null the session.
+- Add new app-wide providers here, not in `layout.tsx` (which is a Server Component).
 
-## `app/layout.tsx` — the shell
+## `app/(app)/layout.tsx` — the signed-in shell
 
-- The nav is configured as a `NAV: NavItem[]` array. Items whose route doesn't exist yet get `disabled: true`.
-- `RoutedTopNav` calls `usePathname`, which **suspends on routes with unknown dynamic params** under Cache Components. It is therefore wrapped in `<Suspense fallback={<TopNav items={NAV} />}>`, which keeps the shell prerendered. Keep that wrapper when you touch the layout.
-- Pages render inside `<main className="flex flex-1 flex-col">`, so **pages must not render their own `<main>`**.
+- **Session gate:** a client layout that calls `useSession()` and does `router.replace("/login")` once the session is known to be `null`.
+- **Always render `{children}`** — inside `<div hidden={!user}>`, behind `SessionSplash` until the user is known. If a layout returns a splash *instead of* its children, Cache Components' instant-navigation validation flags the page as a "dropped segment". `export const instant = false` doesn't fix that, and can't be exported from a Client Component anyway.
+- **Nav:** configured as a `NAV: NavItem[]` array; items whose route doesn't exist yet get `disabled: true`. The `UserMenu` goes in the TopNav `actions` slot.
+- **Keep the Suspense wrapper:** `RoutedTopNav` calls `usePathname`, which **suspends on routes with unknown dynamic params**, so it's wrapped in `<Suspense fallback={<TopNav … />}>`.
+- **Pages** render inside `<main className="flex flex-1 flex-col">`, so **they must not render their own `<main>`**.
 
 ## Page containers
 
 ```tsx
-// app/workbench/page.tsx — intake (pane 01) wired to a mutation; results live at /workbench/[jobId]
+// app/(app)/workbench/page.tsx — intake (pane 01) wired to a mutation; results live at /workbench/[jobId]
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -223,7 +247,7 @@ With Cache Components on, reading `params` outside a Suspense boundary fails `ne
 `next dev` stays silent about this. Every dynamic segment therefore ships a `loading.tsx`. Next wraps the page in a Suspense boundary from it, and it doubles as the skeleton. With it in place, the route builds as a Partial Prerender (◐).
 
 ```tsx
-// app/workbench/[jobId]/loading.tsx — required; also the first paint
+// app/(app)/workbench/[jobId]/loading.tsx — required; also the first paint
 import { JobProgress } from "@/components/triage/JobProgress";
 
 export default function Loading() {
@@ -232,7 +256,7 @@ export default function Loading() {
 ```
 
 ```tsx
-// app/workbench/[jobId]/page.tsx — params is a Promise in Next.js 16
+// app/(app)/workbench/[jobId]/page.tsx — params is a Promise in Next.js 16
 "use client";
 
 import { use } from "react";

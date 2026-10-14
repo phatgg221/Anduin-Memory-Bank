@@ -1,28 +1,32 @@
-# Backend Patterns — FastAPI · SQLAlchemy 2.0 (async) · pgvector · MinIO
+# Backend Patterns — FastAPI · SQLAlchemy 2.0 (async) · Alembic · pgvector · MinIO
 
-Table and column names in the SQL below are **illustrative**: the schema isn't decided. Keep the *patterns*; ask before committing to names.
+Domain table and column names below (`triage_jobs`, …) are **illustrative**: the domain schema isn't decided. Keep the *patterns*; ask before committing to names. The auth tables (`users`, `refresh_tokens`) are real.
 
 ## Layout
 
 ```text
 backend/
-├── pyproject.toml · uv.lock · Dockerfile
+├── pyproject.toml · uv.lock · Dockerfile     # [tool.alembic] config lives in pyproject.toml
+├── migrations/
+│   ├── env.py                  # async engine, URL from settings, imports every module's models
+│   ├── script.py.mako          # template for new revisions
+│   └── versions/               # one file per schema change: YYYYMMDD_HHMM_<rev>_<slug>.py
 ├── app/
 │   ├── main.py                 # FastAPI app, lifespan, router registration
 │   ├── health.py               # GET /api/health
-│   ├── core/
+│   ├── core/                   # shared infrastructure — no domain logic
 │   │   ├── config.py           # pydantic-settings
-│   │   └── storage.py          # MinIO: internal client + public signer
-│   ├── db/
-│   │   ├── base.py             # DeclarativeBase
-│   │   ├── session.py          # async engine, SessionLocal, get_session
-│   │   └── schema.py           # init_db() / drop_all() — imports every module's models
+│   │   ├── db.py               # Base (+ naming convention), engine, SessionLocal, get_session, SessionDep
+│   │   ├── security.py         # Argon2id hash/verify, JWT create/decode
+│   │   ├── storage.py          # MinIO: internal client, no-retry probe, public signer
+│   │   └── migrations.py       # Alembic from code: reset() (dev/test), upgrade_to_head()
 │   ├── modules/
+│   │   ├── auth/               # models, schemas, service, router, deps (CurrentUser)
 │   │   ├── vault/              # router, service, models, schemas, ingest (chunk + embed)
 │   │   ├── triage/             # router, service, models, schemas, worker, sweeper
 │   │   └── intelligence/       # service, retrieval, llm_client, prompts, schemas, guard
 │   └── seed.py
-└── tests/
+└── tests/                      # conftest builds memory_bank_test from the migrations
 ```
 
 ## Module rules
@@ -31,122 +35,100 @@ backend/
 |---|---|---|
 | `router.py` | `APIRouter(prefix="/<domain>")`; parse input, call the service, map domain errors to HTTP | SQL, business logic |
 | `service.py` | Business logic; takes `AsyncSession` first; owns the transaction | Return `Response` objects; import routers |
-| `models.py` | SQLAlchemy models | Change without asking (schema TBD) |
+| `models.py` | SQLAlchemy models (import `Base` from `app.core.db`) | Change without a migration; invent domain tables without asking |
 | `schemas.py` | Pydantic request/response models | Leak ORM objects to the client |
 
-- **Dependency direction:** `triage → intelligence → vault → core/db`. Cross-module calls go through `service.py` only.
+- **Dependency direction:** `triage → intelligence → vault → core`. Any module may depend on `auth.deps` (`CurrentUser`). Cross-module calls go through `service.py` only.
 - **Table ownership:** only the owning module writes its tables.
 
-## `core/config.py`
+## Schema changes — Alembic
+
+1. Edit or add `models.py`. For a **new module**, also add `from app.modules.<name> import models as _<name>_models  # noqa: F401` to `migrations/env.py`.
+2. `bun run db:revision "add triage jobs"` autogenerates `migrations/versions/<date>_<rev>_add_triage_jobs.py`, already formatted by ruff.
+3. **Read the file.** Fix anything autogenerate can't infer:
+   - **Renames:** it emits drop + add. Use `op.alter_column(..., new_column_name=...)` / `op.rename_table` instead.
+   - **Extensions / SQL functions / data backfills:** hand-write them with `op.execute(...)`.
+   - **New NOT NULL columns on tables with rows:** add a `server_default`, or add the column nullable → backfill → `alter_column(nullable=False)`.
+   - **pgvector columns:** the rendered type is `pgvector.sqlalchemy.vector.VECTOR(dim=…)`. Make sure the file imports `pgvector.sqlalchemy`.
+4. `bun run db:migrate`, then `bun run test`. `test_migrations.py` fails if the models and migrations differ, and checks downgrade/upgrade.
+5. Commit the model change and the migration together.
+
+- **Blank migration:** `bun run db:revision "…" --empty`.
+- **Roll back:** `bun run db:downgrade`.
+- **Start over locally:** `bun run db:reset`.
+- **Never use `Base.metadata.create_all`.** The container runs `alembic upgrade head` before uvicorn.
+
+## `core/config.py` (excerpt)
 
 ```python
-from typing import Literal
-
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
 class Settings(BaseSettings):
     # Values come from the environment: docker-compose.yml + the root .env (via env_file).
     model_config = SettingsConfigDict(extra="ignore")
 
     database_url: str
-
     minio_endpoint: str = "minio:9000"
     minio_public_endpoint: str = "localhost:9000"
-    minio_access_key: str
-    minio_secret_key: str
-    minio_bucket: str = "memory-bank"
-    minio_secure: bool = False
-    presign_ttl_seconds: int = 600
+    # … minio, llm, embedding settings …
+    jwt_secret: str = Field(min_length=32)          # generated into .env by bun run setup/dev
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 7
+    refresh_reuse_grace_seconds: int = 30
+    refresh_cookie_secure: bool = False
 
-    llm_provider: Literal["gemini", "openrouter", "fake"] = "fake"
-    llm_model: str = ""
-    embedding_provider: Literal["gemini", "fake"] = "fake"
-    embedding_model: str = "gemini-embedding-001"
-    embedding_dim: int = 768
-    gemini_api_key: str | None = None
-    openrouter_api_key: str | None = None
-
-    job_max_attempts: int = 3
-    job_stale_after_seconds: int = 120
-    sweeper_interval_seconds: int = 30
-    worker_poll_interval_seconds: float = 1.0
-    worker_concurrency: int = 2
+    # Added with the job worker:
+    # job_max_attempts: int = 3; job_stale_after_seconds: int = 120; sweeper_interval_seconds: int = 30
+    # worker_poll_interval_seconds: float = 1.0; worker_concurrency: int = 2
 
 
 settings = Settings()
 ```
 
-## `db/session.py`
+## `core/db.py`
 
 ```python
-from collections.abc import AsyncIterator
+NAMING_CONVENTION = {"ix": "ix_%(column_0_label)s", "uq": "uq_%(table_name)s_%(column_0_name)s",
+                     "ck": "ck_%(table_name)s_%(constraint_name)s",
+                     "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s", "pk": "pk_%(table_name)s"}
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-from app.core.config import settings
+class Base(DeclarativeBase):
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 engine = create_async_engine(settings.database_url, pool_pre_ping=True)  # postgresql+asyncpg://
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
-
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with SessionLocal() as session:
         yield session
-```
 
-## `db/schema.py`
-
-```python
-from sqlalchemy import text
-
-from app.db.base import Base
-from app.db.session import engine
-
-# create_all only knows about models that have been imported.
-from app.modules.triage import models as _triage_models  # noqa: F401
-from app.modules.vault import models as _vault_models  # noqa: F401
-
-
-async def init_db() -> None:
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        await conn.run_sync(Base.metadata.create_all)
-
-
-async def drop_all() -> None:
-    """Used by `bun run dev --refresh-db`. create_all never alters existing tables."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
 ```
 
 Vector columns use `pgvector.sqlalchemy.Vector(settings.embedding_dim)`. If you add an ANN index, build it with `vector_cosine_ops` so it serves `cosine_distance` (`<=>`). HNSW on `vector` supports at most 2,000 dimensions.
 
+## Protecting routes — `auth.deps.CurrentUser`
+
+```python
+from app.core.db import SessionDep
+from app.modules.auth.deps import CurrentUser
+
+@router.get("/cases")
+async def list_cases(user: CurrentUser, session: SessionDep) -> list[CaseOut]:
+    ...  # 401 with WWW-Authenticate: Bearer if the access token is missing/invalid/expired
+```
+
+- `CurrentUser` verifies the JWT (type `access`) and loads an active `User`.
+- **Default to protecting every new domain route.** Only `/api/health` and `/api/auth/*` are public.
+- **Never put tokens in URLs or logs.** The refresh token only ever travels in the httpOnly `dejavu_refresh` cookie (path `/api/auth`).
+- **Auth internals:**
+  - `core/security.py` holds `hash_password` / `verify_password`, which are CPU-bound, so call them via `asyncio.to_thread`, plus `create_token` / `decode_token`.
+  - `modules/auth/service.py` handles rotation, reuse detection, and family revocation.
+
 ## `main.py` (target shape once the worker exists)
 
 ```python
-import asyncio
-import logging
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
-
-from app.core.storage import ensure_bucket
-from app.db.schema import init_db
-from app.db.session import engine
-from app.health import router as health_router
-from app.modules.triage.router import router as triage_router
-from app.modules.triage.sweeper import run_sweeper, sweep_once
-from app.modules.triage.worker import run_worker
-from app.modules.vault.router import router as vault_router
-
-logger = logging.getLogger("uvicorn.error")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Idempotent: safe on every container start.
-    await init_db()  # fatal: no database, no app
+    # The schema is NOT created here: the container runs `alembic upgrade head` before uvicorn.
     try:
         await asyncio.to_thread(ensure_bucket)
     except Exception as exc:
@@ -162,18 +144,15 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(
-    title="Anduin Memory Bank",
-    lifespan=lifespan,
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json",
-)
+app = FastAPI(title="Dejavu API", lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
+              openapi_url="/api/openapi.json")
 app.include_router(health_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
 app.include_router(vault_router, prefix="/api")
 app.include_router(triage_router, prefix="/api")
 ```
 
-`app/health.py` already exists. It returns `200 {status, database, pgvector, storage}` or `503` when degraded, and the frontend status panel depends on that shape.
+`app/health.py` already exists. It returns `200 {status, database, pgvector, storage}` or `503` when degraded, and the frontend status bar depends on that shape.
 
 ## Router → service
 
@@ -181,31 +160,31 @@ app.include_router(triage_router, prefix="/api")
 # modules/triage/router.py
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
-from app.db.session import get_session
+from app.core.db import SessionDep
+from app.modules.auth.deps import CurrentUser
 from app.modules.triage import service
 from app.modules.triage.schemas import CreateTriageResponse, TriageJobOut
 
 router = APIRouter(prefix="/triage", tags=["triage"])
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
 async def create_triage(
+    user: CurrentUser,
     session: SessionDep,
     text: Annotated[str | None, Form()] = None,
     files: Annotated[list[UploadFile] | None, File()] = None,
 ) -> CreateTriageResponse:
     if not text and not files:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Provide text or at least one file")
-    job_id = await service.create_job(session, text=text, files=files or [])
+    job_id = await service.create_job(session, user_id=user.id, text=text, files=files or [])
     return CreateTriageResponse(job_id=job_id)
 
 
 @router.get("/{job_id}")
-async def get_triage(job_id: str, session: SessionDep) -> TriageJobOut:
+async def get_triage(job_id: str, user: CurrentUser, session: SessionDep) -> TriageJobOut:
     job = await service.get_job(session, job_id)
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
@@ -217,7 +196,8 @@ Multipart forms use the `python-multipart` dependency (already installed).
 ## Tests
 
 - **Running:** `bun run test [pytest args]` runs `pytest` inside the backend container against the real Postgres and MinIO.
-- **App tests:** use `with TestClient(app) as client:` so the lifespan runs. Starlette's TestClient uses `httpx2` (installed); plain `httpx` is deprecated there.
+- **Isolation:** `tests/conftest.py` points `DATABASE_URL` at `memory_bank_test`, rebuilds it from the migrations once per run, and truncates every table (except `alembic_version`) before each test that uses the `client` fixture.
+- **App tests:** take the `client` fixture (a `TestClient` with the lifespan running). Starlette's TestClient uses `httpx2` (installed); plain `httpx` is deprecated there.
 - **Pure-logic tests** (guard, prompt builders, scoring) need no services. Keep them free of DB fixtures.
 
 ## Job worker (`modules/triage/worker.py`)

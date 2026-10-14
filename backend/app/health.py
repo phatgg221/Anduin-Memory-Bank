@@ -4,8 +4,8 @@ from typing import Literal
 from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 
+from app.core.db import pgvector_version
 from app.core.storage import bucket_ready
-from app.db.session import pgvector_version
 
 router = APIRouter(tags=["system"])
 

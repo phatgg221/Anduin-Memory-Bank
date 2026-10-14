@@ -22,9 +22,13 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
 - **UI system in place:**
   - shadcn/ui (Radix, Nova) themed with the Dejavu tokens, plus the brand kit (`components/brand/`) and the persistent top nav.
   - `/workbench` shows the empty 3-pane frame with a system status bar.
-- **The table schema is intentionally undecided** because functionality is still being concluded.
-  - Do not invent tables or columns, or write migrations, without asking. Entity names in the docs (HistoricalCase, Person, Artifact, KnowledgeChunk, TriageJob) are working names only.
-  - As a result, `vault`/`triage` routers are empty, the job worker and sweeper aren't wired, `seed.py` is a stub, and the workbench panes are empty.
+- **Auth built:** `/register` (email, name, password, confirm) and `/login`.
+  - A JWT access token (in memory) plus a rotating, revocable refresh token (httpOnly cookie). Tables: `users`, `refresh_tokens`. See ARCHITECTURE §10a.
+  - `/workbench` requires sign-in. New API routes take `user: CurrentUser`.
+- **Alembic owns the schema** (`backend/migrations/`). Every model change ships with a migration from `bun run db:revision`; `create_all` is never used.
+- **Domain tables (vault, triage) are intentionally undecided** because functionality is still being concluded.
+  - Do not invent those tables or columns without asking. Entity names in the docs (HistoricalCase, Person, Artifact, KnowledgeChunk, TriageJob) are working names only.
+  - As a result, the `vault`/`triage` routers are empty, the job worker and sweeper aren't wired, `seed.py` is a stub, and the workbench panes are empty.
 - `PLAN.md` is still to be written.
 - If a task needs a product decision (CONTEXT.md §7, DESIGN.md §8), ask instead of guessing.
 
@@ -33,7 +37,8 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
 - The browser reaches the backend only via the Next `/api/*` rewrite. The sole exception is presigned MinIO GETs for raw files.
 - Frontend: `page → store hook (React Query) → service → lib/axiosClient → /api`. Components are presentational. ESLint enforces this.
 - UI: Dejavu tokens only (no raw hex). Square corners, 1px hairlines, no shadows, light theme. Use the `components/brand/` kit before composing raw classes.
-- Backend: `router → service → SQLAlchemy`, one folder per domain in `backend/app/modules/`. Dependency direction: `triage → intelligence → vault → core/db`.
+- Backend: `router → service → SQLAlchemy`, one folder per domain in `backend/app/modules/`, shared infrastructure in `backend/app/core/`. Dependency direction: `triage → intelligence → vault → core`; any module may use `auth.deps.CurrentUser`.
+- Schema changes = an Alembic migration (`bun run db:revision "msg"` → review → `bun run db:migrate`). Tokens never go in URLs, logs, or localStorage.
 - LLM work runs only as a persisted job (`QUEUED → PROCESSING → COMPLETED | FAILED`) with UI polling, never inside a request.
 - Every LLM output is Pydantic-validated and guarded. The LLM never sets IDs or similarity scores.
 - Seed data uses realistic private-markets scenarios, never lorem ipsum.
@@ -41,6 +46,8 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
 ## Commands
 
 `bun run setup` · `bun run dev` · `bun run dev --refresh-db` · `bun run stop` · `bun run logs` · `bun run seed` · `bun run test` · `bun run lint` · `bun run reset` (destroys volumes — confirm with the user first)
+
+Migrations: `bun run db:revision "msg" [--empty]` · `db:migrate` · `db:downgrade` · `db:current` · `db:history` · `db:check` · `db:reset` (wipes dev data — confirm first)
 
 - Before calling a frontend route done, run `bun run build` in `frontend/`. Cache Components errors only show up at build time.
 - After adding frontend dependencies (`bun add`, `shadcn add`), run `bun run dev` so the container picks them up.

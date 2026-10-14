@@ -1,11 +1,5 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-
-def test_health_reports_database_pgvector_and_storage():
-    with TestClient(app) as client:  # runs the lifespan: extension + bucket bootstrap
-        response = client.get("/api/health")
+def test_health_reports_database_pgvector_and_storage(client):
+    response = client.get("/api/health")
 
     assert response.status_code == 200
     body = response.json()
