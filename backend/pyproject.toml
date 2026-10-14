@@ -1,0 +1,33 @@
+[project]
+name = "anduin-memory-bank-backend"
+version = "0.1.0"
+description = "Anduin Memory Bank API: case triage, precedent retrieval, and delta intelligence"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "asyncpg>=0.32.0",
+    "fastapi>=0.143.1",
+    "minio>=7.2.20",
+    "pgvector>=0.5.1",
+    "pydantic-settings>=2.16.0",
+    "python-multipart>=0.0.32",
+    "sqlalchemy[asyncio]>=2.1.4",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1",
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
