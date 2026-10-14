@@ -118,7 +118,7 @@ async def list_cases(user: CurrentUser, session: SessionDep) -> list[CaseOut]:
 
 - `CurrentUser` verifies the JWT (type `access`) and loads an active `User`.
 - **Default to protecting every new domain route.** Only `/api/health` and `/api/auth/*` are public.
-- **Never put tokens in URLs or logs.** The refresh token only ever travels in the httpOnly `dejavu_refresh` cookie (path `/api/auth`).
+- **Never put tokens in URLs or logs.** The refresh token only ever travels in the httpOnly `dejavu_refresh` cookie (`Path=/`, `SameSite=Lax`). The Next.js proxy verifies it with the same `JWT_SECRET`, so keep the cookie name and claims (`sub`, `type`, `jti`, `exp`) stable, or update `frontend/lib/sessionCookie.ts` to match.
 - **Auth internals:**
   - `core/security.py` holds `hash_password` / `verify_password`, which are CPU-bound, so call them via `asyncio.to_thread`, plus `create_token` / `decode_token`.
   - `modules/auth/service.py` handles rotation, reuse detection, and family revocation.

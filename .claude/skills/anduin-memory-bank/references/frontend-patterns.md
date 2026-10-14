@@ -12,7 +12,7 @@ frontend/
 │   ├── layout.tsx                  # ✓ fonts + <Providers> only (shells live in the route groups)
 │   ├── providers.tsx               # ✓ QueryClient + TooltipProvider; session-expiry → session null
 │   ├── globals.css                 # ✓ Dejavu tokens (see design-system.md)
-│   ├── (auth)/                     # ✓ public: AuthFrame split layout; signed-in → /workbench
+│   ├── (auth)/                     # ✓ public: AuthFrame split layout (proxy bounces signed-in users)
 │   │   ├── login/page.tsx          # ✓
 │   │   └── register/page.tsx       # ✓
 │   └── (app)/                      # ✓ signed-in only: session gate + TopNav/UserMenu + <main>
@@ -31,7 +31,8 @@ frontend/
 │   └── vault/                      # VaultStats, CaseTable, ArtifactList, CitationInspector
 ├── store/                          # queryKeys.ts ✓, auth.ts ✓, system.ts ✓, triage.ts, vault.ts
 ├── services/                       # authService.ts ✓, systemService.ts ✓, triageService.ts, vaultService.ts
-├── lib/                            # axiosClient.ts ✓ (+ refresh interceptor), accessToken.ts ✓, apiError.ts ✓, utils.ts ✓
+├── proxy.ts                        # ✓ page-level auth gate (default-deny)
+├── lib/                            # axiosClient.ts ✓ (+ refresh interceptor), accessToken.ts ✓, apiError.ts ✓, sessionCookie.ts ✓, safeRedirect.ts ✓, utils.ts ✓
 └── types/                          # auth.ts ✓, system.ts ✓, delta.ts ✓ (DeltaStatus), triage.ts, vault.ts
 ```
 
@@ -95,6 +96,17 @@ const nextConfig: NextConfig = {
 | `useLogout()` | Revokes the server session, drops user-scoped caches, sets the session to `null` → `(app)` redirects to `/login` |
 
 New signed-in pages go under `app/(app)/`. They can assume a session, but must not render their own `<main>`.
+
+### `proxy.ts` — page-level gate (Next 16 Proxy, Node runtime)
+
+- **Default-deny:** every page matched needs a valid `dejavu_refresh` cookie except `AUTH_PAGES` (`/login`, `/register`).
+  - Signed out → `307 /login?next=<path+query>`, and an invalid cookie is deleted.
+  - Signed in on an auth page → redirect to the sanitised `?next=` or `/workbench`.
+- **Optimistic only:** `lib/sessionCookie.ts` verifies signature, expiry, and `type=refresh` with `jose` and `JWT_SECRET` (read at request time). **Never add DB or API calls here**: proxy runs on every route and prefetch.
+  - Revoked tokens are caught when `(app)` restores the session: `/api/auth/refresh` returns 401, clears the cookie, and the layout sends the user to `/login`.
+- **Matcher** skips `/api/*` (FastAPI authenticates itself), `/_next/*`, `/__nextjs*`, and paths with a file extension. Keep it that way when editing.
+- **After login/register,** pages call `router.replace(safeNextPath(new URLSearchParams(window.location.search).get("next")))`. Read `window.location` in the callback rather than `useSearchParams`, which would need a Suspense boundary under Cache Components.
+- **Always run `?next=` through `safeNextPath`** (`lib/safeRedirect.ts`). It resolves the value with the URL parser and requires the same origin. Hand-rolled prefix checks miss `/\t/evil.com`.
 
 ## `types/triage.ts` (illustrative — keep in sync with backend `schemas.py`)
 

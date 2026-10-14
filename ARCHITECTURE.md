@@ -45,7 +45,7 @@ All host ports can be changed in `.env`. Postgres defaults to host port 5433 so 
 - **The backend's port 8000 is published for dev convenience only.** Frontend code must never point at it. Swagger is served at `/api/docs`, so it also works through the proxy.
 - **Presigned links are the only direct browser → MinIO path.** They are GET-only, short-lived (≤ 10 min), and generated fresh on each click (never cached client-side beyond their TTL).
 - **Signing host ≠ internal host.** The backend talks to `minio:9000` inside the Docker network, but the browser uses `localhost:9000`. SigV4 signs the Host header, so presigned URLs must come from a second MinIO client configured with the **public** endpoint (§15.1).
-- **Uploads go through the backend.** Intake files go `/api/triage` → backend (validates type/size) → MinIO. Revisit with presigned PUTs only if files get large.
+- **Uploads.** Small intake files can go `/api/triage` → backend (validates type/size) → MinIO. The Next `/api` rewrite **can't carry bodies over 10 MB** (§15.23), so large files must use presigned PUT URLs straight to MinIO.
 
 ## 4. Repository Layout
 
@@ -55,12 +55,14 @@ anduin-memory-bank/
 │   ├── AGENTS.md / CLAUDE.md     Next's agent rules: read node_modules/next/dist/docs before coding
 │   ├── eslint.config.mjs         enforces the layering below (no-restricted-imports / fetch)
 │   ├── next.config.ts            /api/:path* rewrite → BACKEND_INTERNAL_URL; standalone; Cache Components
+│   ├── proxy.ts                  Next 16 Proxy: page-level auth gate (verifies the refresh cookie, default-deny)
 │   ├── components.json           shadcn config (Radix base, Nova style, lucide icons)
 │   ├── app/                      (app)/ signed-in routes · (auth)/ login + register · providers.tsx · globals.css
 │   ├── components/               presentational only: ui/ (shadcn), brand/ (Dejavu kit), shell/ (nav, user menu), auth/, feature folders
 │   ├── store/                    React Query hooks (queryKeys.ts, auth.ts, system.ts, …)
 │   ├── services/                 one typed function per endpoint (authService.ts, systemService.ts, …)
-│   ├── lib/                      axiosClient.ts (only HTTP client + 401→refresh interceptor), accessToken.ts, apiError.ts, utils.ts
+│   ├── lib/                      axiosClient.ts (only HTTP client + 401→refresh interceptor), accessToken.ts, apiError.ts,
+│   │                             sessionCookie.ts + safeRedirect.ts (used by proxy.ts), utils.ts
 │   └── types/                    API contract types (mirror backend Pydantic)
 ├── backend/                      FastAPI (Python 3.12, uv, SQLAlchemy 2.0 async, pgvector)
 │   ├── pyproject.toml            deps + ruff + pytest + [tool.alembic] config
@@ -282,7 +284,8 @@ Proposed routes (triage, vault) will require `CurrentUser`. `AuthOut` = `{access
 ### 10a. Authentication flow
 
 ```text
-register / login ──▶ 200 AuthOut {access_token (15 min)} + Set-Cookie dejavu_refresh (7 days, httpOnly, SameSite=Strict, Path=/api/auth)
+register / login ──▶ 200 AuthOut {access_token (15 min)} + Set-Cookie dejavu_refresh (7 days, httpOnly, SameSite=Lax, Path=/)
+page request ──▶ frontend/proxy.ts verifies the cookie (signature, expiry, type) ──▶ render, or 307 /login?next=…
 API call ──▶ Authorization: Bearer <access_token> ──▶ deps.CurrentUser (JWT verified, type=access, user active)
 401 on an API call ──▶ axios interceptor ──▶ POST /api/auth/refresh (cookie) ──▶ new access token + rotated cookie ──▶ retry once
 page reload ──▶ useSession() ──▶ POST /api/auth/refresh ──▶ session restored (or 401 → /login)
@@ -292,8 +295,11 @@ logout ──▶ POST /api/auth/logout ──▶ whole token family revoked, coo
 - **Where tokens live.**
   - The access token is held in browser memory only (`lib/accessToken.ts`), never in localStorage.
   - The refresh token is an **httpOnly** cookie, so JavaScript can't read it (verified).
-  - The cookie's path is `/api/auth`, so it isn't sent with ordinary API calls or page loads.
-  - `SameSite=Strict` blocks cross-site use (CSRF) of `/refresh` and `/logout`.
+  - The cookie's path is `/`, so page requests carry it to the Next.js proxy.
+  - `SameSite=Lax`:
+    - it's sent on top-level navigations from other sites, so a Dejavu link opened from Slack or email keeps the session;
+    - it's never sent on cross-site POSTs, so `/refresh` and `/logout` stay CSRF-safe;
+    - all other API routes authenticate with the bearer token, not the cookie.
 - **Rotation + reuse detection.**
   - Every refresh issues a new refresh token and revokes the old one.
   - If an *already-revoked* token is presented after the 30 s grace window, the whole session (family) is revoked, on the assumption it was stolen.
@@ -301,7 +307,15 @@ logout ──▶ POST /api/auth/logout ──▶ whole token family revoked, coo
   - Concurrent refreshes of one token are serialised with `SELECT … FOR UPDATE`.
 - **Passwords.** Argon2id (pwdlib). Hashing runs in a thread so it doesn't block the event loop. A dummy verify for unknown emails equalises response timing.
 - **JWTs.** PyJWT, HS256, signed with `JWT_SECRET` (generated into `.env` by `bun run setup` / `bun run dev`). Claims: `sub`, `type`, `jti`, `iat`, `exp`. A refresh token is rejected as an access token, and vice versa.
-- **Frontend gate.** The `(app)` layout restores the session and redirects to `/login` when signed out. The `(auth)` layout redirects signed-in users to `/workbench`. The UI gate is UX only: authorisation is enforced by the API.
+- **Page gate — `frontend/proxy.ts` (Next 16 Proxy, Node runtime).**
+  - Runs on every page request before render. It is **default-deny**: every page needs a valid refresh cookie except `/login` and `/register`, which instead bounce signed-in users to `?next=` or `/workbench`.
+  - Signed-out visitors get `307 /login?next=<path+query>`, and an invalid cookie is deleted.
+  - The check is **optimistic**, per the Next.js guidance (proxy runs on every route, including prefetches): `jose` verifies the HS256 signature with the backend's `JWT_SECRET`, plus expiry and `type=refresh`. There is **no DB lookup**, so a revoked-but-unexpired token passes the proxy.
+  - Revocation is still enforced. The `(app)` layout restores the session via `/api/auth/refresh`, and a 401 there clears the cookie and redirects to `/login`.
+  - **Authorisation is enforced by the API** (`CurrentUser` on every route), never by the proxy or the UI.
+  - The matcher skips `/api/*`, `/_next/*`, dev-overlay endpoints, and any path with a file extension.
+  - `?next=` is sanitised by `lib/safeRedirect.ts`: it's resolved with the URL parser and must stay same-origin, which blocks `//evil.com` and `/\t/evil.com`-style open redirects.
+- **Fail loudly on misconfiguration.** If the frontend has no `JWT_SECRET`, the proxy throws (500 plus a log line) instead of treating everyone as signed out. If the secret differs from the backend's, every login bounces back to `/login`, and the proxy logs "invalid signature — is JWT_SECRET identical…".
 - **Not built (yet):** rate limiting on login/register, email verification, password reset, "sign out everywhere", and purging old token rows.
 
 ## 11. Configuration
@@ -322,7 +336,7 @@ There is one root `.env`, created from `.env.example` by `bun run setup` and git
 | `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` / `EMBEDDING_DIM` | backend | `gemini` / `gemini-embedding-001` / `768` | Changing model or dim ⇒ re-embed everything |
 | `GEMINI_API_KEY` / `OPENROUTER_API_KEY` | backend | — | Never commit; `.env` is git-ignored |
 | `SMTP_HOST` / `SMTP_PORT` | backend | `mailpit` / `1025` | |
-| `JWT_SECRET` | backend | 64 hex chars | Generated into `.env` by `bun run setup` / `bun run dev` when empty. Min 32 chars, enforced at startup |
+| `JWT_SECRET` | backend **and frontend** | 64 hex chars | Generated into `.env` by `bun run setup` / `bun run dev` when empty. Min 32 chars, enforced at startup. Compose passes the same value to both. The frontend reads it at request time in `proxy.ts` (not baked into the build) |
 | `ACCESS_TOKEN_TTL_MINUTES` / `REFRESH_TOKEN_TTL_DAYS` | backend | `15` / `7` | |
 | `REFRESH_COOKIE_SECURE` | backend | `false` | Set `true` whenever served over HTTPS |
 | `JOB_MAX_ATTEMPTS` / `JOB_STALE_AFTER_SECONDS` / `SWEEPER_INTERVAL_SECONDS` | backend | `3` / `120` / `30` | Added with the job worker |
@@ -393,7 +407,7 @@ Container dev notes:
 | D18 | UI kit: shadcn/ui 4.x, Radix base, Nova style (Lucide + Geist); `cn` package replaces clsx + tailwind-merge | Accepted | Radix has the most mature API/docs; Nova matches our existing Geist fonts. `cn` is shadcn's own drop-in |
 | D19 | Dejavu theme: Anduin palette mapped onto shadcn roles; square + flat enforced globally; light only | Accepted | DESIGN.md. Global enforcement keeps future `shadcn add` components on-brand without hand edits |
 | D20 | `/` redirects to `/workbench`; job results at `/workbench/[jobId]` | Proposed | Matches DESIGN.md routes; results stay linkable |
-| D21 | Auth: short-lived JWT access token (memory) + rotating, DB-backed refresh token (httpOnly cookie, path `/api/auth`) with family revocation and reuse detection | Accepted | Revocable sessions without server-side session lookups on every request; tokens unreadable by injected scripts |
+| D21 | Auth: short-lived JWT access token (memory) + rotating, DB-backed refresh token (httpOnly cookie, `Path=/`, `SameSite=Lax`) with family revocation and reuse detection; Next.js `proxy.ts` gates pages optimistically on that cookie | Accepted | Revocable sessions without server-side session lookups on every request; tokens unreadable by injected scripts |
 | D22 | `app/core/` holds shared infrastructure (config, db, security, storage, migrations); domain modules live in `app/modules/` | Accepted | Team convention |
 
 ## 15. Known Gotchas
@@ -420,6 +434,9 @@ Container dev notes:
 20. **Dev server 500 with `ENOENT … .next/dev/routes-manifest.json`.** This happened once, after layouts were swapped in a route group mid-session. Recover with `bun run dev`, which renews the frontend's `.next` volume.
 21. **The email validator rejects reserved TLDs** (`.test`, `.local`, `.localhost`, …) with a 422. Use `.example` addresses for test accounts.
 22. **The schema was reset when Alembic was introduced (2026-10-15).** If an old local DB has tables but no `alembic_version`, the backend will fail on `upgrade head` with "relation already exists". Run `bun run db:reset`.
+23. **Next's `/api` rewrite can't forward request bodies over 10 MB.** It returns a 500 "socket hang up", and FastAPI never sees the request. Verified with and without `proxy.ts`, so it's the rewrite itself, not the auth proxy. Large intake uploads (120-page PDFs) must go **straight to MinIO via presigned PUT URLs**, with the API only registering the object key (§3).
+24. **`JWT_SECRET` must be identical for the backend and frontend.** Both read it from the root `.env` through compose. After changing it, restart both containers (`bun run dev`). Every existing session then becomes invalid, which is expected.
+25. **The refresh cookie moved from `Path=/api/auth` to `Path=/` (2026-10-15).** A browser that signed in before may still hold the old cookie until it expires. It's harmless: when both are sent, Starlette keeps the last one, which is the new one.
 
 ## 16. Open Questions
 

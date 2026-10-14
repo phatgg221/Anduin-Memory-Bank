@@ -1,3 +1,5 @@
+import re
+
 from app.core.config import settings
 from app.modules.auth.router import REFRESH_COOKIE
 
@@ -37,8 +39,8 @@ def test_register_signs_in_and_sets_httponly_refresh_cookie(client):
     cookie = response.headers["set-cookie"]
     assert cookie.startswith(f"{REFRESH_COOKIE}=")
     assert "HttpOnly" in cookie
-    assert "Path=/api/auth" in cookie
-    assert "SameSite=strict" in cookie
+    assert re.search(r"Path=/(;|$)", cookie)  # site-wide, so the Next.js proxy can verify it
+    assert "SameSite=lax" in cookie
 
     me = client.get("/api/auth/me", headers=bearer(body["access_token"]))
     assert me.status_code == 200

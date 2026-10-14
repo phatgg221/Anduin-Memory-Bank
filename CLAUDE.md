@@ -24,7 +24,8 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
   - `/workbench` shows the empty 3-pane frame with a system status bar.
 - **Auth built:** `/register` (email, name, password, confirm) and `/login`.
   - A JWT access token (in memory) plus a rotating, revocable refresh token (httpOnly cookie). Tables: `users`, `refresh_tokens`. See ARCHITECTURE §10a.
-  - `/workbench` requires sign-in. New API routes take `user: CurrentUser`.
+  - `frontend/proxy.ts` (Next 16 Proxy) gates every page server-side, default-deny, by verifying the refresh cookie. New API routes take `user: CurrentUser`, which is the real enforcement.
+  - `JWT_SECRET` must be the same for backend and frontend; compose passes it to both.
 - **Alembic owns the schema** (`backend/migrations/`). Every model change ships with a migration from `bun run db:revision`; `create_all` is never used.
 - **Domain tables (vault, triage) are intentionally undecided** because functionality is still being concluded.
   - Do not invent those tables or columns without asking. Entity names in the docs (HistoricalCase, Person, Artifact, KnowledgeChunk, TriageJob) are working names only.

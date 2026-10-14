@@ -36,7 +36,8 @@ This is an operational workbench, not a chatbot. The product is branded **Dejavu
 - **Auth on the client:**
   - The access token lives only in memory (`lib/accessToken.ts`) — never localStorage. `lib/axiosClient.ts` attaches it, and on a 401 runs one shared `/auth/refresh` and retries.
   - Session state: `useSession()` in `store/auth.ts`.
-  - Signed-in pages go under `app/(app)/`, which gates on the session and holds the nav. Public auth pages go under `app/(auth)/`.
+  - **`proxy.ts` gates pages server-side, default-deny.** Any new page is protected automatically. To make a page public, add it to `AUTH_PAGES` in `lib/safeRedirect.ts` (auth pages) or extend the proxy deliberately. Never verify sessions against the DB in the proxy.
+  - Signed-in pages go under `app/(app)/`, which restores the session (catching revoked tokens) and holds the nav. Public auth pages go under `app/(auth)/`.
   - A layout must always render `{children}`: hide them rather than drop them, or Next's instant-navigation validation complains.
 - **Presigned links are fetched fresh on each click** (a mutation, not a cached query), because they expire.
 - **Next.js 16.4** is newer than your training data. Check `frontend/node_modules/next/dist/docs/` before using an API you're unsure of.
@@ -80,7 +81,8 @@ Templates → `references/frontend-patterns.md` (data flow) and `references/desi
   Steps 3–4 get wired in once the job table exists.
 - **Auth:**
   - Protect every new domain route with `user: CurrentUser` (from `app.modules.auth.deps`). Only `/api/health` and `/api/auth/*` are public.
-  - Tokens: a short-lived JWT access token (bearer), plus a rotating refresh token in an httpOnly cookie scoped to `/api/auth`.
+  - Tokens: a short-lived JWT access token (bearer), plus a rotating refresh token in an httpOnly cookie (`Path=/`, `SameSite=Lax`).
+  - `frontend/proxy.ts` verifies that cookie (signature only) to gate pages. The API stays the real enforcement.
   - Password hashing and JWT helpers live in `app/core/security.py`.
 - **Resilient jobs.** LLM triage never runs inside a request or as a fire-and-forget in-memory task.
   - Persist a job row (`QUEUED → PROCESSING → COMPLETED | FAILED`).

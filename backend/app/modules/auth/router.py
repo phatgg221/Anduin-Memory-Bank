@@ -11,9 +11,8 @@ from app.modules.auth.schemas import AuthOut, LoginIn, RegisterIn, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-REFRESH_COOKIE = "dejavu_refresh"
-# Only ever sent to the auth endpoints, never with ordinary API calls or page loads.
-REFRESH_COOKIE_PATH = "/api/auth"
+REFRESH_COOKIE = "dejavu_refresh"  
+REFRESH_COOKIE_PATH = "/"
 
 RefreshCookie = Annotated[str | None, Cookie(alias=REFRESH_COOKIE)]
 
@@ -23,7 +22,7 @@ def _cookie_options() -> dict:
         "path": REFRESH_COOKIE_PATH,
         "httponly": True,
         "secure": settings.refresh_cookie_secure,
-        "samesite": "strict",
+        "samesite": "lax",
     }
 
 

@@ -90,6 +90,7 @@ services:
       target: dev
     environment:
       BACKEND_INTERNAL_URL: http://backend:8000
+      JWT_SECRET: ${JWT_SECRET}
     volumes:
       - ./frontend:/app
       # Keep the container's Linux node_modules and build cache instead of the host's.

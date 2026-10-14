@@ -15,8 +15,9 @@ const NAV: NavItem[] = [
 ];
 
 /**
- * Signed-in area. The session is restored in the browser (the refresh cookie is scoped to /api/auth, so page
- * requests never carry it); signed-out visitors are sent to /login.
+ * Signed-in area. proxy.ts has already turned away visitors without a valid-looking session cookie; this gate
+ * restores the session in the browser (getting an access token) and catches what the proxy can't see — a revoked
+ * session — by sending the visitor to /login when /api/auth/refresh says no.
  *
  * Pages always render — hidden behind the splash until the session is known — so the route keeps a complete
  * static shell (Cache Components' instant-navigation validation flags segments a layout doesn't render). Hiding
