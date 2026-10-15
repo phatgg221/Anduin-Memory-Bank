@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { RoomMember, RoomPerson } from "@/types/rooms";
+import { cn } from "@/lib/utils";
 import { Avatar } from "./Avatar";
 
 interface MemberListProps {
@@ -22,6 +23,8 @@ interface MemberListProps {
   onlineIds: Set<string>;
   onAdd: (person: RoomPerson) => void;
   onRemove: (userId: string) => void;
+  noun?: "room" | "case";
+  readOnly?: boolean;
 }
 
 /** Room members: the department lead first (always in, can't be removed), then everyone else. */
@@ -34,9 +37,11 @@ export function MemberList({
   onlineIds,
   onAdd,
   onRemove,
+  noun = "room",
+  readOnly = false,
 }: MemberListProps) {
   const memberIds = new Set(members.map((m) => m.user.id));
-  const candidates = people.filter((p) => !memberIds.has(p.id));
+  const candidates = people.filter((p) => p.is_active && !memberIds.has(p.id));
   const me = people.find((p) => p.id === currentUserId);
 
   return (
@@ -68,13 +73,13 @@ export function MemberList({
               </span>
             </span>
             {role === "LEAD" ? (
-              <span className="micro-label border border-navy px-1.5 py-0.5 text-navy">Lead</span>
-            ) : (
+              <span className="micro-label border border-navy px-1.5 py-0.5 text-navy">{noun === "case" ? "Owner" : "Lead"}</span>
+            ) : readOnly ? null : (
               <Button
                 variant="ghost"
                 size="icon"
                 className="size-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                aria-label={user.id === currentUserId ? "Leave room" : `Remove ${user.name}`}
+                aria-label={user.id === currentUserId ? `Leave ${noun}` : `Remove ${user.name}`}
                 onClick={() => onRemove(user.id)}
               >
                 <X className="size-3.5" />
@@ -83,10 +88,10 @@ export function MemberList({
           </li>
         ))}
       </ul>
-      <div className="flex flex-wrap gap-2">
+      <div className={cn("flex flex-wrap gap-2", readOnly && "hidden")}>
         {!isMember && me && (
           <Button variant="outline" size="sm" onClick={() => onAdd(me)}>
-            Join room
+            Join {noun}
           </Button>
         )}
         {candidates.length > 0 && (
@@ -98,7 +103,7 @@ export function MemberList({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel className="micro-label text-muted-foreground">Add to room</DropdownMenuLabel>
+              <DropdownMenuLabel className="micro-label text-muted-foreground">Add to {noun}</DropdownMenuLabel>
               {candidates.map((person) => (
                 <DropdownMenuItem key={person.id} onSelect={() => onAdd(person)} className="gap-2">
                   <Avatar initials={person.avatar_initials} className="size-6" />

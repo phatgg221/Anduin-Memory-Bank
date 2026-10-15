@@ -32,6 +32,7 @@ CASE_STATUSES = ("OPEN", "RESOLVED")
 CASE_SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
 SOURCE_TYPES = ("CLIENT_EMAIL", "CS_ESCALATION", "LEGAL_REDLINE", "SECURITY_RFP")
 COPILOT_ROLES = ("user", "assistant")
+CASE_MEMBER_ROLES = ("LEAD", "MEMBER")
 CHUNK_TYPES = ("CASE_SUMMARY", "CHANNEL_DISCUSSION", "ARTIFACT_CONTENT", "RESOLUTION_PLAYBOOK")
 
 
@@ -136,6 +137,20 @@ class ChannelMessage(Base):
     case: Mapped[CaseRecord] = relationship(back_populates="channel_messages", lazy="raise")
     author: Mapped[User | None] = relationship(lazy="raise")
     attached_artifact: Mapped[CaseArtifact | None] = relationship(lazy="raise")
+
+
+class CaseMember(Base):
+    """Who is in a case channel: the owner (LEAD), the creator, everyone who posted, and anyone added."""
+
+    __tablename__ = "case_members"
+    __table_args__ = (CheckConstraint(f"role IN {CASE_MEMBER_ROLES}", name="role"),)
+
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("case_records.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True)
+    role: Mapped[str] = mapped_column(String(16))
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User] = relationship(lazy="raise")
 
 
 class CopilotMessage(Base):

@@ -19,6 +19,14 @@ class PersonOut(BaseModel):
     departed_at: date | None
 
 
+class CaseMemberOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user: PersonOut
+    role: Literal["LEAD", "MEMBER"]
+    joined_at: datetime
+
+
 Severity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"]
 SourceType = Literal["CLIENT_EMAIL", "CS_ESCALATION", "LEGAL_REDLINE", "SECURITY_RFP"]
 FundName = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
@@ -164,6 +172,7 @@ class ThreadViewOut(BaseModel):
     resolved_at: datetime | None
     precedents: list[PrecedentOut]
     participants: list[PersonOut]
+    members: list[CaseMemberOut]
     messages: list[ThreadMessageOut]
 
 
@@ -190,6 +199,7 @@ class CaseCreateIn(BaseModel):
     context_tags: ContextTags = {}
     department_id: str
     secondary_department_ids: list[str] = []
+    member_ids: Annotated[list[uuid.UUID], Field(max_length=20)] = []  # colleagues engaged to resolve it
 
 
 class CaseUpdateIn(BaseModel):

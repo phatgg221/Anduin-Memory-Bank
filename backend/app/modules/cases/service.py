@@ -4,7 +4,8 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import ColumnElement, delete, func, or_, select
+from sqlalchemy import ColumnElement, delete, func, or_, select, text, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,7 +15,14 @@ from app.core.config import settings
 from app.core.storage import internal
 from app.core.text import slugify
 from app.modules.auth.models import User
-from app.modules.cases.models import CaseArtifact, CaseRecord, ChannelMessage, CopilotMessage, KnowledgeChunk
+from app.modules.cases.models import (
+    CaseArtifact,
+    CaseMember,
+    CaseRecord,
+    ChannelMessage,
+    CopilotMessage,
+    KnowledgeChunk,
+)
 from app.modules.org.models import Department
 
 PAGE = 100
@@ -165,6 +173,64 @@ async def _case(session: AsyncSession, case_id: uuid.UUID) -> CaseRecord:
     return case
 
 
+def _join(case_id: uuid.UUID, user_id: uuid.UUID, role: str = "MEMBER"):
+    return insert(CaseMember).values(case_id=case_id, user_id=user_id, role=role).on_conflict_do_nothing()
+
+
+# Owner as LEAD; creator and everyone who posted as MEMBER. Safe to re-run (backfill, seed).
+SYNC_MEMBERS = text(
+    """
+    INSERT INTO case_members (case_id, user_id, role, joined_at)
+    SELECT id, lead_resolver_user_id, 'LEAD', created_at FROM case_records WHERE lead_resolver_user_id IS NOT NULL
+    UNION ALL
+    SELECT id, created_by_user_id, 'MEMBER', created_at FROM case_records WHERE created_by_user_id IS NOT NULL
+    UNION ALL
+    SELECT case_id, user_id, 'MEMBER', min(created_at) FROM channel_messages WHERE user_id IS NOT NULL
+    GROUP BY case_id, user_id
+    ON CONFLICT DO NOTHING
+    """
+)
+
+
+async def sync_members(session: AsyncSession) -> None:
+    await session.execute(SYNC_MEMBERS)
+
+
+async def case_members(session: AsyncSession, case_id: uuid.UUID) -> list[CaseMember]:
+    query = (
+        select(CaseMember)
+        .where(CaseMember.case_id == case_id)
+        .options(selectinload(CaseMember.user))
+        .order_by(CaseMember.role, CaseMember.joined_at)
+    )
+    return list(await session.scalars(query))
+
+
+async def add_member(session: AsyncSession, case_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    """Idempotent. Alumni can't be added; they're cited, not invited."""
+    case = await _case(session, case_id)
+    if case.status != "OPEN":
+        raise ConflictError("This case is committed to memory; its members are read-only")
+    member = await session.get(User, user_id)
+    if member is None:
+        raise NotFoundError("Unknown colleague")
+    if not member.is_active:
+        raise InvalidError("Alumni can't be added to a case")
+    await session.execute(_join(case_id, user_id))
+    await session.commit()
+
+
+async def remove_member(session: AsyncSession, case_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    """Idempotent. The owner stays; change the owner in the case details first."""
+    case = await _case(session, case_id)
+    if case.status != "OPEN":
+        raise ConflictError("This case is committed to memory; its members are read-only")
+    if case.lead_resolver_user_id == user_id:
+        raise ConflictError("The case owner can't be removed")
+    await session.execute(delete(CaseMember).where(CaseMember.case_id == case_id, CaseMember.user_id == user_id))
+    await session.commit()
+
+
 async def thread_view(session: AsyncSession, case_id: uuid.UUID) -> dict:
     case = await _case(session, case_id)
     latest = list(await session.scalars(_messages_query(case_id).order_by(ChannelMessage.seq.desc()).limit(PAGE)))
@@ -188,6 +254,7 @@ async def thread_view(session: AsyncSession, case_id: uuid.UUID) -> dict:
         "resolved_at": case.resolved_at,
         "precedents": await precedents_for(session, case),
         "participants": list(participants.values()),
+        "members": await case_members(session, case_id),
         "messages": messages,
     }
 
@@ -228,6 +295,8 @@ async def post_thread_message(
                 attached_artifact_id=attached_artifact_id,
             )
         )
+        await session.flush()
+        await session.execute(_join(case_id, user.id))
         await session.commit()
     message = await session.scalar(_messages_query(case_id).where(ChannelMessage.id == message_id))
     return message, case
@@ -249,6 +318,11 @@ async def create_case(session: AsyncSession, user: User, data) -> CaseRecord:
 
     secondary = await _valid_departments(session, data.department_id, data.secondary_department_ids)
     lead_id = await _valid_lead(session, data.lead_user_id) or user.id
+    member_ids = list(dict.fromkeys(m for m in data.member_ids if m not in (lead_id, user.id)))
+    if member_ids:
+        active = set(await session.scalars(select(User.id).where(User.id.in_(member_ids), User.is_active)))
+        if len(active) != len(member_ids):
+            raise InvalidError("Case members must be active colleagues")
 
     for _ in range(3):  # two people creating a case at the same moment can race for the same code
         code = await _next_case_code(session, datetime.now(UTC).year)
@@ -272,6 +346,12 @@ async def create_case(session: AsyncSession, user: User, data) -> CaseRecord:
         )
         session.add(case)
         try:
+            await session.flush()
+            await session.execute(_join(case.id, lead_id, "LEAD"))
+            if lead_id != user.id:
+                await session.execute(_join(case.id, user.id))
+            for member_id in member_ids:
+                await session.execute(_join(case.id, member_id))
             await session.commit()
             return case
         except IntegrityError:
@@ -320,6 +400,14 @@ async def update_case(session: AsyncSession, case_id: uuid.UUID, data) -> tuple[
         case.due_date = data.due_date  # null clears the deadline
     if "lead_user_id" in fields and data.lead_user_id is not None:
         case.lead_resolver_user_id = await _valid_lead(session, data.lead_user_id)
+        await session.execute(
+            update(CaseMember).where(CaseMember.case_id == case.id, CaseMember.role == "LEAD").values(role="MEMBER")
+        )
+        await session.execute(
+            insert(CaseMember)
+            .values(case_id=case.id, user_id=case.lead_resolver_user_id, role="LEAD")
+            .on_conflict_do_update(index_elements=["case_id", "user_id"], set_={"role": "LEAD"})
+        )
     if "secondary_department_ids" in fields and data.secondary_department_ids is not None:
         case.secondary_department_ids = await _valid_departments(
             session, case.department_id, data.secondary_department_ids

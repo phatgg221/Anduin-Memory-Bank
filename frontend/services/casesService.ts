@@ -46,6 +46,14 @@ export const casesService = {
     return (await withApiErrors(axiosClient.patch<ThreadView>(`/cases/${caseId}`, input))).data;
   },
 
+  async addMember(caseId: string, userId: string): Promise<void> {
+    await withApiErrors(axiosClient.put(`/cases/${caseId}/members/${userId}`));
+  },
+
+  async removeMember(caseId: string, userId: string): Promise<void> {
+    await withApiErrors(axiosClient.delete(`/cases/${caseId}/members/${userId}`));
+  },
+
   /** Idempotent on the client-generated id; the server assigns the case code. */
   async createCase(input: CreateCaseInput): Promise<ThreadSummary> {
     return (await withApiErrors(axiosClient.post<ThreadSummary>("/cases", input))).data;

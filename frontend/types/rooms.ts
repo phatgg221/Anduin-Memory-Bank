@@ -136,6 +136,7 @@ export interface ThreadView {
   resolved_at: string | null;
   precedents: PrecedentDetail[];
   participants: RoomPerson[];
+  members: RoomMember[];
   messages: ThreadMessage[];
 }
 
@@ -156,6 +157,7 @@ export interface CaseIntake {
 export interface CreateCaseInput extends CaseIntake {
   id: string;
   department_id: string;
+  member_ids?: string[];
 }
 
 export type UpdateCaseInput = Partial<CaseIntake>;

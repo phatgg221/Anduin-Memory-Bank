@@ -10,7 +10,7 @@ import { DEMO_SCENARIOS } from "@/lib/demoScenarios";
 import { useSession } from "@/store/auth";
 import { useAnalyze } from "@/store/memory";
 import { useDepartments } from "@/store/org";
-import { useRooms } from "@/store/rooms";
+import { usePeople, useRooms } from "@/store/rooms";
 import { useCreateCase, useOpenCases, useUploadFiles } from "@/store/threads";
 
 export default function WorkbenchHub() {
@@ -22,6 +22,7 @@ export default function WorkbenchHub() {
   const departments = useDepartments(signedIn);
   const openCases = useOpenCases(departmentId, signedIn);
   const rooms = useRooms(signedIn);
+  const people = usePeople(signedIn);
   const createCase = useCreateCase();
   const upload = useUploadFiles();
   const analyze = useAnalyze();
@@ -36,7 +37,7 @@ export default function WorkbenchHub() {
 
   const [runStage, setRunStage] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | undefined>();
-  const runIntake = async ({ intake, files, departmentId: scenarioDepartment }: IntakeSubmission) => {
+  const runIntake = async ({ intake, files, memberIds, departmentId: scenarioDepartment }: IntakeSubmission) => {
     if (!user) return;
     setRunError(undefined);
     const owner = scenarioDepartment ?? departmentId ?? user.primary_department_id ?? "CLIENT_OPERATIONS";
@@ -46,6 +47,7 @@ export default function WorkbenchHub() {
         id: crypto.randomUUID(),
         department_id: owner,
         lead_user_id: user.id,
+        member_ids: memberIds,
         ...intake,
       });
       if (files.length) {
@@ -71,6 +73,9 @@ export default function WorkbenchHub() {
         <IntakePanel
           scenarios={DEMO_SCENARIOS}
           fundSuggestions={fundSuggestions}
+          people={people.data ?? []}
+          currentUserId={user?.id ?? null}
+          departmentCodes={departmentCodes}
           onRun={runIntake}
           isRunning={runStage !== null}
           runLabel={runStage ?? undefined}

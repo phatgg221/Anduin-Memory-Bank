@@ -22,6 +22,7 @@ from app.core.security import UNUSABLE_PASSWORD, hash_password, verify_password
 from app.core.storage import ensure_bucket, internal
 from app.core.text import CASE_TAG
 from app.modules.auth.models import User
+from app.modules.cases import service as cases_service
 from app.modules.cases.models import CaseArtifact, CaseRecord, ChannelMessage
 from app.modules.org.models import Department
 from app.modules.rooms.models import Room, RoomMember, RoomMessage
@@ -311,6 +312,8 @@ async def main() -> None:
             await seed_case(session, case, handles, artifact_ids, case_ids)
             print(f"  {case.code}  {case.data['status']:8}  {len(case.messages):2} messages  {case.data['title'][:60]}")
         room_messages = await seed_rooms(session, handles, case_ids, artifact_ids)
+        await session.flush()
+        await cases_service.sync_members(session)
     queued = await queue_index_jobs(only_missing=True)
     await engine.dispose()
     resolved = sum(c.resolved for c in cases)

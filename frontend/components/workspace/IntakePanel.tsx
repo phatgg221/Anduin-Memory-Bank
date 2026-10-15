@@ -1,6 +1,6 @@
 "use client";
 
-import { Paperclip, X, Zap } from "lucide-react";
+import { Paperclip, UserPlus, X, Zap } from "lucide-react";
 import { useRef, useState, type DragEvent, type FormEvent } from "react";
 import { ActionButton } from "@/components/brand/ActionButton";
 import { SectionLabel } from "@/components/brand/SectionLabel";
@@ -15,13 +15,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar } from "@/components/rooms/Avatar";
 import type { DemoScenario } from "@/lib/demoScenarios";
 import { cn } from "@/lib/utils";
-import { SEVERITIES, SOURCE_TYPES, type CaseIntake, type Severity, type SourceType } from "@/types/rooms";
+import {
+  SEVERITIES,
+  SOURCE_TYPES,
+  type CaseIntake,
+  type RoomPerson,
+  type Severity,
+  type SourceType,
+} from "@/types/rooms";
 
 export interface IntakeSubmission {
   intake: Omit<CaseIntake, "lead_user_id">;
   files: File[];
+  memberIds: string[];
   /** The scenario's home department, when a demo preset was loaded. */
   departmentId: string | null;
 }
@@ -29,6 +38,9 @@ export interface IntakeSubmission {
 interface IntakePanelProps {
   scenarios: DemoScenario[];
   fundSuggestions: string[];
+  people: RoomPerson[];
+  currentUserId: string | null;
+  departmentCodes: Record<string, string>;
   onRun: (submission: IntakeSubmission) => void;
   isRunning: boolean;
   runLabel?: string;
@@ -48,14 +60,28 @@ const EMPTY: Omit<CaseIntake, "lead_user_id"> = {
 };
 const ACCEPT = ".pdf,.csv,.md,.txt,.json,.eml,.docx,.xlsx";
 
-/** `■ 01 / INCOMING PROBLEM` — structured intake that becomes a case room with live precedent matching. */
-export function IntakePanel({ scenarios, fundSuggestions, onRun, isRunning, runLabel, error }: IntakePanelProps) {
+export function IntakePanel({
+  scenarios,
+  fundSuggestions,
+  people,
+  currentUserId,
+  departmentCodes,
+  onRun,
+  isRunning,
+  runLabel,
+  error,
+}: IntakePanelProps) {
   const [intake, setIntake] = useState(EMPTY);
+  const [memberIds, setMemberIds] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [scenarioDepartment, setScenarioDepartment] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  const me = people.find((p) => p.id === currentUserId);
+  const selected = memberIds.map((id) => people.find((p) => p.id === id)).filter((p): p is RoomPerson => Boolean(p));
+  const candidates = people.filter((p) => p.is_active && p.id !== currentUserId && !memberIds.includes(p.id));
 
   const set = <K extends keyof typeof intake>(key: K, value: (typeof intake)[K]) => setIntake((i) => ({ ...i, [key]: value }));
   const ready = intake.client_name.trim().length >= 2 && intake.initial_request_brief.trim().length >= 10;
@@ -76,7 +102,7 @@ export function IntakePanel({ scenarios, fundSuggestions, onRun, isRunning, runL
     setLocalError(null);
     const source = SOURCE_TYPES.find((s) => s.id === intake.source_type)?.label;
     const title = intake.title.trim() || [intake.fund_name || intake.client_name, source].filter(Boolean).join(" — ");
-    onRun({ intake: { ...intake, title: title.slice(0, 200) }, files, departmentId: scenarioDepartment });
+    onRun({ intake: { ...intake, title: title.slice(0, 200) }, files, memberIds, departmentId: scenarioDepartment });
   };
 
   return (
@@ -96,6 +122,11 @@ export function IntakePanel({ scenarios, fundSuggestions, onRun, isRunning, runL
                   setIntake(scenario.intake);
                   setScenarioDepartment(scenario.departmentId);
                   setFiles([]);
+                  setMemberIds(
+                    people
+                      .filter((p) => p.is_active && p.id !== currentUserId && scenario.people.includes(p.name))
+                      .map((p) => p.id),
+                  );
                 }}
               >
                 {scenario.label}
@@ -206,6 +237,59 @@ export function IntakePanel({ scenarios, fundSuggestions, onRun, isRunning, runL
             </button>
           ))}
         </div>
+      </div>
+
+
+      <div className="flex flex-col gap-1.5">
+        <span className="micro-label text-muted-foreground">People to resolve it</span>
+        <ul className="flex flex-col gap-1">
+          {me && (
+            <li className="flex items-center gap-2 border bg-background px-2 py-1 text-xs">
+              <Avatar initials={me.avatar_initials} className="size-6" />
+              <span className="flex-1 truncate text-ink">{me.name} (you)</span>
+              <span className="micro-label text-muted-foreground">Owner</span>
+            </li>
+          )}
+          {selected.map((person) => (
+            <li key={person.id} className="flex items-center gap-2 border bg-background px-2 py-1 text-xs">
+              <Avatar initials={person.avatar_initials} className="size-6" />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-ink">{person.name}</span>
+                <span className="truncate text-[11px] text-muted-foreground">
+                  {person.job_title}
+                  {person.primary_department_id && ` · ${departmentCodes[person.primary_department_id] ?? ""}`}
+                </span>
+              </span>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-ink"
+                aria-label={`Remove ${person.name}`}
+                onClick={() => setMemberIds((ids) => ids.filter((id) => id !== person.id))}
+              >
+                <X className="size-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+        {candidates.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex w-fit items-center gap-1.5 px-1 py-0.5 text-xs text-muted-foreground hover:text-ink">
+              <UserPlus className="size-3.5" aria-hidden /> Add colleague
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuLabel className="micro-label text-muted-foreground">Engage to resolve</DropdownMenuLabel>
+              {candidates.map((person) => (
+                <DropdownMenuItem key={person.id} onSelect={() => setMemberIds((ids) => [...ids, person.id])} className="gap-2">
+                  <Avatar initials={person.avatar_initials} className="size-6" />
+                  <span className="flex-1">{person.name}</span>
+                  {person.primary_department_id && (
+                    <span className="micro-label text-muted-foreground">{departmentCodes[person.primary_department_id]}</span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {(localError ?? error) && (

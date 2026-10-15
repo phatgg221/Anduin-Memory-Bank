@@ -98,7 +98,14 @@ export function useSendThreadMessage(caseId: string) {
         const merged = mergeMessages(view, [message]);
         const author = message.author;
         const known = !author || view.participants.some((p) => p.id === author.id);
-        return known ? merged : { ...merged, participants: [...view.participants, author] };
+        const withParticipant = known ? merged : { ...merged, participants: [...view.participants, author] };
+        const member = !author || view.members.some((m) => m.user.id === author.id);
+        return member
+          ? withParticipant
+          : {
+              ...withParticipant,
+              members: [...view.members, { user: author, role: "MEMBER" as const, joined_at: new Date().toISOString() }],
+            };
       }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all }),
   });
@@ -156,5 +163,43 @@ export function useUploadFiles() {
       for (const file of files) await casesService.uploadFile(caseId, file);
     },
     onSuccess: (_result, { caseId }) => queryClient.invalidateQueries({ queryKey: queryKeys.cases.thread(caseId) }),
+  });
+}
+
+type MemberChange = { kind: "add"; person: RoomPerson } | { kind: "remove"; userId: string };
+
+/** Add or remove a case member, optimistically. Explicit-state PUT/DELETE, so retries are safe. */
+export function useChangeCaseMember(caseId: string) {
+  const queryClient = useQueryClient();
+  const key = queryKeys.cases.thread(caseId);
+  const mutationKey = ["cases", "members", caseId];
+
+  return useMutation<void, ApiRequestError, MemberChange, { previous?: ThreadView }>({
+    mutationKey,
+    mutationFn: (change) =>
+      change.kind === "add"
+        ? casesService.addMember(caseId, change.person.id)
+        : casesService.removeMember(caseId, change.userId),
+    scope: { id: `case-members:${caseId}` },
+    retry: retryTransient,
+    onMutate: async (change) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<ThreadView>(key);
+      updateThread(queryClient, caseId, (view) => {
+        const others = view.members.filter((m) => m.user.id !== (change.kind === "add" ? change.person.id : change.userId));
+        const members =
+          change.kind === "add"
+            ? [...others, { user: change.person, role: "MEMBER" as const, joined_at: new Date().toISOString() }]
+            : others;
+        return { ...view, members };
+      });
+      return { previous };
+    },
+    onError: (_error, _change, snapshot) => {
+      if (snapshot?.previous) queryClient.setQueryData(key, snapshot.previous);
+    },
+    onSettled: () => {
+      if (queryClient.isMutating({ mutationKey }) === 1) queryClient.invalidateQueries({ queryKey: key });
+    },
   });
 }

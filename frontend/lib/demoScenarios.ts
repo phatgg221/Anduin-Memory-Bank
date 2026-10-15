@@ -4,6 +4,7 @@ export interface DemoScenario {
   id: string;
   label: string;
   departmentId: string;
+  people: string[];
   intake: Omit<CaseIntake, "lead_user_id">;
 }
 
@@ -13,6 +14,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     id: "apollo",
     label: "Apollo Global — Cayman Feeder II (joint signers, 10% AML, $15M MFN)",
     departmentId: "CLIENT_OPERATIONS",
+    people: ["Sarah Tran", "Elena Rostova"],
     intake: {
       client_name: "Apollo Global Management",
       fund_name: "Apollo Crossover Feeder II (Cayman master-feeder)",
@@ -33,6 +35,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     id: "allianz",
     label: "Allianz Global Investors — €450k EU private wealth & DORA security RFP",
     departmentId: "SALES_SOLUTIONS",
+    people: ["Elena Rostova", "Marcus Vance"],
     intake: {
       client_name: "Allianz Global Investors",
       fund_name: "European private wealth feeder platform",
@@ -52,6 +55,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     id: "tpg",
     label: "TPG Capital — 650-LP DealCloud migration & bank email quarantine",
     departmentId: "CUSTOMER_SUCCESS",
+    people: ["Sarah Tran", "Marcus Vance"],
     intake: {
       client_name: "TPG Capital",
       fund_name: "TPG legacy LP base (DealCloud migration)",

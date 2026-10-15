@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 
 from app.core import realtime
 from app.core.db import SessionDep
@@ -135,3 +135,23 @@ async def upload_file(
         raise _http(error) from None
     await realtime.room_changed(realtime.thread_room(case_id), "threads")
     return ArtifactRefOut.model_validate(artifact)
+
+
+@router.put("/{case_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def add_member(case_id: uuid.UUID, user_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> Response:
+    try:
+        await service.add_member(session, case_id, user_id)
+    except (service.NotFoundError, service.ConflictError, service.InvalidError) as error:
+        raise _http(error) from None
+    await realtime.room_changed(realtime.thread_room(case_id), "members")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/{case_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_member(case_id: uuid.UUID, user_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> Response:
+    try:
+        await service.remove_member(session, case_id, user_id)
+    except (service.NotFoundError, service.ConflictError) as error:
+        raise _http(error) from None
+    await realtime.room_changed(realtime.thread_room(case_id), "members")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

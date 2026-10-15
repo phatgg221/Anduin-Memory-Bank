@@ -166,3 +166,47 @@ def test_edit_case_details(client, sql, monkeypatch):
     assert [t["case_code"] for t in sales] == ["CASE-2026-047"]
     assert client.patch(f"/api/cases/{APOLLO}", json={"severity": "NOPE"}, headers=ryan).status_code == 422
     assert client.patch(f"/api/cases/{SOVEREIGN}", json={"severity": "LOW"}, headers=ryan).status_code == 409
+
+
+def member_roles(client, headers, case_id):
+    view = client.get(f"/api/cases/{case_id}/thread", headers=headers).json()
+    return {m["user"]["name"]: m["role"] for m in view["members"]}
+
+
+def test_case_members(client, sql):
+    elena, ryan = signed_in(client, sql)
+    ryan_id = client.get("/api/auth/me", headers=ryan).json()["id"]
+    case_id = new_case(client, elena, lead_user_id=ryan_id).json()["id"]
+    assert member_roles(client, elena, case_id) == {"Ryan Miller": "LEAD", "Elena Rostova": "MEMBER"}
+
+    post(client, elena, APOLLO, "Joining by posting")
+    assert member_roles(client, elena, APOLLO) == {"Elena Rostova": "MEMBER"}
+
+    url = f"/api/cases/{APOLLO}/members/{ryan_id}"
+    assert client.put(url, headers=elena).status_code == 204
+    assert client.put(url, headers=elena).status_code == 204  # idempotent
+    assert member_roles(client, elena, APOLLO) == {"Elena Rostova": "MEMBER", "Ryan Miller": "MEMBER"}
+    assert client.delete(url, headers=elena).status_code == 204
+    assert client.delete(url, headers=elena).status_code == 204
+    assert member_roles(client, elena, APOLLO) == {"Elena Rostova": "MEMBER"}
+
+    alumni = "00000000-0000-0000-0000-0000000000d1"
+    assert client.put(f"/api/cases/{APOLLO}/members/{alumni}", headers=elena).status_code == 422
+    assert client.put(f"/api/cases/{APOLLO}/members/{uuid.uuid4()}", headers=elena).status_code == 404
+    assert client.delete(f"/api/cases/{case_id}/members/{ryan_id}", headers=elena).status_code == 409  # the owner
+    assert client.put(f"/api/cases/{SOVEREIGN}/members/{ryan_id}", headers=elena).status_code == 409  # resolved
+
+    elena_id = client.get("/api/auth/me", headers=elena).json()["id"]
+    client.patch(f"/api/cases/{case_id}", json={"lead_user_id": elena_id}, headers=elena)
+    assert member_roles(client, elena, case_id) == {"Elena Rostova": "LEAD", "Ryan Miller": "MEMBER"}
+
+
+def test_create_case_with_people_to_resolve_it(client, sql):
+    elena, ryan = signed_in(client, sql)
+    ryan_id = client.get("/api/auth/me", headers=ryan).json()["id"]
+    case_id = new_case(client, elena, member_ids=[ryan_id, ryan_id]).json()["id"]
+    assert member_roles(client, elena, case_id) == {"Elena Rostova": "LEAD", "Ryan Miller": "MEMBER"}
+
+    alumni = "00000000-0000-0000-0000-0000000000d1"
+    assert new_case(client, elena, member_ids=[alumni]).status_code == 422
+    assert new_case(client, elena, member_ids=[str(uuid.uuid4())]).status_code == 422

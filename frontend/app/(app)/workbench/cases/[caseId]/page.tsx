@@ -8,6 +8,7 @@ import { JobProgress } from "@/components/memory/JobProgress";
 import { MemoryBanner } from "@/components/memory/MemoryBanner";
 import { MemoryReviewForm } from "@/components/memory/MemoryReviewForm";
 import { Composer } from "@/components/rooms/Composer";
+import { MemberList } from "@/components/rooms/MemberList";
 import { MessageThread } from "@/components/rooms/MessageThread";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +24,7 @@ import { useAnalyze, useAskCopilot, useCaseJobs, useCommitMemory, useCopilot, us
 import { useDepartments } from "@/store/org";
 import { usePeople, useRoomSocket } from "@/store/rooms";
 import {
+  useChangeCaseMember,
   useOpenCases,
   useSendThreadMessage,
   useThread,
@@ -33,8 +35,8 @@ import {
 import { useOpenArtifact } from "@/store/vault";
 import type { RoomPerson } from "@/types/rooms";
 
-type Tab = "channel" | "delta" | "copilot";
-const TABS: Tab[] = ["channel", "delta", "copilot"];
+type Tab = "channel" | "delta" | "copilot" | "people";
+const TABS: Tab[] = ["channel", "delta", "copilot", "people"];
 
 export default function CasePage({ params }: { params: Promise<{ caseId: string }> }) {
   const { caseId } = use(params);
@@ -69,6 +71,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   const askCopilot = useAskCopilot(caseId);
   const resolve = useResolve(caseId);
   const commitMemory = useCommitMemory(caseId);
+  const changeMember = useChangeCaseMember(caseId);
   const openArtifact = useOpenArtifact();
   const panels = usePanels();
 
@@ -234,6 +237,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
             { id: "channel", label: `Case channel (${t.messages.length})` },
             { id: "delta", label: `Precedent & delta (${t.precedents.length})` },
             { id: "copilot", label: `Memory copilot${copilotThinking ? " · thinking" : ""}` },
+            { id: "people", label: `People (${t.members.length})` },
           ]}
         />
         {tab === "channel" && (
@@ -288,6 +292,29 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
               onOpenVault={() => router.push("/vault")}
               onOpenChannel={() => setTab("channel")}
             />
+          </div>
+        )}
+        {tab === "people" && me && (
+          <div className="min-h-0 flex-1 overflow-y-auto p-6">
+            <div className="max-w-xl">
+              <MemberList
+                noun="case"
+                readOnly={!isOpenCase}
+                members={t.members}
+                people={people.data ?? []}
+                currentUserId={me.id}
+                isMember={t.members.some((m) => m.user.id === me.id)}
+                departmentCodes={departmentCodes}
+                onlineIds={new Set(socket.online.map((p) => p.id))}
+                onAdd={(person) => changeMember.mutate({ kind: "add", person })}
+                onRemove={(userId) => changeMember.mutate({ kind: "remove", userId })}
+              />
+              {changeMember.error && (
+                <p role="alert" className="mt-3 text-xs text-destructive">
+                  {changeMember.error.message}
+                </p>
+              )}
+            </div>
           </div>
         )}
         {tab === "copilot" && (
