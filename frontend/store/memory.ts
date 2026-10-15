@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApiRequestError } from "@/lib/apiError";
 import { memoryService } from "@/services/memoryService";
-import type { CaseJob, CaseJobs, CommitResult, CopilotMessage, CopilotView, MemoryRecord } from "@/types/memory";
+import type { CaseJob, CaseJobs, CommitResult, CopilotAsk, CopilotMessage, CopilotView, MemoryRecord } from "@/types/memory";
 import { queryKeys } from "./queryKeys";
 
 const POLL_MS = 2_000;
@@ -84,11 +84,12 @@ export function useCopilot(caseId: string | null) {
 export function useAskCopilot(caseId: string) {
   const queryClient = useQueryClient();
   const key = queryKeys.cases.copilot(caseId);
-  return useMutation<CaseJob, ApiRequestError, { message_id: string; job_id: string; question: string }, { previous?: CopilotView }>({
+  return useMutation<CaseJob, ApiRequestError, CopilotAsk, { previous?: CopilotView }>({
     mutationFn: (input) => memoryService.askCopilot(caseId, input),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<CopilotView>(key);
+      if (input.reply_in_channel) return { previous };
       const optimistic: CopilotMessage = {
         id: input.message_id,
         role: "user",

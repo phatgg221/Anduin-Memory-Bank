@@ -66,6 +66,8 @@ class ThreadMessageOut(BaseModel):
     content: str
     attached_artifact: AttachmentOut | None
     is_milestone: bool = Field(validation_alias="is_resolution_milestone")
+    is_agent: bool = False
+    mentioned_user_ids: list[uuid.UUID] = []
     created_at: datetime
 
     @computed_field
@@ -182,6 +184,7 @@ class ThreadMessageIn(BaseModel):
     is_milestone: bool = False
     # Any case's file: lets the team pull a precedent's deliverable into this thread ("Use in case").
     attached_artifact_id: uuid.UUID | None = None
+    mentioned_user_ids: Annotated[list[uuid.UUID], Field(max_length=20)] = []  # @mentions; they join the case
 
 
 class CaseCreateIn(BaseModel):

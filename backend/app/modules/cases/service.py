@@ -273,10 +273,15 @@ async def post_thread_message(
     content: str,
     is_milestone: bool,
     attached_artifact_id: uuid.UUID | None = None,
-) -> tuple[ChannelMessage, CaseRecord]:
-    """Idempotent on the client-generated id. Resolved cases are read-only memory."""
+    mentioned_user_ids: list[uuid.UUID] | None = None,
+) -> tuple[ChannelMessage, CaseRecord, bool]:
+    """Idempotent on the client-generated id. Resolved cases are read-only memory.
+
+    Mentioned colleagues join the case; alumni and unknown ids are dropped. Returns whether anyone joined.
+    """
     case = await _case(session, case_id)
     existing = await session.get(ChannelMessage, message_id)
+    joined = False
     if existing is not None:
         if existing.case_id != case_id or existing.user_id != user.id:
             raise ConflictError("Message id already used")
@@ -285,6 +290,11 @@ async def post_thread_message(
             raise ConflictError("This case is resolved; its thread is read-only")
         if attached_artifact_id and await session.get(CaseArtifact, attached_artifact_id) is None:
             raise NotFoundError("Unknown file")
+        wanted = list(dict.fromkeys(mentioned_user_ids or []))
+        mentioned = (
+            list(await session.scalars(select(User.id).where(User.id.in_(wanted), User.is_active))) if wanted else []
+        )
+        before = set(await session.scalars(select(CaseMember.user_id).where(CaseMember.case_id == case_id)))
         session.add(
             ChannelMessage(
                 id=message_id,
@@ -293,13 +303,24 @@ async def post_thread_message(
                 content=content,
                 is_resolution_milestone=is_milestone,
                 attached_artifact_id=attached_artifact_id,
+                mentioned_user_ids=[str(m) for m in mentioned],
             )
         )
         await session.flush()
-        await session.execute(_join(case_id, user.id))
+        for member_id in [user.id, *mentioned]:
+            await session.execute(_join(case_id, member_id))
         await session.commit()
+        joined = bool({user.id, *mentioned} - before)
     message = await session.scalar(_messages_query(case_id).where(ChannelMessage.id == message_id))
-    return message, case
+    return message, case, joined
+
+
+async def post_agent_message(session: AsyncSession, case_id: uuid.UUID, message_id: uuid.UUID, content: str):
+    """The copilot's reply in the case channel. Idempotent: the id is the job's, so a retried job posts once."""
+    if await session.get(ChannelMessage, message_id) is None:
+        session.add(ChannelMessage(id=message_id, case_id=case_id, user_id=None, content=content, is_agent=True))
+        await session.commit()
+    return await session.scalar(_messages_query(case_id).where(ChannelMessage.id == message_id))
 
 
 async def _next_case_code(session: AsyncSession, year: int) -> str:

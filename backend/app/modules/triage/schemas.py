@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, computed_field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, computed_field
 
 from app.modules.intelligence.schemas import CaseMemoryDraft
 from app.modules.triage.service import STEPS
@@ -21,6 +21,13 @@ class JobOut(BaseModel):
     result: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime
+    input: dict[str, Any] | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def in_channel(self) -> bool:
+        """A copilot question asked with @Dejavu in the case channel; the answer is posted there."""
+        return bool((self.input or {}).get("reply_in_channel"))
 
     @computed_field
     @property
@@ -42,7 +49,8 @@ class AnalyzeIn(BaseModel):
 class CopilotAskIn(BaseModel):
     message_id: uuid.UUID  # the question's id (client-generated)
     job_id: uuid.UUID  # the answer job's id (client-generated)
-    question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=2000)]
+    question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=4000)]
+    reply_in_channel: bool = False  # asked with @Dejavu: message_id is the channel message, the answer goes there
 
 
 class CopilotMessageOut(BaseModel):

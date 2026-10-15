@@ -24,6 +24,8 @@ export interface ChatMessage {
   tagged_case_codes: string[];
   attached_artifact: { id: string; file_name: string; file_type: string } | null;
   is_milestone: boolean;
+  is_agent?: boolean;
+  mentioned_user_ids?: string[];
   created_at: string;
   /** Client-only: sent optimistically, not confirmed by the server yet. */
   pending?: boolean;
@@ -214,4 +216,5 @@ export interface SendMessageInput {
   is_milestone: boolean;
   /** A file from any case, e.g. a precedent's deliverable reused here. */
   attached_artifact_id?: string;
+  mentioned_user_ids?: string[];
 }

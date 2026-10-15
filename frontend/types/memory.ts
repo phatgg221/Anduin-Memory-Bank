@@ -33,6 +33,7 @@ export interface CaseJob {
   status: JobStatus;
   step: string | null;
   steps: string[];
+  in_channel?: boolean;
   attempts: number;
   error: string | null;
   result:
@@ -76,4 +77,12 @@ export interface CopilotMessage {
 export interface CopilotView {
   messages: CopilotMessage[];
   jobs: CaseJob[];
+}
+
+/** `reply_in_channel`: asked with @Dejavu in the case channel; the answer is posted there. */
+export interface CopilotAsk {
+  message_id: string;
+  job_id: string;
+  question: string;
+  reply_in_channel?: boolean;
 }

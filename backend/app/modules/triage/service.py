@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -6,11 +7,13 @@ from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import distinct_on, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import realtime
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.modules.auth.models import User
 from app.modules.cases import service as cases
 from app.modules.cases.models import CaseRecord, ChannelMessage, CopilotMessage
+from app.modules.cases.schemas import ThreadMessageOut
 from app.modules.intelligence import analyzer, copilot, indexer, llm_client, summarizer
 from app.modules.intelligence.guard import guard_memory
 from app.modules.intelligence.schemas import (
@@ -24,6 +27,8 @@ from app.modules.intelligence.transcript import build_transcript
 from app.modules.org.models import Department
 from app.modules.rooms import service as rooms
 from app.modules.triage.models import CaseJob
+
+MENTION = re.compile(r"@dejavu\b", re.IGNORECASE)
 
 STEPS = {
     "ANALYZE": analyzer.ANALYZE_STEPS,
@@ -109,18 +114,28 @@ async def request_analysis(session: AsyncSession, user: User, case_id: uuid.UUID
 
 
 async def ask_copilot(
-    session: AsyncSession, user: User, case_id: uuid.UUID, message_id: uuid.UUID, job_id: uuid.UUID, question: str
+    session: AsyncSession,
+    user: User,
+    case_id: uuid.UUID,
+    message_id: uuid.UUID,
+    job_id: uuid.UUID,
+    question: str,
+    reply_in_channel: bool = False,
 ) -> CaseJob:
-    """Stores the question (idempotent on its id) and queues the answer job."""
+    """Stores the question (idempotent on its id) and queues the answer job.
+
+    With @Dejavu in the case channel the question is already a channel message, and the answer is posted there.
+    """
     if await session.get(CaseRecord, case_id) is None:
         raise NotFoundError("Unknown case")
     if existing := await session.get(CaseJob, job_id):
         return existing
-    if not await session.get(CopilotMessage, message_id):
+    if reply_in_channel:
+        question = MENTION.sub("", question).strip() or "Summarise where this case stands and what to do next."
+    elif not await session.get(CopilotMessage, message_id):
         await cases.add_copilot_message(session, case_id, "user", question, message_id=message_id, user_id=user.id)
-    return await enqueue(
-        session, job_id, case_id, "COPILOT", user, {"question": question, "message_id": str(message_id)}
-    )
+    job_input = {"question": question, "message_id": str(message_id), "reply_in_channel": reply_in_channel}
+    return await enqueue(session, job_id, case_id, "COPILOT", user, job_input)
 
 
 async def copilot_view(session: AsyncSession, case_id: uuid.UUID) -> tuple[list, list[CaseJob]]:
@@ -272,9 +287,13 @@ async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
     async with SessionLocal() as session:
         job = await session.get_one(CaseJob, job_id)
         question = (job.input or {}).get("question", "")
-        case = await session.get_one(CaseRecord, case_id)
-        history = [(m.role, m.content) for m in await cases.copilot_messages(session, case_id)][:-1]
+        in_channel = bool((job.input or {}).get("reply_in_channel"))
+        thread, case = await _thread_context(session, case_id)
+        history = (
+            [] if in_channel else [(m.role, m.content) for m in await cases.copilot_messages(session, case_id)][:-1]
+        )
         context = copilot.CopilotContext(
+            channel=build_transcript(thread).text if thread.messages else "",
             case_block=(
                 f"{case.case_code} · {case.title}\nCustomer: {case.client_name} · Fund: {case.fund_name}\n"
                 f"Severity: {case.severity} · Status: {case.status}\n{case.initial_request_brief}"
@@ -283,6 +302,15 @@ async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
             history=history,
         )
         result = await copilot.answer(session, context, question, lambda step: heartbeat(job_id, step))
+        if in_channel:
+            posted = await cases.post_agent_message(session, case_id, job_id, result["answer"])
+            out = ThreadMessageOut.model_validate(posted).model_dump(mode="json")
+            await realtime.publish(realtime.thread_room(case_id), {"type": "message.created", "message": out})
+            return {
+                "channel_message_id": str(posted.id),
+                "uncited_case_codes": result["uncited_case_codes"],
+                "provider": llm_client.provider_label(),
+            }
         message = await cases.add_copilot_message(
             session,
             case_id,
@@ -349,12 +377,13 @@ async def _thread_context(session: AsyncSession, case_id: uuid.UUID) -> tuple[Th
 
     def to_transcript(message, attachment=None) -> TranscriptMessage:
         author = message.author
+        agent = getattr(message, "is_agent", False)
         return TranscriptMessage(
             id=message.id,
             author_id=author.id if author else None,
-            author_name=author.name if author else "Former member",
+            author_name=author.name if author else ("Dejavu copilot (AI)" if agent else "Former member"),
             author_title=author.job_title if author else None,
-            author_active=author.is_active if author else False,
+            author_active=author.is_active if author else agent,
             content=message.content,
             created_at=message.created_at,
             is_milestone=getattr(message, "is_resolution_milestone", False),

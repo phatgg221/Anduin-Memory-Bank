@@ -68,7 +68,9 @@ async def copilot_view(case_id: uuid.UUID, user: CurrentUser, session: SessionDe
 async def ask_copilot(case_id: uuid.UUID, data: CopilotAskIn, user: CurrentUser, session: SessionDep) -> JobOut:
     """Asks the Memory Copilot about this case. The answer arrives as a copilot message when the job completes."""
     try:
-        job = await service.ask_copilot(session, user, case_id, data.message_id, data.job_id, data.question)
+        job = await service.ask_copilot(
+            session, user, case_id, data.message_id, data.job_id, data.question, data.reply_in_channel
+        )
     except service.NotFoundError as error:
         raise _http(error) from None
     return JobOut.model_validate(job)

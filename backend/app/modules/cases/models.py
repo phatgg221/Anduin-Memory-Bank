@@ -132,6 +132,9 @@ class ChannelMessage(Base):
     content: Mapped[str] = mapped_column(Text)
     attached_artifact_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("case_artifacts.id", ondelete="SET NULL"))
     is_resolution_milestone: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # Posted by the Dejavu copilot (no human author); its id is the COPILOT job's id.
+    is_agent: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    mentioned_user_ids: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     case: Mapped[CaseRecord] = relationship(back_populates="channel_messages", lazy="raise")

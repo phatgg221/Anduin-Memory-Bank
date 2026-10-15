@@ -156,3 +156,32 @@ def test_upload_a_client_file(client, sql):
     assert client.post(f"/api/cases/{APOLLO}/files", files=bad, headers=elena).status_code == 422
     assert client.post(f"/api/cases/{SOVEREIGN}/files", files=files, headers=elena).status_code == 409
     assert post(client, elena, APOLLO, "uploaded").status_code == 200
+
+
+def test_ask_dejavu_in_the_case_channel(client, sql):
+    elena, ryan = signed_in(client, sql)
+    ryan_id = client.get("/api/auth/me", headers=ryan).json()["id"]
+    message = {
+        "id": str(uuid.uuid4()),
+        "content": "@Ryan Miller can you check the W-8 flow? @Dejavu why did the sovereign case take three weeks?",
+        "mentioned_user_ids": [ryan_id, "00000000-0000-0000-0000-0000000000d1"],  # alumni mentions are dropped
+    }
+    posted = client.post(f"/api/cases/{APOLLO}/thread/messages", json=message, headers=elena).json()
+    assert posted["mentioned_user_ids"] == [ryan_id] and posted["is_agent"] is False
+    members = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["members"]
+    assert {m["user"]["name"] for m in members} >= {"Elena Rostova", "Ryan Miller"}
+
+    job_id = str(uuid.uuid4())
+    body = {"message_id": message["id"], "job_id": job_id, "question": message["content"], "reply_in_channel": True}
+    asked = client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=elena).json()
+    assert asked["in_channel"] is True
+    view = client.get(f"/api/cases/{APOLLO}/copilot", headers=elena).json()
+    assert view["messages"] == [] and view["jobs"][0]["in_channel"] is True  # nothing in the copilot tab
+
+    run_job(client, job_id)
+    run_job(client, job_id)  # a retried job posts once
+    thread = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["messages"]
+    reply = thread[-1]
+    assert [m["id"] for m in thread].count(job_id) == 1
+    assert reply["id"] == job_id and reply["is_agent"] is True and reply["author"] is None
+    assert "[CASE-2025-052]" in reply["content"]

@@ -97,6 +97,7 @@ def test_thread_writes_publish_to_thread_and_department_rooms(client, sql, monke
     post(client, elena, APOLLO, "Live thread")
     assert published == [
         (f"case-{APOLLO}", "message.created", None),
+        (f"case-{APOLLO}", "room.changed", "members"),  # the first post joins the author to the case
         ("CLIENT_OPERATIONS", "room.changed", "threads"),
         ("LEGAL_COMPLIANCE", "room.changed", "threads"),
     ]

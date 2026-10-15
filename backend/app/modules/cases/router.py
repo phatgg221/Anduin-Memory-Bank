@@ -105,8 +105,15 @@ async def post_thread_message(
     case_id: uuid.UUID, data: ThreadMessageIn, user: CurrentUser, session: SessionDep
 ) -> ThreadMessageOut:
     try:
-        message, case = await service.post_thread_message(
-            session, user, case_id, data.id, data.content, data.is_milestone, data.attached_artifact_id
+        message, case, joined = await service.post_thread_message(
+            session,
+            user,
+            case_id,
+            data.id,
+            data.content,
+            data.is_milestone,
+            data.attached_artifact_id,
+            data.mentioned_user_ids,
         )
     except (service.NotFoundError, service.ConflictError) as error:
         raise _http(error) from None
@@ -114,6 +121,8 @@ async def post_thread_message(
     await realtime.publish(
         realtime.thread_room(case_id), {"type": "message.created", "message": out.model_dump(mode="json")}
     )
+    if joined:
+        await realtime.room_changed(realtime.thread_room(case_id), "members")
     for department_id in [case.department_id, *case.secondary_department_ids]:
         await realtime.room_changed(department_id, "threads")
     return out

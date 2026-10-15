@@ -22,6 +22,7 @@ class CopilotContext:
     case_block: str
     precedents: list[dict]  # from cases.precedents_for: code, title, summary, pitfalls, lead, files
     history: list[tuple[str, str]] = field(default_factory=list)  # (role, content), oldest first
+    channel: str = ""  # the case channel as a numbered transcript: what the team has said so far
 
 
 async def answer(session: AsyncSession, context: CopilotContext, question: str, on_step: OnStep) -> dict:
@@ -50,7 +51,7 @@ async def answer(session: AsyncSession, context: CopilotContext, question: str, 
     await on_step(COPILOT_STEPS[2])
     draft = await llm_client.complete_json(
         COPILOT_SYSTEM,
-        copilot_user(context.case_block, precedent_block, memory_block, history, question),
+        copilot_user(context.case_block, precedent_block, memory_block, history, question, context.channel[-12000:]),
         CopilotAnswerDraft,
         fake=lambda: _fake_answer(context, question, hits),
     )

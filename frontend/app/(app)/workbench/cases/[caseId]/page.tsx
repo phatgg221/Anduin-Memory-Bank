@@ -1,13 +1,20 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, use, useEffect, useMemo, useRef, type ReactNode } from "react";
+import {
+  Suspense,
+  use,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
 import { SectionLabel } from "@/components/brand/SectionLabel";
 import { CaseDetailsPanel } from "@/components/cases/CaseDetailsPanel";
 import { JobProgress } from "@/components/memory/JobProgress";
 import { MemoryBanner } from "@/components/memory/MemoryBanner";
 import { MemoryReviewForm } from "@/components/memory/MemoryReviewForm";
-import { Composer } from "@/components/rooms/Composer";
+import { Composer, type Mentionable } from "@/components/rooms/Composer";
 import { MemberList } from "@/components/rooms/MemberList";
 import { MessageThread } from "@/components/rooms/MessageThread";
 import { Button } from "@/components/ui/button";
@@ -20,7 +27,14 @@ import { ReusableKit } from "@/components/workspace/ReusableKit";
 import { TabBar } from "@/components/workspace/TabBar";
 import { usePanels } from "@/lib/usePanels";
 import { useSession } from "@/store/auth";
-import { useAnalyze, useAskCopilot, useCaseJobs, useCommitMemory, useCopilot, useResolve } from "@/store/memory";
+import {
+  useAnalyze,
+  useAskCopilot,
+  useCaseJobs,
+  useCommitMemory,
+  useCopilot,
+  useResolve,
+} from "@/store/memory";
 import { useDepartments } from "@/store/org";
 import { usePeople, useRoomSocket } from "@/store/rooms";
 import {
@@ -38,7 +52,11 @@ import type { RoomPerson } from "@/types/rooms";
 type Tab = "channel" | "delta" | "copilot" | "people";
 const TABS: Tab[] = ["channel", "delta", "copilot", "people"];
 
-export default function CasePage({ params }: { params: Promise<{ caseId: string }> }) {
+export default function CasePage({
+  params,
+}: {
+  params: Promise<{ caseId: string }>;
+}) {
   const { caseId } = use(params);
   return (
     <Suspense fallback={<Skeleton className="m-6 h-[60dvh] flex-1" />}>
@@ -76,7 +94,8 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   const panels = usePanels();
 
   const departmentCodes = useMemo(
-    () => Object.fromEntries((departments.data ?? []).map((d) => [d.id, d.code])),
+    () =>
+      Object.fromEntries((departments.data ?? []).map((d) => [d.id, d.code])),
     [departments.data],
   );
   const me: RoomPerson | undefined = useMemo(
@@ -101,9 +120,22 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   const analysisJob = jobs.data?.analyze ?? null;
   const previousStatus = useRef<string | undefined>(undefined);
   const { refetch: refetchThread } = thread;
+  const dejavuReplying = (copilot.data?.jobs ?? []).some(
+    (j) => j.in_channel && (j.status === "QUEUED" || j.status === "PROCESSING"),
+  );
+  const wasReplying = useRef(false);
+  useEffect(() => {
+    if (wasReplying.current && !dejavuReplying) void refetchThread();
+    wasReplying.current = dejavuReplying;
+  }, [dejavuReplying, refetchThread]);
   useEffect(() => {
     const status = analysisJob?.status;
-    if (previousStatus.current && previousStatus.current !== "COMPLETED" && status === "COMPLETED") void refetchThread();
+    if (
+      previousStatus.current &&
+      previousStatus.current !== "COMPLETED" &&
+      status === "COMPLETED"
+    )
+      void refetchThread();
     previousStatus.current = status;
   }, [analysisJob?.status, refetchThread]);
 
@@ -150,7 +182,9 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     top && `What's different from ${top.case_code}, and what's net-new?`,
   ].filter((c): c is string => Boolean(c));
   const usedFileIds = new Set(
-    t.messages.map((m) => m.attached_artifact?.id).filter((id): id is string => Boolean(id)),
+    t.messages
+      .map((m) => m.attached_artifact?.id)
+      .filter((id): id is string => Boolean(id)),
   );
   const summarizeJob = jobs.data?.summarize ?? null;
   const startDraft = () => resolve.mutate(crypto.randomUUID());
@@ -158,10 +192,67 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     router.push(`${base}?tab=${tab}&review=1`);
     if (!summarizeJob || summarizeJob.status === "FAILED") startDraft();
   };
-  const newMessage = (content: string, isMilestone: boolean, attached?: string) => ({
-    input: { id: crypto.randomUUID(), content, is_milestone: isMilestone, attached_artifact_id: attached },
+  const newMessage = (
+    content: string,
+    isMilestone: boolean,
+    attached?: string,
+    mentioned: string[] = [],
+  ) => ({
+    input: {
+      id: crypto.randomUUID(),
+      content,
+      is_milestone: isMilestone,
+      attached_artifact_id: attached,
+      mentioned_user_ids: mentioned,
+    },
     author: me!,
   });
+  const sendToChannel = (
+    content: string,
+    isMilestone: boolean,
+    mentioned: string[],
+  ) => {
+    if (!me) return;
+    const message = newMessage(content, isMilestone, undefined, mentioned);
+    sendThread.mutate(message, {
+      onSuccess: () => {
+        if (/@dejavu\b/i.test(content))
+          askCopilot.mutate({
+            message_id: message.input.id,
+            job_id: crypto.randomUUID(),
+            question: content,
+            reply_in_channel: true,
+          });
+      },
+    });
+  };
+  const memberIds = new Set(t.members.map((m) => m.user.id));
+  const mentionables: Mentionable[] = [
+    {
+      id: "dejavu",
+      name: "Dejavu",
+      initials: "AI",
+      hint: "AI copilot · answers here in the channel",
+      agent: true,
+    },
+    ...t.members
+      .filter((m) => m.user.id !== me?.id)
+      .map((m) => ({
+        id: m.user.id,
+        name: m.user.name,
+        initials: m.user.avatar_initials,
+        hint: m.user.job_title ?? "Member",
+      })),
+    ...(people.data ?? [])
+      .filter((p) => p.is_active && p.id !== me?.id && !memberIds.has(p.id))
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        initials: p.avatar_initials,
+        hint: "Not in this case yet · will be added",
+      })),
+  ];
+  const mentionNames = (people.data ?? []).map((p) => p.name);
 
   const header = (
     <CaseHeader
@@ -178,17 +269,24 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
 
   let body: ReactNode;
   if (reviewing) {
-    const draft = summarizeJob?.status === "COMPLETED" ? summarizeJob.result : null;
+    const draft =
+      summarizeJob?.status === "COMPLETED" ? summarizeJob.result : null;
     body = (
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-6">
         <div className="flex items-center justify-between gap-2">
           <SectionLabel>Complete &amp; save to memory</SectionLabel>
-          <Button variant="ghost" size="sm" onClick={() => router.push(`${base}?tab=${tab}`)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push(`${base}?tab=${tab}`)}
+          >
             Back to case
           </Button>
         </div>
         {!isOpenCase ? (
-          <p className="text-sm text-muted-foreground">This case is already committed to memory.</p>
+          <p className="text-sm text-muted-foreground">
+            This case is already committed to memory.
+          </p>
         ) : draft?.record && summarizeJob ? (
           <MemoryReviewForm
             key={summarizeJob.id}
@@ -199,16 +297,22 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
             error={commitMemory.error?.message}
             onRegenerate={startDraft}
             onCommit={(record) =>
-              commitMemory.mutate(record, { onSuccess: () => router.replace(`${base}?tab=channel`) })
+              commitMemory.mutate(record, {
+                onSuccess: () => router.replace(`${base}?tab=channel`),
+              })
             }
           />
         ) : summarizeJob ? (
           <div className="flex flex-col items-start gap-3">
             <p className="text-sm text-muted-foreground">
-              The AI summarizer is reading the case channel, the war-room mentions and the files, and drafting the
-              memory record (how it went, resolution steps, pitfalls) for your review.
+              The AI summarizer is reading the case channel, the war-room
+              mentions and the files, and drafting the memory record (how it
+              went, resolution steps, pitfalls) for your review.
             </p>
-            <JobProgress job={summarizeJob} title="Drafting the memory record" />
+            <JobProgress
+              job={summarizeJob}
+              title="Drafting the memory record"
+            />
             {summarizeJob.status === "FAILED" && (
               <Button onClick={startDraft} disabled={resolve.isPending}>
                 Try again
@@ -216,17 +320,25 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
             )}
           </div>
         ) : (
-          <Button className="w-fit" onClick={startDraft} disabled={resolve.isPending}>
+          <Button
+            className="w-fit"
+            onClick={startDraft}
+            disabled={resolve.isPending}
+          >
             Draft memory record
           </Button>
         )}
-        {resolve.error && <p className="text-sm text-destructive">{resolve.error.message}</p>}
+        {resolve.error && (
+          <p className="text-sm text-destructive">{resolve.error.message}</p>
+        )}
       </div>
     );
   } else {
     const copilotMessages = copilot.data?.messages ?? [];
-    const copilotJobs = copilot.data?.jobs ?? [];
-    const copilotThinking = copilotJobs.some((j) => j.status === "QUEUED" || j.status === "PROCESSING");
+    const copilotJobs = (copilot.data?.jobs ?? []).filter((j) => !j.in_channel);
+    const copilotThinking = copilotJobs.some(
+      (j) => j.status === "QUEUED" || j.status === "PROCESSING",
+    );
     body = (
       <>
         <TabBar
@@ -235,8 +347,14 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
           onSelect={setTab}
           tabs={[
             { id: "channel", label: `Case channel (${t.messages.length})` },
-            { id: "delta", label: `Precedent & delta (${t.precedents.length})` },
-            { id: "copilot", label: `Memory copilot${copilotThinking ? " · thinking" : ""}` },
+            {
+              id: "delta",
+              label: `Precedent & delta (${t.precedents.length})`,
+            },
+            {
+              id: "copilot",
+              label: `Memory copilot${copilotThinking ? " · thinking" : ""}`,
+            },
             { id: "people", label: `People (${t.members.length})` },
           ]}
         />
@@ -245,8 +363,13 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
             {top && (
               <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-surface-2 px-6 py-2 text-xs text-muted-foreground">
                 <span className="micro-label text-navy">Dejavu</span>
-                Closest precedent: <span className="font-medium text-ink">{top.case_code}</span> ({top.similarity_score}
-                %){top.lead_is_alumni && top.lead_name && ` · led by ${top.lead_name} (alumni)`}
+                Closest precedent:{" "}
+                <span className="font-medium text-ink">{top.case_code}</span> (
+                {top.similarity_score}
+                %)
+                {top.lead_is_alumni &&
+                  top.lead_name &&
+                  ` · led by ${top.lead_name} (alumni)`}
               </div>
             )}
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -259,6 +382,8 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
                   messages={t.messages}
                   lastReadSeq={Infinity}
                   currentUserId={user!.id}
+                  currentUserName={user!.name}
+                  mentionNames={mentionNames}
                   onOpenArtifact={handleOpenArtifact}
                   onCaseClick={handleCaseClick}
                 />
@@ -267,13 +392,21 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
             {isOpenCase ? (
               <Composer
                 roomName={t.channel_slug}
-                onSend={(content, isMilestone) => me && sendThread.mutate(newMessage(content, isMilestone))}
+                onSend={sendToChannel}
                 onTyping={socket.notifyTyping}
-                typingNames={socket.typing.map((p) => p.name)}
+                typingNames={[
+                  ...(dejavuReplying ? ["Dejavu"] : []),
+                  ...socket.typing.map((p) => p.name),
+                ]}
+                mentionables={mentionables}
                 error={sendThread.error?.message}
               />
             ) : (
-              <MemoryBanner summary={t.summary} resolvedAt={t.resolved_at} indexJob={jobs.data?.index ?? null} />
+              <MemoryBanner
+                summary={t.summary}
+                resolvedAt={t.resolved_at}
+                indexJob={jobs.data?.index ?? null}
+              />
             )}
           </>
         )}
@@ -285,7 +418,13 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
               departmentCodes={departmentCodes}
               analysis={analysisJob}
               onRunAnalysis={
-                isOpenCase ? () => analyze.mutate({ caseId: t.id, jobId: crypto.randomUUID() }) : undefined
+                isOpenCase
+                  ? () =>
+                      analyze.mutate({
+                        caseId: t.id,
+                        jobId: crypto.randomUUID(),
+                      })
+                  : undefined
               }
               isStarting={analyze.isPending}
               onOpenFile={handleOpenArtifact}
@@ -307,7 +446,9 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
                 departmentCodes={departmentCodes}
                 onlineIds={new Set(socket.online.map((p) => p.id))}
                 onAdd={(person) => changeMember.mutate({ kind: "add", person })}
-                onRemove={(userId) => changeMember.mutate({ kind: "remove", userId })}
+                onRemove={(userId) =>
+                  changeMember.mutate({ kind: "remove", userId })
+                }
               />
               {changeMember.error && (
                 <p role="alert" className="mt-3 text-xs text-destructive">
@@ -327,7 +468,11 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
                 error={askCopilot.error?.message ?? copilot.error?.message}
                 onCaseClick={handleCaseClick}
                 onAsk={(question) =>
-                  askCopilot.mutate({ message_id: crypto.randomUUID(), job_id: crypto.randomUUID(), question })
+                  askCopilot.mutate({
+                    message_id: crypto.randomUUID(),
+                    job_id: crypto.randomUUID(),
+                    question,
+                  })
                 }
               />
             </div>
@@ -369,7 +514,13 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
               canUse={isOpenCase}
               onPreview={handleOpenArtifact}
               onUse={(file) => {
-                sendThread.mutate(newMessage(`Reusing ${file.name} from ${file.caseCode}.`, false, file.id));
+                sendThread.mutate(
+                  newMessage(
+                    `Reusing ${file.name} from ${file.caseCode}.`,
+                    false,
+                    file.id,
+                  ),
+                );
                 setTab("channel");
               }}
             />
