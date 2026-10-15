@@ -23,10 +23,10 @@ export function TopNav({ items, activeHref, actions }: TopNavProps) {
   return (
     <header className="sticky top-0 z-40 border-b bg-background">
       <div className="flex h-14 items-stretch">
-        <Link href="/" className="flex items-center border-r px-5 whitespace-nowrap hover:bg-surface-2">
-          <BrandMark />
+        <Link href="/" className="flex shrink-0 items-center border-r px-5 whitespace-nowrap hover:bg-surface-2">
+          <BrandMark className="[&>span:last-child]:hidden xl:[&>span:last-child]:inline" />
         </Link>
-        <nav aria-label="Primary" className="flex items-stretch">
+        <nav aria-label="Primary" className="flex min-w-0 items-stretch overflow-x-auto [scrollbar-width:none]">
           {items.map((item) =>
             item.disabled ? (
               <span
@@ -55,7 +55,7 @@ export function TopNav({ items, activeHref, actions }: TopNavProps) {
             ),
           )}
         </nav>
-        {actions && <div className="ml-auto flex items-center gap-2 px-4">{actions}</div>}
+        {actions && <div className="ml-auto flex shrink-0 items-center gap-2 px-4">{actions}</div>}
       </div>
     </header>
   );

@@ -31,7 +31,7 @@ export function UserMenu({ name, email, onSignOut, isSigningOut }: UserMenuProps
           <span aria-hidden className="flex size-6 items-center justify-center bg-navy text-[10px] font-semibold text-white">
             {initials(name)}
           </span>
-          <span className="text-sm">{name}</span>
+          <span className="hidden text-sm xl:inline">{name}</span>
           <ChevronDown className="size-4 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
