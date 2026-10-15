@@ -6,7 +6,14 @@ from app.core import realtime
 from app.core.db import SessionDep
 from app.modules.auth.deps import CurrentUser
 from app.modules.cases import service
-from app.modules.cases.schemas import CaseCreateIn, ThreadMessageIn, ThreadMessageOut, ThreadSummaryOut, ThreadViewOut
+from app.modules.cases.schemas import (
+    CaseCreateIn,
+    CaseUpdateIn,
+    ThreadMessageIn,
+    ThreadMessageOut,
+    ThreadSummaryOut,
+    ThreadViewOut,
+)
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -35,11 +42,28 @@ async def create_case(data: CaseCreateIn, user: CurrentUser, session: SessionDep
         case_code=case.case_code,
         title=case.title,
         status=case.status,
+        client_name=case.client_name,
+        severity=case.severity,
+        due_date=case.due_date,
         department_id=case.department_id,
         secondary_department_ids=case.secondary_department_ids,
         message_count=0,
         last_message_at=None,
     )
+
+
+@router.patch("/{case_id}")
+async def update_case(case_id: uuid.UUID, data: CaseUpdateIn, user: CurrentUser, session: SessionDep) -> ThreadViewOut:
+    """Edits an open case's details. Returns the full thread view so the client reconciles without a refetch."""
+    try:
+        _, departments = await service.update_case(session, case_id, data)
+        view = ThreadViewOut.model_validate(await service.thread_view(session, case_id), from_attributes=True)
+    except (service.NotFoundError, service.ConflictError, service.InvalidError) as error:
+        raise _http(error) from None
+    await realtime.room_changed(realtime.thread_room(case_id), "threads")
+    for department_id in departments:
+        await realtime.room_changed(department_id, "threads")
+    return view
 
 
 @router.get("/{case_id}/thread")

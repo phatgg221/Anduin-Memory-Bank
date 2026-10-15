@@ -124,6 +124,7 @@ A ★ after the handle marks a resolution milestone (is_resolution_milestone = t
 
 Same keys as a resolved case, except:
 - `status: "OPEN"`, with no `summary`, `howItWent`, `resolutionSteps`, `pitfalls`, `durationDays`, or `resolvedAt`;
+- `leadResolver` is the case's current **owner** (shown in Case details);
 - it adds `comparisonResults`: the Workbench's precedent banner, pre-computed so the UI works before the live pipeline exists. It also serves as the regression fixture for that pipeline.
 
 ```json

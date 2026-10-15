@@ -12,7 +12,7 @@
   ],
   "status": "OPEN",
   "createdBy": "ryan.miller",
-  "leadResolver": null,
+  "leadResolver": "ryan.miller",
   "initialRequestBrief": "Allianz Global Investors (€450k ARR) sent a 160-question security & scoping RFP for a European Private Wealth feeder platform (1,800 HNW investors managed by wealth advisors). Requires EU DORA compliance, Frankfurt data residency, and Swiss FINMA client confidentiality addendums.",
   "contextTags": {
     "Workflow": "Security RFP",

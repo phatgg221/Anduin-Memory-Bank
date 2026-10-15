@@ -79,5 +79,8 @@ class ThreadContext:
     initial_request_brief: str
     context_tags: dict[str, str]
     messages: list[TranscriptMessage]
+    client_name: str | None = None
+    severity: str = "MEDIUM"
+    due_date: str | None = None
     artifacts: list[str] = field(default_factory=list)
     room_mentions: list[TranscriptMessage] = field(default_factory=list)

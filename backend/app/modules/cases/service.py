@@ -78,6 +78,9 @@ async def thread_summaries(session: AsyncSession, department_id: str) -> list[di
             "case_code": c.case_code,
             "title": c.title,
             "status": c.status,
+            "client_name": c.client_name,
+            "severity": c.severity,
+            "due_date": c.due_date,
             "department_id": c.department_id,
             "secondary_department_ids": c.secondary_department_ids,
             "message_count": stats.get(c.id, (0, None))[0],
@@ -97,7 +100,12 @@ def _messages_query(case_id: uuid.UUID):
 
 
 async def _case(session: AsyncSession, case_id: uuid.UUID) -> CaseRecord:
-    case = await session.get(CaseRecord, case_id, options=[selectinload(CaseRecord.created_by)])
+    options = [
+        selectinload(CaseRecord.created_by),
+        selectinload(CaseRecord.lead_resolver),
+        selectinload(CaseRecord.artifacts),
+    ]
+    case = await session.get(CaseRecord, case_id, options=options, populate_existing=True)
     if case is None:
         raise NotFoundError("Unknown case")
     return case
@@ -110,6 +118,11 @@ async def thread_view(session: AsyncSession, case_id: uuid.UUID) -> dict:
     participants = {m.author.id: m.author for m in messages if m.author}
     return {
         **{key: getattr(case, key) for key in ("id", "case_code", "title", "status", "department_id")},
+        "client_name": case.client_name,
+        "severity": case.severity,
+        "due_date": case.due_date,
+        "lead": case.lead_resolver,
+        "artifacts": case.artifacts,
         "secondary_department_ids": case.secondary_department_ids,
         "initial_request_brief": case.initial_request_brief,
         "context_tags": case.context_tags,
@@ -165,11 +178,8 @@ async def create_case(session: AsyncSession, user: User, data) -> CaseRecord:
             raise ConflictError("Case id already used")
         return existing
 
-    involved = [data.department_id, *data.secondary_department_ids]
-    known = set(await session.scalars(select(Department.id).where(Department.id.in_(involved))))
-    if set(involved) - known:
-        raise InvalidError("Unknown department")
-    secondary = [d for d in dict.fromkeys(data.secondary_department_ids) if d != data.department_id]
+    secondary = await _valid_departments(session, data.department_id, data.secondary_department_ids)
+    lead_id = await _valid_lead(session, data.lead_user_id) or user.id
 
     for _ in range(3):  # two people creating a case at the same moment can race for the same code
         code = await _next_case_code(session, datetime.now(UTC).year)
@@ -178,6 +188,11 @@ async def create_case(session: AsyncSession, user: User, data) -> CaseRecord:
             case_code=code,
             channel_slug=f"case-{slugify(data.title, 50)}-{code[-3:]}",
             title=data.title,
+            client_name=data.client_name,
+            severity=data.severity,
+            due_date=data.due_date,
+            lead_resolver_user_id=lead_id,
+            context_tags=data.context_tags,
             department_id=data.department_id,
             secondary_department_ids=secondary,
             status="OPEN",
@@ -193,6 +208,45 @@ async def create_case(session: AsyncSession, user: User, data) -> CaseRecord:
             if await session.get(CaseRecord, data.id) is not None:
                 return await session.get_one(CaseRecord, data.id)
     raise ConflictError("Couldn't allocate a case code; try again")
+
+
+async def _valid_departments(session: AsyncSession, owner: str, secondary: list[str]) -> list[str]:
+    involved = [owner, *secondary]
+    known = set(await session.scalars(select(Department.id).where(Department.id.in_(involved))))
+    if set(involved) - known:
+        raise InvalidError("Unknown department")
+    return [d for d in dict.fromkeys(secondary) if d != owner]
+
+
+async def _valid_lead(session: AsyncSession, lead_id: uuid.UUID | None) -> uuid.UUID | None:
+    if lead_id is None:
+        return None
+    lead = await session.get(User, lead_id)
+    if lead is None or not lead.is_active:
+        raise InvalidError("The owner must be an active colleague")
+    return lead.id
+
+
+async def update_case(session: AsyncSession, case_id: uuid.UUID, data) -> tuple[CaseRecord, list[str]]:
+    """Patches an OPEN case's details. Returns the case and every department that was or is involved."""
+    case = await _case(session, case_id)
+    if case.status != "OPEN":
+        raise ConflictError("This case is committed to memory; its details are read-only")
+    before = [case.department_id, *case.secondary_department_ids]
+    fields = data.model_fields_set
+    for key in ("client_name", "title", "initial_request_brief", "severity", "context_tags"):
+        if key in fields and getattr(data, key) is not None:
+            setattr(case, key, getattr(data, key))
+    if "due_date" in fields:
+        case.due_date = data.due_date  # null clears the deadline
+    if "lead_user_id" in fields and data.lead_user_id is not None:
+        case.lead_resolver_user_id = await _valid_lead(session, data.lead_user_id)
+    if "secondary_department_ids" in fields and data.secondary_department_ids is not None:
+        case.secondary_department_ids = await _valid_departments(
+            session, case.department_id, data.secondary_department_ids
+        )
+    await session.commit()
+    return case, list(dict.fromkeys([*before, *case.secondary_department_ids]))
 
 
 # --- memory (used by the triage worker; this module owns the tables it writes) ---------------------------------

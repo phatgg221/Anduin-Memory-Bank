@@ -1,13 +1,17 @@
 import { ArrowLeft, BookmarkCheck, PanelLeft, PanelRight } from "lucide-react";
+import { SeverityBadge } from "@/components/cases/SeverityBadge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { SocketStatus } from "@/types/realtime";
+import type { Severity } from "@/types/rooms";
 import { PanelToggle } from "./PinnedCaseBar";
 
 interface ThreadBarProps {
   roomCode: string;
   caseCode: string;
   title: string;
+  severity: Severity;
+  clientName: string | null;
   departments: string[];
   status: SocketStatus;
   onBack: () => void;
@@ -49,12 +53,14 @@ export function ThreadBar(props: ThreadBarProps) {
           </button>
           <span className="micro-label text-muted-foreground">›</span>
           <span className="micro-label text-navy">{caseCode}</span>
+          <SeverityBadge severity={props.severity} className="py-0" />
           <span className="micro-label flex items-center gap-1.5 text-muted-foreground" role="status">
             <span aria-hidden className={cn("size-1.5", DOT[status])} />
             {status === "live" ? "Live" : status === "connecting" ? "Connecting" : "Offline · polling"}
           </span>
         </div>
         <h2 className="truncate text-sm font-medium text-ink" title={title}>
+          {props.clientName && <span className="text-muted-foreground">{props.clientName} · </span>}
           {title}
         </h2>
       </div>

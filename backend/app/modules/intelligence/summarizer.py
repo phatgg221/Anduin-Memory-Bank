@@ -25,6 +25,8 @@ async def summarize_thread(context: ThreadContext, on_step: OnStep) -> tuple[Cas
     case_block = "\n".join(
         [
             f"Case: {context.case_code} · {context.title}",
+            f"Customer: {context.client_name or 'not recorded'}",
+            f"Severity: {context.severity}" + (f" · deadline {context.due_date}" if context.due_date else ""),
             f"Department: {context.department}",
             f"Incoming request: {context.initial_request_brief}",
             *(f"{k}: {v}" for k, v in context.context_tags.items()),

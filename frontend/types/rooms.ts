@@ -37,16 +37,30 @@ export interface ThreadMessage extends ChatMessage {
   case_id: string;
 }
 
+export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+export const SEVERITIES: Severity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+
 /** An open case's sub-chat, listed under every department it involves. */
 export interface ThreadSummary {
   id: string;
   case_code: string;
   title: string;
   status: string;
+  client_name: string | null;
+  severity: Severity;
+  due_date: string | null;
   department_id: string;
   secondary_department_ids: string[];
   message_count: number;
   last_message_at: string | null;
+}
+
+export interface CaseFile {
+  id: string;
+  file_name: string;
+  file_type: string;
+  is_reusable: boolean;
+  description: string;
 }
 
 export interface ThreadView {
@@ -54,12 +68,18 @@ export interface ThreadView {
   case_code: string;
   title: string;
   status: string;
+  client_name: string | null;
+  severity: Severity;
+  due_date: string | null;
   department_id: string;
   secondary_department_ids: string[];
   initial_request_brief: string;
   context_tags: Record<string, string>;
   created_by: RoomPerson | null;
+  /** The owner: accountable for the case (stored as the case's lead). */
+  lead: RoomPerson | null;
   created_at: string;
+  artifacts: CaseFile[];
   /** Set once the case is committed to memory. */
   summary: string | null;
   resolved_at: string | null;
@@ -68,13 +88,24 @@ export interface ThreadView {
   messages: ThreadMessage[];
 }
 
-export interface CreateCaseInput {
-  id: string;
+/** The intake fields shared by "New case thread" and "Edit details". */
+export interface CaseIntake {
+  client_name: string;
   title: string;
   initial_request_brief: string;
-  department_id: string;
+  severity: Severity;
+  due_date: string | null;
+  lead_user_id: string | null;
+  context_tags: Record<string, string>;
   secondary_department_ids: string[];
 }
+
+export interface CreateCaseInput extends CaseIntake {
+  id: string;
+  department_id: string;
+}
+
+export type UpdateCaseInput = Partial<CaseIntake>;
 
 export interface RoomSummary {
   department_id: string;

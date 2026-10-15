@@ -62,6 +62,7 @@ def test_create_case_assigns_next_code_and_is_idempotent(client, sql):
     elena, ryan = signed_in(client, sql)
     body = {
         "id": str(uuid.uuid4()),
+        "client_name": "Bain Capital",
         "title": "Bain Capital Tech Opportunities V — Parallel Fund Onboarding",
         "initial_request_brief": "Bain needs a Delaware parallel fund with ERISA tracking.",
         "department_id": "LEGAL_COMPLIANCE",
@@ -99,3 +100,69 @@ def test_thread_writes_publish_to_thread_and_department_rooms(client, sql, monke
         ("CLIENT_OPERATIONS", "room.changed", "threads"),
         ("LEGAL_COMPLIANCE", "room.changed", "threads"),
     ]
+
+
+def new_case(client, headers, **overrides):
+    body = {
+        "id": str(uuid.uuid4()),
+        "client_name": "Bain Capital",
+        "title": "Bain Capital Tech Opportunities V — Parallel Fund Onboarding",
+        "initial_request_brief": "Bain needs a Delaware parallel fund with ERISA tracking.",
+        "severity": "HIGH",
+        "due_date": "2026-12-01",
+        "context_tags": {"Jurisdiction": "Delaware", "Fund Structure": "Parallel Fund"},
+        "department_id": "LEGAL_COMPLIANCE",
+        **overrides,
+    }
+    return client.post("/api/cases", json=body, headers=headers)
+
+
+def test_intake_fields_are_stored_and_shown_in_the_thread(client, sql):
+    elena, ryan = signed_in(client, sql)
+    created = new_case(client, elena)
+    assert created.status_code == 201
+    summary = created.json()
+    assert (summary["client_name"], summary["severity"], summary["due_date"]) == ("Bain Capital", "HIGH", "2026-12-01")
+
+    view = client.get(f"/api/cases/{summary['id']}/thread", headers=ryan).json()
+    assert view["lead"]["name"] == "Elena Rostova"  # owner defaults to the creator
+    assert view["context_tags"] == {"Jurisdiction": "Delaware", "Fund Structure": "Parallel Fund"}
+    assert view["artifacts"] == []
+
+    ryan_id = client.get("/api/auth/me", headers=ryan).json()["id"]
+    owned = new_case(client, elena, lead_user_id=ryan_id).json()
+    assert client.get(f"/api/cases/{owned['id']}/thread", headers=elena).json()["lead"]["name"] == "Ryan Miller"
+
+
+def test_intake_validation(client, sql):
+    elena, _ = signed_in(client, sql)
+    assert new_case(client, elena, severity="URGENT").status_code == 422
+    assert new_case(client, elena, client_name="").status_code == 422
+    assert new_case(client, elena, context_tags={f"Tag {i}": "x" for i in range(9)}).status_code == 422
+    alumni = new_case(client, elena, lead_user_id="00000000-0000-0000-0000-0000000000d1")  # David Le, inactive
+    assert alumni.status_code == 422
+
+
+def test_edit_case_details(client, sql, monkeypatch):
+    from app.core import realtime
+
+    published = []
+
+    async def capture(room_id, event):
+        published.append(room_id)
+
+    monkeypatch.setattr(realtime, "publish", capture)
+    elena, ryan = signed_in(client, sql)
+    patch = {"severity": "CRITICAL", "due_date": None, "secondary_department_ids": ["SALES_SOLUTIONS"]}
+    edited = client.patch(f"/api/cases/{APOLLO}", json=patch, headers=ryan)
+    assert edited.status_code == 200
+    view = edited.json()
+    assert view["severity"] == "CRITICAL" and view["due_date"] is None
+    assert view["secondary_department_ids"] == ["SALES_SOLUTIONS"]
+    assert view["initial_request_brief"] == "Apollo brief"  # untouched fields stay
+    assert {f"case-{APOLLO}", "CLIENT_OPERATIONS", "LEGAL_COMPLIANCE", "SALES_SOLUTIONS"} <= set(published)
+
+    sales = client.get("/api/rooms/SALES_SOLUTIONS", headers=ryan).json()["threads"]
+    assert [t["case_code"] for t in sales] == ["CASE-2026-047"]
+    assert client.patch(f"/api/cases/{APOLLO}", json={"severity": "NOPE"}, headers=ryan).status_code == 422
+    assert client.patch(f"/api/cases/{SOVEREIGN}", json={"severity": "LOW"}, headers=ryan).status_code == 409

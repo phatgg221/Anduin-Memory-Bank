@@ -12,7 +12,7 @@
   ],
   "status": "OPEN",
   "createdBy": "chloe.nguyen",
-  "leadResolver": null,
+  "leadResolver": "chloe.nguyen",
   "initialRequestBrief": "TPG Capital is migrating 650 legacy LP entities from DealCloud CRM ahead of Q1 Capital Call & Tax distributions. Multi-currency EUR/JPY wires are failing validation and institutional bank LPs at Citi/UBS report missing portal invite emails.",
   "contextTags": {
     "Workflow": "Legacy Data Migration / Capital Calls",

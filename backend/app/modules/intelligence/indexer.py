@@ -25,7 +25,8 @@ class ChunkDraft:
 def build_chunks(
     context: ThreadContext, record: CaseMemoryRecord, artifact_texts: dict[str, str] | None = None
 ) -> list[ChunkDraft]:
-    head = f"{context.case_code} · {context.title} ({context.department})"
+    customer = f" · customer {context.client_name}" if context.client_name else ""
+    head = f"{context.case_code} · {context.title} ({context.department}{customer} · severity {context.severity})"
     tags = "; ".join(f"{k}: {v}" for k, v in record.context_tags.items())
     chunks = [
         ChunkDraft(

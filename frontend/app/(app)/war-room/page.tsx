@@ -7,6 +7,7 @@ import { IsometricStack } from "@/components/brand/IsometricStack";
 import { SectionLabel } from "@/components/brand/SectionLabel";
 import { Composer } from "@/components/rooms/Composer";
 import { ContextPane } from "@/components/rooms/ContextPane";
+import { CaseDetailsPanel } from "@/components/cases/CaseDetailsPanel";
 import { JobProgress } from "@/components/memory/JobProgress";
 import { MemoryBanner } from "@/components/memory/MemoryBanner";
 import { MemoryReviewForm } from "@/components/memory/MemoryReviewForm";
@@ -41,6 +42,7 @@ import {
   useThread,
   useThreadCacheHandlers,
   useThreadPolling,
+  useUpdateCase,
 } from "@/store/threads";
 import { useCaseJobs, useCommitMemory, useResolve } from "@/store/memory";
 import { useOpenArtifact } from "@/store/vault";
@@ -86,6 +88,8 @@ function WarRoom() {
   const jobs = useCaseJobs(signedIn ? threadId : null);
   const resolve = useResolve(threadId ?? "");
   const commitMemory = useCommitMemory(threadId ?? "");
+  const updateCase = useUpdateCase(threadId ?? "");
+  const [rightTab, setRightTab] = useState<"details" | "context">("details");
   const summarizeJob = jobs.data?.summarize ?? null;
   const startDraft = () => resolve.mutate(crypto.randomUUID());
   const openReview = () => {
@@ -233,6 +237,8 @@ function WarRoom() {
         key={department.id}
         department={department}
         departments={departments.data}
+        people={people.data ?? []}
+        currentUserId={user!.id}
         isSubmitting={createCase.isPending}
         error={createCase.error?.message}
         fieldErrors={createCase.error?.fieldErrors}
@@ -254,6 +260,8 @@ function WarRoom() {
           roomCode={(department?.code ?? departmentCodes[t.department_id] ?? "").toLowerCase()}
           caseCode={t.case_code}
           title={`Resolve: ${t.title}`}
+          severity={t.severity}
+          clientName={t.client_name}
           departments={[t.department_id, ...t.secondary_department_ids].map((id) => departmentCodes[id] ?? id)}
           status={socket.status}
           onBack={() => router.push(`/war-room?thread=${t.id}`)}
@@ -310,6 +318,8 @@ function WarRoom() {
           roomCode={(department?.code ?? departmentCodes[t.department_id] ?? "").toLowerCase()}
           caseCode={t.case_code}
           title={t.title}
+          severity={t.severity}
+          clientName={t.client_name}
           departments={[t.department_id, ...t.secondary_department_ids].map((id) => departmentCodes[id] ?? id)}
           status={socket.status}
           onBack={() => router.push("/war-room")}
@@ -444,8 +454,47 @@ function WarRoom() {
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">{centre}</section>
 
-      <aside aria-label="Dejavu context" className={cn(panelClass("context"), "bg-background")}>
-        <ContextPane pinned={threadId ? (thread.data ?? null) : (view?.pinned_case ?? null)} />
+      <aside aria-label="Case details and Dejavu context" className={cn(panelClass("context"), "bg-background")}>
+        {threadId && thread.data ? (
+          <>
+            <div role="tablist" aria-label="Right panel" className="flex shrink-0 border-b">
+              {(["details", "context"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={rightTab === tab}
+                  onClick={() => setRightTab(tab)}
+                  className={cn(
+                    "micro-label relative flex-1 px-4 py-3 hover:bg-surface-2",
+                    rightTab === tab
+                      ? "text-navy after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-navy"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {tab === "details" ? "Case details" : "Dejavu context"}
+                </button>
+              ))}
+            </div>
+            {rightTab === "details" ? (
+              <CaseDetailsPanel
+                key={thread.data.id}
+                thread={thread.data}
+                departments={departments.data ?? []}
+                people={people.data ?? []}
+                onSave={(input) => updateCase.mutate(input)}
+                isSaving={updateCase.isPending}
+                error={updateCase.error?.message}
+                fieldErrors={updateCase.error?.fieldErrors}
+                onOpenFile={handleOpenArtifact}
+              />
+            ) : (
+              <ContextPane pinned={thread.data} />
+            )}
+          </>
+        ) : (
+          <ContextPane pinned={view?.pinned_case ?? null} />
+        )}
       </aside>
     </div>
   );

@@ -12,7 +12,7 @@
   ],
   "status": "OPEN",
   "createdBy": "chloe.nguyen",
-  "leadResolver": null,
+  "leadResolver": "chloe.nguyen",
   "initialRequestBrief": "Apollo Global is onboarding \"Apollo Crossover Feeder II\" (Cayman Master-Feeder). Requires Joint Non-US Institutional LP Signers (W-8BEN-E), Sovereign Wealth Side Letter MFN tiers ($15M threshold), CIMA 10% AML UBO look-through, and a net-new Digital Asset Hardware Wallet Custody Attestation Annex.",
   "contextTags": {
     "Jurisdiction": "Cayman Islands",

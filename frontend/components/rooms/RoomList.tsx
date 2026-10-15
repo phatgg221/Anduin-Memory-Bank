@@ -77,8 +77,16 @@ export function RoomList({
                         >
                           <CornerDownRight className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                           <span className="flex min-w-0 flex-1 flex-col">
-                            <span className="micro-label text-navy">{thread.case_code}</span>
-                            <span className="truncate text-xs">{thread.title}</span>
+                            <span className="micro-label whitespace-nowrap text-navy">{thread.case_code}</span>
+                            <span className="truncate text-xs">
+                              {(thread.severity === "CRITICAL" || thread.severity === "HIGH") && (
+                                <span className={thread.severity === "CRITICAL" ? "font-medium text-net-new" : "font-medium text-modified"}>
+                                  {thread.severity} ·{" "}
+                                </span>
+                              )}
+                              {thread.client_name ? `${thread.client_name} · ` : ""}
+                              {thread.title}
+                            </span>
                           </span>
                           <span className="micro-label text-muted-foreground" aria-label={`${thread.message_count} messages`}>
                             {thread.message_count}

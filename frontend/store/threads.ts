@@ -9,6 +9,7 @@ import type {
   ThreadMessage,
   ThreadSummary,
   ThreadView,
+  UpdateCaseInput,
 } from "@/types/rooms";
 import { queryKeys } from "./queryKeys";
 import { mergeMessages } from "./rooms";
@@ -110,5 +111,29 @@ export function useCreateCase() {
     mutationFn: casesService.createCase,
     retry: retryTransient,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all }),
+  });
+}
+
+/** Edit an open case's details. Optimistic: the panel and header change at once, rolled back if the API refuses. */
+export function useUpdateCase(caseId: string) {
+  const queryClient = useQueryClient();
+  const key = queryKeys.cases.thread(caseId);
+  return useMutation<ThreadView, ApiRequestError, UpdateCaseInput, { previous?: ThreadView }>({
+    mutationFn: (input) => casesService.updateCase(caseId, input),
+    scope: { id: `case-edit:${caseId}` },
+    retry: retryTransient,
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<ThreadView>(key);
+      // lead_user_id can't be shown optimistically without the person; the server response fills it in.
+      const visible = Object.fromEntries(Object.entries(input).filter(([k]) => k !== "lead_user_id"));
+      updateThread(queryClient, caseId, (view) => ({ ...view, ...visible }));
+      return { previous };
+    },
+    onError: (_error, _input, snapshot) => {
+      if (snapshot?.previous) queryClient.setQueryData(key, snapshot.previous);
+    },
+    onSuccess: (view) => queryClient.setQueryData<ThreadView>(key, (old) => ({ ...view, messages: old?.messages ?? view.messages })),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all }),
   });
 }
