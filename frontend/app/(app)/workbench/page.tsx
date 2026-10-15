@@ -34,7 +34,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { CaseHeader } from "@/components/workspace/CaseHeader";
 import { CaseRoomList } from "@/components/workspace/CaseRoomList";
-import { CopilotPopup } from "@/components/workspace/CopilotPopup";
+import { CopilotPanel } from "@/components/workspace/CopilotPanel";
 import { EmptyWorkspace } from "@/components/workspace/EmptyWorkspace";
 import {
   IntakePanel,
@@ -87,7 +87,7 @@ const layoutStorage: LayoutStorage = {
     typeof window === "undefined" ? null : window.localStorage.getItem(key),
   setItem: (key, value) => window.localStorage.setItem(key, value),
 };
-type Tab = "delta" | "channel" | "details";
+type Tab = "channel" | "delta" | "details" | "copilot";
 
 // useSearchParams needs a Suspense boundary under Cache Components.
 export default function WorkbenchPage() {
@@ -100,7 +100,7 @@ export default function WorkbenchPage() {
 
 /**
  * Case Workspace: 01 intake + active case rooms · 02 precedent delta / case channel / details · 03 reusable kit +
- * memory copilot. The URL holds the selection: ?case=<id>&tab=delta|channel|details[&review=1], or ?room=1 for the
+ * memory copilot. The URL holds the selection: ?case=<id>&tab=channel|delta|details|copilot[&review=1], or ?room=1 for the
  * department's general room.
  */
 function Workbench() {
@@ -109,9 +109,9 @@ function Workbench() {
   const caseId = params.get("case");
   const roomMode = !caseId && params.get("room") === "1";
   const tab: Tab =
-    (["delta", "channel", "details"] as const).find(
+    (["channel", "delta", "details", "copilot"] as const).find(
       (t) => t === params.get("tab"),
-    ) ?? "delta";
+    ) ?? "channel";
   const reviewing = Boolean(caseId) && params.get("review") === "1";
 
   const user = useSession().data?.user;
@@ -242,7 +242,7 @@ function Workbench() {
     router.push(`/workbench${query}`);
     setDrawer(null);
   };
-  const openCase = (id: string, nextTab: Tab = "delta") =>
+  const openCase = (id: string, nextTab: Tab = "channel") =>
     go(`?case=${id}&tab=${nextTab}`);
   const setTab = (next: Tab) =>
     router.replace(`/workbench?case=${caseId}&tab=${next}`);
@@ -549,18 +549,48 @@ function Workbench() {
         label: `Case channel (${t.messages.length})`,
       };
       const detailsTab = { id: "details" as const, label: "Details" };
+      const copilotMessages = copilot.data?.messages ?? [];
+      const copilotJobs = copilot.data?.jobs ?? [];
+      const copilotThinking = copilotJobs.some(
+        (j) => j.status === "QUEUED" || j.status === "PROCESSING",
+      );
+      const copilotTab = {
+        id: "copilot" as const,
+        label: `Memory copilot${copilotThinking ? " · thinking" : ""}`,
+      };
+      const copilotView = (
+        <div className="flex min-h-0 flex-1 flex-col p-6">
+          <div className="flex min-h-0 w-full max-w-3xl flex-1 flex-col">
+            <CopilotPanel
+              messages={copilotMessages}
+              jobs={copilotJobs}
+              chips={chips}
+              error={askCopilot.error?.message ?? copilot.error?.message}
+              onCaseClick={handleCaseClick}
+              onAsk={(question) =>
+                askCopilot.mutate({
+                  message_id: crypto.randomUUID(),
+                  job_id: crypto.randomUUID(),
+                  question,
+                })
+              }
+            />
+          </div>
+        </div>
+      );
 
       centre = (
         <>
           {header}
           <TabBar
-            tabs={[deltaTab, channelTab, detailsTab]}
+            tabs={[channelTab, deltaTab, detailsTab, copilotTab]}
             active={tab}
             onSelect={setTab}
           />
           {tab === "delta" && deltaView}
           {tab === "channel" && channelView}
           {tab === "details" && detailsView}
+          {tab === "copilot" && copilotView}
         </>
       );
     }
@@ -794,24 +824,6 @@ function Workbench() {
           </>
         )}
       </div>
-      {t && (
-        <CopilotPopup
-          key={t.id}
-          caseCode={t.case_code}
-          messages={copilot.data?.messages ?? []}
-          jobs={copilot.data?.jobs ?? []}
-          chips={chips}
-          error={askCopilot.error?.message ?? copilot.error?.message}
-          onCaseClick={handleCaseClick}
-          onAsk={(question) =>
-            askCopilot.mutate({
-              message_id: crypto.randomUUID(),
-              job_id: crypto.randomUUID(),
-              question,
-            })
-          }
-        />
-      )}
       <SystemStatusBar />
     </div>
   );
