@@ -3,11 +3,11 @@
 import { FileText, Star } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import type { RoomMessage } from "@/types/rooms";
+import type { ChatMessage } from "@/types/rooms";
 import { Avatar } from "./Avatar";
 
 interface MessageThreadProps {
-  messages: RoomMessage[];
+  messages: ChatMessage[];
   lastReadSeq: number;
   currentUserId: string;
   onOpenArtifact: (artifactId: string) => void;

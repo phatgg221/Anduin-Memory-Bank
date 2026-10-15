@@ -20,14 +20,15 @@ from app.core.config import settings
 from app.core.db import SessionLocal, engine
 from app.core.security import UNUSABLE_PASSWORD, hash_password, verify_password
 from app.core.storage import ensure_bucket, internal
+from app.core.text import CASE_TAG
 from app.modules.auth.models import User
 from app.modules.cases.models import CaseArtifact, CaseRecord, ChannelMessage
 from app.modules.org.models import Department
 from app.modules.rooms.models import Room, RoomMember, RoomMessage
+from app.reindex import queue_index_jobs
 from app.seed_pack import SeedCase, load_cases, load_departments, load_rooms, load_users, parse_timestamp
 
 CHAT_REFERENCE = re.compile(r"Chat #L(\d+)")
-CASE_TAG = re.compile(r"#(CASE-\d{4}-\d{3})\b")
 USER_FIELDS = ("name", "primary_department_id", "role", "job_title", "avatar_initials", "is_active", "tenure_note")
 mimetypes.add_type("text/markdown", ".md")
 mimetypes.add_type("text/csv", ".csv")
@@ -305,12 +306,13 @@ async def main() -> None:
             await seed_case(session, case, handles, artifact_ids, case_ids)
             print(f"  {case.code}  {case.data['status']:8}  {len(case.messages):2} messages  {case.data['title'][:60]}")
         room_messages = await seed_rooms(session, handles, case_ids, artifact_ids)
+    queued = await queue_index_jobs(only_missing=True)
     await engine.dispose()
     resolved = sum(c.resolved for c in cases)
     colleagues = len(handles) - ("operator" in handles)
     print(f"Seeded {colleagues} colleagues, {resolved} resolved cases, {len(cases) - resolved} open channels.")
     print(f"Seeded the department war rooms (leads, members, {room_messages} messages).")
-    print("Knowledge chunks are not embedded yet: they land with the intelligence pipeline.")
+    print(f"Queued INDEX jobs for {len(queued)} resolved case(s) without chunks; the API worker embeds them.")
 
 
 if __name__ == "__main__":

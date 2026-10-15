@@ -1,0 +1,158 @@
+import asyncio
+import uuid
+
+import asyncpg
+import pytest
+
+from tests.conftest import TEST_DB, _dsn
+from tests.test_case_threads import APOLLO, post, signed_in
+
+
+def run_job(client, job_id):
+    from app.modules.triage import service
+
+    client.portal.call(service.process, uuid.UUID(job_id))
+
+
+def jobs(client, headers):
+    return client.get(f"/api/cases/{APOLLO}/jobs", headers=headers).json()
+
+
+def fetchval(query, *args):
+    async def go():
+        conn = await asyncpg.connect(_dsn(TEST_DB))
+        try:
+            return await conn.fetchval(query, *args)
+        finally:
+            await conn.close()
+
+    return asyncio.run(go())
+
+
+def discussion(client, elena, ryan):
+    post(client, ryan, APOLLO, "Kickoff: Cayman feeder with joint signers and a $15M MFN bracket.")
+    post(client, elena, APOLLO, "Careful: never let both signers edit the Chapter 4 election, it deadlocked Sequoia.")
+    body = {
+        "id": str(uuid.uuid4()),
+        "content": "Agreed plan: reuse cayman_fatca_v2 and the redlines.",
+        "is_milestone": True,
+    }
+    client.post(f"/api/cases/{APOLLO}/thread/messages", json=body, headers=ryan)
+
+
+def resolve(client, headers, job_id=None):
+    return client.post(f"/api/cases/{APOLLO}/resolve", json={"job_id": job_id or str(uuid.uuid4())}, headers=headers)
+
+
+def test_resolve_needs_messages_and_is_idempotent(client, sql):
+    elena, ryan = signed_in(client, sql)
+    assert resolve(client, elena).status_code == 409  # empty thread
+    discussion(client, elena, ryan)
+
+    job_id = str(uuid.uuid4())
+    first = resolve(client, elena, job_id)
+    assert first.status_code == 202 and first.json()["status"] == "QUEUED"
+    assert first.json()["steps"] == ["Reading the case thread", "Drafting the memory record", "Checking citations"]
+    assert resolve(client, elena, job_id).json()["id"] == job_id  # retry
+    assert resolve(client, ryan).json()["id"] == job_id  # second click while live: same job
+
+
+def test_summary_job_drafts_a_guarded_record(client, sql):
+    elena, ryan = signed_in(client, sql)
+    discussion(client, elena, ryan)
+    job_id = resolve(client, elena).json()["id"]
+    run_job(client, job_id)
+
+    job = jobs(client, elena)["summarize"]
+    assert job["status"] == "COMPLETED" and job["result"]["provider"].startswith("fake")
+    record = job["result"]["record"]
+    assert record["resolution_steps"] == ["Agreed plan: reuse cayman_fatca_v2 and the redlines."]
+    [pitfall] = record["pitfalls"]
+    assert pitfall["severity"] == "HIGH" and pitfall["reference"].startswith("Chat #L")
+    elena_id = client.get("/api/auth/me", headers=elena).json()["id"]
+    assert pitfall["authorId"] == elena_id and pitfall["messageId"]  # set by code from the cited line
+
+
+def test_commit_resolves_locks_thread_and_indexes(client, sql):
+    elena, ryan = signed_in(client, sql)
+    discussion(client, elena, ryan)
+    run_job(client, resolve(client, elena).json()["id"])
+    record = jobs(client, elena)["summarize"]["result"]["record"]
+
+    edited = {**record, "summary": "Apollo Cayman feeder: reused the joint-signer schema and sovereign redlines."}
+    edited["pitfalls"] = [
+        *record["pitfalls"],
+        {"warning": "Invented warning with no source at all.", "severity": "LOW", "reference": "Chat #L999"},
+    ]
+    committed = client.post(f"/api/cases/{APOLLO}/commit", json=edited, headers=elena)
+    assert committed.status_code == 200
+    body = committed.json()
+    assert body["status"] == "RESOLVED" and body["index_job"]["kind"] == "INDEX"
+    assert any("Chat #L999" in w for w in body["guard_warnings"])
+
+    thread = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()
+    assert thread["status"] == "RESOLVED"
+    assert post(client, ryan, APOLLO, "too late").status_code == 409
+    assert client.post(f"/api/cases/{APOLLO}/commit", json=edited, headers=elena).status_code == 409
+    assert resolve(client, elena).status_code == 409
+
+    stored = fetchval(f"SELECT pitfalls::text FROM case_records WHERE id = '{APOLLO}'")
+    assert "Chat #L999" not in stored  # the unverifiable reference was dropped before storing
+
+    run_job(client, body["index_job"]["id"])
+    assert jobs(client, elena)["index"]["status"] == "COMPLETED"
+    chunks = fetchval(f"SELECT count(*) FROM knowledge_chunks WHERE case_id = '{APOLLO}'")
+    dims = fetchval(f"SELECT vector_dims(embedding) FROM knowledge_chunks WHERE case_id = '{APOLLO}' LIMIT 1")
+    assert chunks >= 3 and dims == 768
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_status"),
+    [("OPENROUTER_API_KEY is not set", "FAILED"), ("Provider unavailable after retries: 503", "QUEUED")],
+)
+def test_llm_failures_fail_fast_or_requeue(client, sql, monkeypatch, message, expected_status):
+    from app.modules.intelligence import llm_client
+
+    async def broken(*args, **kwargs):
+        raise llm_client.LLMError(message)
+
+    monkeypatch.setattr(llm_client, "complete_json", broken)
+    elena, ryan = signed_in(client, sql)
+    discussion(client, elena, ryan)
+    job_id = resolve(client, elena).json()["id"]
+    sql(f"UPDATE case_jobs SET status = 'PROCESSING', attempts = 1 WHERE id = '{job_id}'")
+    run_job(client, job_id)
+    job = jobs(client, elena)["summarize"]
+    assert job["status"] == expected_status and message in job["error"]
+
+
+def test_sweeper_requeues_stalled_jobs(client, sql):
+    from app.modules.triage import service
+
+    elena, ryan = signed_in(client, sql)
+    discussion(client, elena, ryan)
+    job_id = resolve(client, elena).json()["id"]
+    stale = "status = 'PROCESSING', attempts = 1, heartbeat_at = now() - interval '1 hour'"
+    sql(f"UPDATE case_jobs SET {stale} WHERE id = '{job_id}'")
+    assert client.portal.call(service.sweep_once) == 1
+    assert jobs(client, elena)["summarize"]["status"] == "QUEUED"
+
+
+def test_thread_context_loads_even_when_case_already_in_session(client, sql):
+    from sqlalchemy import select
+
+    from app.core.db import SessionLocal
+    from app.modules.cases.models import CaseRecord
+    from app.modules.triage.service import _thread_context
+
+    elena, ryan = signed_in(client, sql)
+    discussion(client, elena, ryan)
+
+    async def go():
+        async with SessionLocal() as session:
+            case = await session.scalar(select(CaseRecord).where(CaseRecord.id == uuid.UUID(APOLLO)))
+            context, _ = await _thread_context(session, case.id)
+            return context
+
+    context = client.portal.call(go)
+    assert len(context.messages) == 3 and context.artifacts == []

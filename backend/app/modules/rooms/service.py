@@ -1,17 +1,17 @@
-import re
 import uuid
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.text import CASE_TAG
 from app.modules.auth.models import User
 from app.modules.cases.models import CaseRecord
+from app.modules.cases.service import precedents_for, thread_summaries
 from app.modules.org.models import Department
 from app.modules.rooms.models import Room, RoomMember, RoomMessage, RoomRead
 
-CASE_TAG = re.compile(r"#(CASE-\d{4}-\d{3})\b")
 PAGE = 100
 
 
@@ -104,41 +104,16 @@ async def list_rooms(session: AsyncSession, user: User) -> list[dict]:
     ]
 
 
-def _in_department(department_id: str):
-    return or_(
-        CaseRecord.department_id == department_id,
-        CaseRecord.secondary_department_ids.contains(func.jsonb_build_array(department_id)),
-    )
-
-
 async def _pinned_case(session: AsyncSession, case: CaseRecord | None) -> dict | None:
     if case is None:
         return None
-    matches = case.comparison_results or []
-    codes = [m["caseCode"] for m in matches]
-    query = select(CaseRecord).where(CaseRecord.case_code.in_(codes)).options(selectinload(CaseRecord.lead_resolver))
-    past = {c.case_code: c for c in await session.scalars(query)} if codes else {}
-    precedents = []
-    for match in matches:
-        precedent = past.get(match["caseCode"])
-        lead = precedent.lead_resolver if precedent else None
-        precedents.append(
-            {
-                "case_code": match["caseCode"],
-                "title": precedent.title if precedent else match["caseCode"],
-                "similarity_score": match["similarityScore"],
-                "how_past_case_went": match["howPastCaseWent"],
-                "lead_name": lead.name if lead else None,
-                "lead_is_alumni": bool(lead and not lead.is_active),
-            }
-        )
     return {
         "id": case.id,
         "case_code": case.case_code,
         "title": case.title,
         "status": case.status,
         "initial_request_brief": case.initial_request_brief,
-        "precedents": precedents,
+        "precedents": await precedents_for(session, case),
     }
 
 
@@ -157,11 +132,7 @@ async def room_view(session: AsyncSession, user: User, department_id: str) -> di
     )
     latest = list(await session.scalars(_messages_query(department_id).order_by(RoomMessage.seq.desc()).limit(PAGE)))
     pinned = await session.get(CaseRecord, room.pinned_case_id) if room.pinned_case_id else None
-    case_options = await session.scalars(
-        select(CaseRecord)
-        .where(CaseRecord.status == "OPEN", _in_department(department_id))
-        .order_by(CaseRecord.case_code)
-    )
+    threads = await thread_summaries(session, department_id)
     last_read = await session.scalar(
         select(RoomRead.last_read_seq).where(RoomRead.department_id == department_id, RoomRead.user_id == user.id)
     )
@@ -173,9 +144,8 @@ async def room_view(session: AsyncSession, user: User, department_id: str) -> di
         "is_member": any(m.user_id == user.id for m in members),
         "members": members,
         "pinned_case": await _pinned_case(session, pinned),
-        "case_options": [
-            {"id": c.id, "case_code": c.case_code, "title": c.title, "status": c.status} for c in case_options
-        ],
+        "case_options": sorted(threads, key=lambda t: t["case_code"]),
+        "threads": threads,
         "messages": list(reversed(latest)),
         "last_read_seq": last_read or 0,
     }
@@ -269,3 +239,14 @@ async def mark_read(session: AsyncSession, user: User, department_id: str, seq: 
         )
     )
     await session.commit()
+
+
+async def mentions_of(session: AsyncSession, case_code: str) -> list[RoomMessage]:
+    """War-room messages that tag a case (#CASE-…): they feed that case's memory, chosen by code, not the LLM."""
+    query = (
+        select(RoomMessage)
+        .where(RoomMessage.tagged_case_codes.contains([case_code]))
+        .options(selectinload(RoomMessage.author))
+        .order_by(RoomMessage.seq)
+    )
+    return list(await session.scalars(query))

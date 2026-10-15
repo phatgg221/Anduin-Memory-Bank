@@ -16,6 +16,10 @@ TEST_DB = _dev.path.lstrip("/") + "_test"
 os.environ["DATABASE_URL"] = urlunsplit(_dev._replace(path=f"/{TEST_DB}"))
 # Tests never publish to the running PartyKit server; test_rooms checks publishing with a stub.
 os.environ["REALTIME_URL"] = ""
+# No background worker in tests: they run jobs explicitly with triage.service.process().
+os.environ["WORKER_ENABLED"] = "false"
+os.environ["LLM_PROVIDER"] = "fake"
+os.environ["EMBEDDING_PROVIDER"] = "fake"
 
 
 def _dsn(database: str) -> str:

@@ -4,6 +4,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
+from app.modules.cases.schemas import ThreadSummaryOut
+
 
 class PersonOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -90,6 +92,7 @@ class RoomViewOut(BaseModel):
     members: list[MemberOut]
     pinned_case: PinnedCaseOut | None
     case_options: list[CaseRefOut]
+    threads: list[ThreadSummaryOut]
     messages: list[MessageOut]
     last_read_seq: int
 

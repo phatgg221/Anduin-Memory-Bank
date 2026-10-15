@@ -12,6 +12,11 @@ export const queryKeys = {
     room: (departmentId: string) => ["rooms", "room", departmentId] as const,
     poll: (departmentId: string) => ["rooms", "poll", departmentId] as const,
   },
+  cases: {
+    thread: (caseId: string) => ["cases", "thread", caseId] as const,
+    poll: (caseId: string) => ["cases", "poll", caseId] as const,
+    jobs: (caseId: string) => ["cases", "jobs", caseId] as const,
+  },
   vault: {
     all: ["vault"] as const,
     cases: (departmentId: string | null) => ["vault", "cases", departmentId ?? "ALL"] as const,

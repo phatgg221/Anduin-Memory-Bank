@@ -21,11 +21,20 @@ class Settings(BaseSettings):
 
     llm_provider: Literal["gemini", "openrouter", "fake"] = "fake"
     llm_model: str = ""
-    embedding_provider: Literal["gemini", "fake"] = "fake"
+    embedding_provider: Literal["gemini", "openrouter", "fake"] = "fake"
     embedding_model: str = "gemini-embedding-001"
     embedding_dim: int = 768
     gemini_api_key: str | None = None
     openrouter_api_key: str | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    llm_timeout_seconds: float = 60.0
+
+    # Background jobs (case_jobs): worker + sweeper run inside the API process. Tests turn the loops off.
+    worker_enabled: bool = True
+    worker_poll_interval_seconds: float = 1.0
+    job_max_attempts: int = 3
+    job_stale_after_seconds: int = 120
+    sweeper_interval_seconds: int = 30
 
     # PartyKit realtime service: the API POSTs persisted war-room events to it. Unset = realtime off (tests).
     realtime_url: str | None = None

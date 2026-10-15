@@ -6,6 +6,8 @@ export interface Presence {
   avatar_initials: string;
 }
 
+/** Room ids: a department id (war room) or `case-<case uuid>` (case thread). */
+
 /** Browser → room. The socket must send `auth` first; anything else before it is ignored. */
 export type ClientEvent =
   | { type: "auth"; token: string; user: Presence }
@@ -17,7 +19,7 @@ export type ServerEvent =
   | { type: "presence"; presence: Presence[] }
   | { type: "typing"; user: Presence }
   | { type: "message.created"; message: unknown }
-  | { type: "room.changed"; reason: "members" | "pinned_case" };
+  | { type: "room.changed"; reason: "members" | "pinned_case" | "threads" };
 
 /** API → room (HTTP POST with the shared x-realtime-secret header). */
 export type ApiEvent = Extract<ServerEvent, { type: "message.created" | "room.changed" }>;

@@ -1,15 +1,23 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { PanelLeft } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { IsometricStack } from "@/components/brand/IsometricStack";
 import { SectionLabel } from "@/components/brand/SectionLabel";
 import { Composer } from "@/components/rooms/Composer";
 import { ContextPane } from "@/components/rooms/ContextPane";
+import { JobProgress } from "@/components/memory/JobProgress";
+import { MemoryBanner } from "@/components/memory/MemoryBanner";
+import { MemoryReviewForm } from "@/components/memory/MemoryReviewForm";
 import { MemberList } from "@/components/rooms/MemberList";
 import { MessageThread } from "@/components/rooms/MessageThread";
+import { NewThreadForm } from "@/components/rooms/NewThreadForm";
+import { ParticipantList } from "@/components/rooms/ParticipantList";
 import { PanelToggle, PinnedCaseBar } from "@/components/rooms/PinnedCaseBar";
 import { RoomList } from "@/components/rooms/RoomList";
+import { ThreadBar } from "@/components/rooms/ThreadBar";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useMediaQuery } from "@/lib/useMediaQuery";
@@ -20,20 +28,43 @@ import {
   useMarkRead,
   usePeople,
   useRoom,
+  useRoomCacheHandlers,
   useRoomPolling,
   useRoomSocket,
   useRooms,
   useSendMessage,
   useSetPinnedCase,
 } from "@/store/rooms";
+import {
+  useCreateCase,
+  useSendThreadMessage,
+  useThread,
+  useThreadCacheHandlers,
+  useThreadPolling,
+} from "@/store/threads";
+import { useCaseJobs, useCommitMemory, useResolve } from "@/store/memory";
 import { useOpenArtifact } from "@/store/vault";
-import { PanelLeft } from "lucide-react";
 import type { RoomPerson } from "@/types/rooms";
 
 type Panel = "rooms" | "context";
 
+// useSearchParams needs a Suspense boundary under Cache Components.
 export default function WarRoomPage() {
+  return (
+    <Suspense fallback={<Skeleton className="m-6 h-[60dvh]" />}>
+      <WarRoom />
+    </Suspense>
+  );
+}
+
+function WarRoom() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // The URL holds what the centre pane shows: the room chat, ?thread=<case id>, or ?new=1.
+  const threadId = searchParams.get("thread");
+  const creating = !threadId && searchParams.get("new") === "1";
+  const reviewing = Boolean(threadId) && searchParams.get("review") === "1";
+
   const user = useSession().data?.user;
   const signedIn = Boolean(user);
   const roomId = user?.active_department_id ?? null;
@@ -42,13 +73,25 @@ export default function WarRoomPage() {
   const people = usePeople(signedIn);
   const departments = useDepartments(signedIn);
   const room = useRoom(signedIn ? roomId : null);
+  const thread = useThread(signedIn ? threadId : null);
 
   const selectRoom = useSetActiveDepartment();
   const send = useSendMessage(roomId ?? "");
+  const sendThread = useSendThreadMessage(threadId ?? "");
+  const createCase = useCreateCase();
   const markRead = useMarkRead(roomId ?? "");
   const changeMember = useChangeMember(roomId ?? "");
   const pin = useSetPinnedCase(roomId ?? "");
   const openArtifact = useOpenArtifact();
+  const jobs = useCaseJobs(signedIn ? threadId : null);
+  const resolve = useResolve(threadId ?? "");
+  const commitMemory = useCommitMemory(threadId ?? "");
+  const summarizeJob = jobs.data?.summarize ?? null;
+  const startDraft = () => resolve.mutate(crypto.randomUUID());
+  const openReview = () => {
+    router.push(`/war-room?thread=${threadId}&review=1`);
+    if (!summarizeJob || summarizeJob.status === "FAILED") startDraft();
+  };
 
   const departmentCodes = useMemo(
     () => Object.fromEntries((departments.data ?? []).map((d) => [d.id, d.code])),
@@ -68,8 +111,17 @@ export default function WarRoomPage() {
     [user],
   );
 
-  const socket = useRoomSocket(roomId, me);
-  useRoomPolling(roomId, room.isSuccess, socket.status === "live");
+  // One live socket for whatever chat is on screen: the department room, or the case thread's own PartyKit room.
+  const roomHandlers = useRoomCacheHandlers(roomId);
+  const threadHandlers = useThreadCacheHandlers(threadId);
+  const socket = useRoomSocket(
+    threadId ? `case-${threadId}` : creating ? null : roomId,
+    me,
+    threadId ? threadHandlers : roomHandlers,
+  );
+  const live = socket.status === "live";
+  useRoomPolling(roomId, room.isSuccess && !threadId, live);
+  useThreadPolling(threadId, thread.isSuccess, live);
   const onlineIds = useMemo(() => new Set(socket.online.map((p) => p.id)), [socket.online]);
 
   // Reading the room moves the read marker to the newest confirmed message.
@@ -77,31 +129,10 @@ export default function WarRoomPage() {
   const newestSeq = view?.messages.reduce((max, m) => (m.pending ? max : Math.max(max, m.seq)), 0) ?? 0;
   const { mutate: markReadUpTo } = markRead;
   useEffect(() => {
-    if (view && newestSeq > view.last_read_seq && document.visibilityState === "visible") markReadUpTo(newestSeq);
-  }, [view, newestSeq, markReadUpTo]);
-
-  const handleOpenArtifact = (artifactId: string) => {
-    const tab = window.open("", "_blank");
-    openArtifact.mutate(artifactId, {
-      onSuccess: ({ url }) => {
-        if (!tab) return void window.open(url, "_blank", "noopener");
-        tab.opener = null;
-        tab.location.href = url;
-      },
-      onError: () => tab?.close(),
-    });
-  };
-
-  const handleCaseClick = (caseCode: string) => {
-    const option = view?.case_options.find((c) => c.case_code === caseCode);
-    if (option) pin.mutate(option.id);
-    else router.push("/vault");
-  };
-
-  const handleSend = (content: string, isMilestone: boolean) => {
-    if (!me) return;
-    send.mutate({ input: { id: crypto.randomUUID(), content, is_milestone: isMilestone }, author: me });
-  };
+    if (!threadId && view && newestSeq > view.last_read_seq && document.visibilityState === "visible") {
+      markReadUpTo(newestSeq);
+    }
+  }, [threadId, view, newestSeq, markReadUpTo]);
 
   // Side panels: columns that collapse on wide screens, slide-over drawers on narrow ones. The chat always stays.
   const isWide = useMediaQuery("(min-width: 1024px)");
@@ -129,7 +160,239 @@ export default function WarRoomPage() {
     .filter((r) => r.department_id !== roomId)
     .reduce((sum, r) => sum + r.unread_count, 0);
 
-  const error = selectRoom.error ?? changeMember.error ?? pin.error ?? openArtifact.error ?? room.error;
+  const goToRoom = (departmentId: string) => {
+    if (departmentId !== roomId) selectRoom.mutate(departmentId);
+    router.push("/war-room");
+    setDrawer(null);
+  };
+  const goToThread = (caseId: string) => {
+    router.push(`/war-room?thread=${caseId}`);
+    setDrawer(null);
+  };
+
+  const handleOpenArtifact = (artifactId: string) => {
+    const tab = window.open("", "_blank");
+    openArtifact.mutate(artifactId, {
+      onSuccess: ({ url }) => {
+        if (!tab) return void window.open(url, "_blank", "noopener");
+        tab.opener = null;
+        tab.location.href = url;
+      },
+      onError: () => tab?.close(),
+    });
+  };
+
+  // A #CASE-… chip opens that case's thread when it's open, otherwise the vault.
+  const handleCaseClick = (caseCode: string) => {
+    const open = view?.threads.find((t) => t.case_code === caseCode);
+    if (open) goToThread(open.id);
+    else router.push("/vault");
+  };
+
+  const newMessage = (content: string, isMilestone: boolean) => ({
+    input: { id: crypto.randomUUID(), content, is_milestone: isMilestone },
+    author: me!,
+  });
+
+  const error =
+    selectRoom.error ?? changeMember.error ?? pin.error ?? openArtifact.error ?? room.error ?? thread.error;
+  const department = departments.data?.find((d) => d.id === roomId);
+
+  const toggles = {
+    roomsOpen: isOpen("rooms"),
+    onToggleRooms: () => toggle("rooms"),
+    contextOpen: isOpen("context"),
+    onToggleContext: () => toggle("context"),
+  };
+
+  const alert = error && (
+    <p role="alert" className="border-b border-destructive px-6 py-2 text-sm text-destructive">
+      {error.message}
+    </p>
+  );
+
+  let centre;
+  if (!roomId) {
+    centre = (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+        {!isOpen("rooms") && (
+          <PanelToggle label="Show rooms" pressed={false} onClick={() => toggle("rooms")} badge={otherUnread}>
+            <PanelLeft className="size-4" />
+          </PanelToggle>
+        )}
+        <IsometricStack />
+        <SectionLabel as="p">Pick a department room</SectionLabel>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          Every department has one war room. Choose one on the left, or pick a department in the header.
+        </p>
+      </div>
+    );
+  } else if (creating && department && departments.data) {
+    centre = (
+      <NewThreadForm
+        key={department.id}
+        department={department}
+        departments={departments.data}
+        isSubmitting={createCase.isPending}
+        error={createCase.error?.message}
+        fieldErrors={createCase.error?.fieldErrors}
+        onCancel={() => router.push("/war-room")}
+        onSubmit={(values) =>
+          createCase.mutate(
+            { id: crypto.randomUUID(), department_id: department.id, ...values },
+            { onSuccess: (created) => router.replace(`/war-room?thread=${created.id}`) },
+          )
+        }
+      />
+    );
+  } else if (threadId && thread.data && reviewing) {
+    const t = thread.data;
+    const draft = summarizeJob?.status === "COMPLETED" ? summarizeJob.result : null;
+    centre = (
+      <>
+        <ThreadBar
+          roomCode={(department?.code ?? departmentCodes[t.department_id] ?? "").toLowerCase()}
+          caseCode={t.case_code}
+          title={`Resolve: ${t.title}`}
+          departments={[t.department_id, ...t.secondary_department_ids].map((id) => departmentCodes[id] ?? id)}
+          status={socket.status}
+          onBack={() => router.push(`/war-room?thread=${t.id}`)}
+          backLabel="Thread"
+          {...toggles}
+        />
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-6">
+          {t.status !== "OPEN" ? (
+            <p className="text-sm text-muted-foreground">This case is already committed to memory.</p>
+          ) : !summarizeJob ? (
+            <div className="flex flex-col items-start gap-3">
+              <p className="text-sm text-muted-foreground">
+                The AI summarizer reads this thread, the war-room messages that tag {t.case_code} and the case files,
+                then drafts a Case Memory Record for you to review.
+              </p>
+              <Button onClick={startDraft} disabled={resolve.isPending}>
+                {resolve.isPending ? "Starting…" : "Draft memory record"}
+              </Button>
+              {resolve.error && <p className="text-sm text-destructive">{resolve.error.message}</p>}
+            </div>
+          ) : draft?.record ? (
+            <MemoryReviewForm
+              key={summarizeJob.id}
+              draft={draft.record}
+              provider={draft.provider}
+              guardWarnings={draft.guard_warnings}
+              isCommitting={commitMemory.isPending}
+              error={commitMemory.error?.message}
+              onRegenerate={startDraft}
+              onCommit={(record) =>
+                commitMemory.mutate(record, { onSuccess: () => router.replace(`/war-room?thread=${t.id}`) })
+              }
+            />
+          ) : (
+            <div className="flex flex-col items-start gap-3">
+              <JobProgress job={summarizeJob} title="Drafting the memory record" />
+              {summarizeJob.status === "FAILED" && (
+                <Button onClick={startDraft} disabled={resolve.isPending}>
+                  Try again
+                </Button>
+              )}
+              {resolve.error && <p className="text-sm text-destructive">{resolve.error.message}</p>}
+            </div>
+          )}
+        </div>
+      </>
+    );
+  } else if (threadId && thread.data) {
+    const t = thread.data;
+    const open = t.status === "OPEN";
+    centre = (
+      <>
+        <ThreadBar
+          roomCode={(department?.code ?? departmentCodes[t.department_id] ?? "").toLowerCase()}
+          caseCode={t.case_code}
+          title={t.title}
+          departments={[t.department_id, ...t.secondary_department_ids].map((id) => departmentCodes[id] ?? id)}
+          status={socket.status}
+          onBack={() => router.push("/war-room")}
+          onResolve={open ? openReview : undefined}
+          {...toggles}
+        />
+        {alert}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {t.messages.length === 0 ? (
+            <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+              No messages yet. Kick off {t.case_code} with the team.
+            </p>
+          ) : (
+            <MessageThread
+              messages={t.messages}
+              lastReadSeq={Infinity}
+              currentUserId={user!.id}
+              onOpenArtifact={handleOpenArtifact}
+              onCaseClick={handleCaseClick}
+            />
+          )}
+        </div>
+        {open ? (
+          <Composer
+            roomName={t.case_code}
+            onSend={(content, isMilestone) => me && sendThread.mutate(newMessage(content, isMilestone))}
+            onTyping={socket.notifyTyping}
+            typingNames={socket.typing.map((p) => p.name)}
+            error={sendThread.error?.message}
+          />
+        ) : (
+          <MemoryBanner summary={t.summary} resolvedAt={t.resolved_at} indexJob={jobs.data?.index ?? null} />
+        )}
+      </>
+    );
+  } else if (!threadId && view) {
+    centre = (
+      <>
+        <PinnedCaseBar
+          roomName={view.code.toLowerCase()}
+          pinned={view.pinned_case}
+          options={view.case_options}
+          onPin={(caseId) => pin.mutate(caseId)}
+          isPinning={pin.isPending}
+          status={socket.status}
+          otherUnread={otherUnread}
+          {...toggles}
+        />
+        {alert}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {view.messages.length === 0 ? (
+            <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+              No messages yet. Start the conversation for {view.name}.
+            </p>
+          ) : (
+            <MessageThread
+              messages={view.messages}
+              lastReadSeq={view.last_read_seq}
+              currentUserId={user!.id}
+              onOpenArtifact={handleOpenArtifact}
+              onCaseClick={handleCaseClick}
+            />
+          )}
+        </div>
+        <Composer
+          roomName={view.code.toLowerCase()}
+          onSend={(content, isMilestone) => me && send.mutate(newMessage(content, isMilestone))}
+          onTyping={socket.notifyTyping}
+          typingNames={socket.typing.map((p) => p.name)}
+          error={send.error?.message}
+        />
+      </>
+    );
+  } else {
+    centre = error ? (
+      alert
+    ) : (
+      <div className="flex flex-col gap-4 p-6">
+        <Skeleton className="h-10" />
+        <Skeleton className="h-64" />
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex h-[calc(100dvh-3.5rem)]">
@@ -147,95 +410,42 @@ export default function WarRoomPage() {
           <RoomList
             rooms={rooms.data}
             activeId={roomId}
-            onSelect={(id) => {
-              selectRoom.mutate(id);
+            onSelect={goToRoom}
+            threads={view?.threads ?? []}
+            activeThreadId={threadId}
+            onSelectThread={goToThread}
+            onNewThread={() => {
+              router.push("/war-room?new=1");
               setDrawer(null);
             }}
+            isCreatingThread={creating}
           />
         ) : (
           <Skeleton className="h-56" />
         )}
-        {view && me && (
-          <MemberList
-            members={view.members}
-            people={people.data ?? []}
-            currentUserId={me.id}
-            isMember={view.is_member}
-            departmentCodes={departmentCodes}
-            onlineIds={onlineIds}
-            onAdd={(person) => changeMember.mutate({ kind: "add", person })}
-            onRemove={(userId) => changeMember.mutate({ kind: "remove", userId })}
-          />
+        {threadId && thread.data && me ? (
+          <ParticipantList people={thread.data.participants} onlineIds={onlineIds} currentUserId={me.id} />
+        ) : (
+          view &&
+          me && (
+            <MemberList
+              members={view.members}
+              people={people.data ?? []}
+              currentUserId={me.id}
+              isMember={view.is_member}
+              departmentCodes={departmentCodes}
+              onlineIds={onlineIds}
+              onAdd={(person) => changeMember.mutate({ kind: "add", person })}
+              onRemove={(userId) => changeMember.mutate({ kind: "remove", userId })}
+            />
+          )
         )}
       </aside>
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {!roomId ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-            {!isOpen("rooms") && (
-              <PanelToggle label="Show rooms" pressed={false} onClick={() => toggle("rooms")} badge={otherUnread}>
-                <PanelLeft className="size-4" />
-              </PanelToggle>
-            )}
-            <IsometricStack />
-            <SectionLabel as="p">Pick a department room</SectionLabel>
-            <p className="max-w-sm text-sm text-muted-foreground">
-              Every department has one war room. Choose one on the left, or pick a department in the header.
-            </p>
-          </div>
-        ) : view ? (
-          <>
-            <PinnedCaseBar
-              roomName={view.code.toLowerCase()}
-              pinned={view.pinned_case}
-              options={view.case_options}
-              onPin={(caseId) => pin.mutate(caseId)}
-              isPinning={pin.isPending}
-              status={socket.status}
-              roomsOpen={isOpen("rooms")}
-              otherUnread={otherUnread}
-              onToggleRooms={() => toggle("rooms")}
-              contextOpen={isOpen("context")}
-              onToggleContext={() => toggle("context")}
-            />
-            {error && (
-              <p role="alert" className="border-b border-destructive px-6 py-2 text-sm text-destructive">
-                {error.message}
-              </p>
-            )}
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {view.messages.length === 0 ? (
-                <p className="px-6 py-10 text-center text-sm text-muted-foreground">
-                  No messages yet. Start the conversation for {view.name}.
-                </p>
-              ) : (
-                <MessageThread
-                  messages={view.messages}
-                  lastReadSeq={view.last_read_seq}
-                  currentUserId={user!.id}
-                  onOpenArtifact={handleOpenArtifact}
-                  onCaseClick={handleCaseClick}
-                />
-              )}
-            </div>
-            <Composer
-              roomName={view.code.toLowerCase()}
-              onSend={handleSend}
-              onTyping={socket.notifyTyping}
-              typingNames={socket.typing.map((t) => t.name)}
-              error={send.error?.message}
-            />
-          </>
-        ) : (
-          <div className="flex flex-col gap-4 p-6">
-            <Skeleton className="h-10" />
-            <Skeleton className="h-64" />
-          </div>
-        )}
-      </section>
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col">{centre}</section>
 
       <aside aria-label="Dejavu context" className={cn(panelClass("context"), "bg-background")}>
-        <ContextPane pinned={view?.pinned_case ?? null} />
+        <ContextPane pinned={threadId ? (thread.data ?? null) : (view?.pinned_case ?? null)} />
       </aside>
     </div>
   );

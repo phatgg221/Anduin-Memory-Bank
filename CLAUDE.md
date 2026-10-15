@@ -29,10 +29,12 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
 - **Alembic owns the schema** (`backend/migrations/`). Every model change ships with a migration from `bun run db:revision`; `create_all` is never used.
 - **Domain schema built** (ARCHITECTURE §9.2): `departments` (module `org`), extended `users` (department, role, ALUMNI via `is_active`/`departed_at`), and in module `cases`: `case_records` (OPEN channel → RESOLVED memory), `case_artifacts`, `channel_messages`, `copilot_messages`, `knowledge_chunks` (pgvector, HNSW).
   - Every user sees every department (no RBAC walls in the MVP); the department switcher only filters.
-  - Still undecided: the job table for ANALYZE/SUMMARIZE runs. Don't invent it without asking.
+  - `case_jobs` (module `triage`) runs SUMMARIZE and INDEX jobs with a worker + sweeper in the API process (ARCHITECTURE §9.2). An ANALYZE job (live precedent matching) isn't built yet.
 - **Seed pack loaded by `bun run seed`:** 5 departments, 7 colleagues (2 ALUMNI) plus your account via `SEED_OPERATOR_EMAIL`, 8 resolved cases, 3 open demo channels with pre-computed `comparison_results`, 26 artifacts in MinIO. Knowledge chunks aren't embedded yet.
-- **Built UI:** War Room (landing tab: one chat per department, lead + department members by default, pinned case with its precedents, PartyKit websockets for live messages/presence/typing with polling as fallback, optimistic send), Workbench (empty 3-pane frame), Knowledge Vault (resolved cases + files by department). The header department switcher is saved per user (`users.active_department_id`).
-- Not built yet: file upload in chat, the job worker/sweeper, the intelligence pipeline, and the workbench panes.
+- **Built UI:** War Room (landing tab: one chat per department, lead + department members by default, pinned case with its precedents, PartyKit websockets for live messages/presence/typing with polling as fallback, optimistic send; each open case is a sub-chat thread under every department it involves, with "+ New case thread"), Workbench (empty 3-pane frame), Knowledge Vault (resolved cases + files by department). The header department switcher is saved per user (`users.active_department_id`).
+- **Resolve & Commit to Memory** is built: AI summarizer job → human review → commit (case RESOLVED) → index into pgvector. LLM via `llm_client` (`fake` by default; OpenRouter when `LLM_PROVIDER=openrouter`, `LLM_MODEL`, `OPENROUTER_API_KEY` are set).
+- **RAG:** every resolved case is chunked and embedded into `knowledge_chunks`; `GET /api/memory/search?q=` does semantic retrieval. `bun run reindex` re-embeds everything after an embedding-model change.
+- Not built yet: file upload in chat, the ANALYZE job (live top-3 matching with metadata boost + LLM delta), and the workbench panes.
 - `PLAN.md` is still to be written.
 - If a task needs a product decision (CONTEXT.md §7, DESIGN.md §8), ask instead of guessing.
 
@@ -51,7 +53,7 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
 
 ## Commands
 
-`bun run setup` · `bun run dev` · `bun run dev --refresh-db` · `bun run stop` · `bun run logs` · `bun run seed` · `bun run test` · `bun run lint` · `bun run reset` (destroys volumes — confirm with the user first)
+`bun run setup` · `bun run dev` · `bun run dev --refresh-db` · `bun run stop` · `bun run logs` · `bun run seed` · `bun run reindex [--missing]` · `bun run test` · `bun run lint` · `bun run reset` (destroys volumes — confirm with the user first)
 
 Migrations: `bun run db:revision "msg" [--empty]` · `db:migrate` · `db:downgrade` · `db:current` · `db:history` · `db:check` · `db:reset` (wipes dev data — confirm first)
 

@@ -12,6 +12,6 @@ export type ServerEvent =
   | { type: "presence"; presence: Presence[] }
   | { type: "typing"; user: Presence }
   | { type: "message.created"; message: RoomMessage }
-  | { type: "room.changed"; reason: "members" | "pinned_case" };
+  | { type: "room.changed"; reason: "members" | "pinned_case" | "threads" };
 
 export type SocketStatus = "connecting" | "live" | "offline";

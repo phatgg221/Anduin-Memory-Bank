@@ -4,7 +4,7 @@ import { retryTransient, type ApiRequestError } from "@/lib/apiError";
 import { connectRoom, type RoomConnection } from "@/services/realtimeService";
 import { roomsService } from "@/services/roomsService";
 import type { Presence, SocketStatus } from "@/types/realtime";
-import type { RoomMessage, RoomPerson, RoomSummary, RoomView, SendMessageInput } from "@/types/rooms";
+import type { ChatMessage, RoomMessage, RoomPerson, RoomSummary, RoomView, SendMessageInput } from "@/types/rooms";
 import { queryKeys } from "./queryKeys";
 
 const POLL_MS = 3_000;
@@ -45,7 +45,7 @@ function lastConfirmedSeq(view: RoomView): number {
 }
 
 /** Dedupes by id (a confirmed copy replaces its optimistic twin) and keeps pending messages last. */
-function mergeMessages(view: RoomView, incoming: RoomMessage[]): RoomView {
+export function mergeMessages<M extends ChatMessage, V extends { messages: M[] }>(view: V, incoming: M[]): V {
   const byId = new Map(view.messages.map((m) => [m.id, m]));
   for (const message of incoming) byId.set(message.id, message);
   const messages = [...byId.values()].sort(
@@ -188,12 +188,21 @@ export function useSetPinnedCase(departmentId: string) {
   });
 }
 
+interface SocketHandlers {
+  onMessage: (message: ChatMessage) => void;
+  onChanged: (reason: "members" | "pinned_case" | "threads") => void;
+}
+
 /**
- * Live connection to the department's PartyKit room: new messages and room changes land in the cache as they
- * happen, plus who's online and who's typing. Polling keeps running as a fallback.
+ * Live connection to one PartyKit room: a department war room (room id = department id) or a case thread
+ * (`case-<id>`). Delivers new messages and changes to the handlers, plus who's online and who's typing.
+ * Polling keeps running as a fallback.
  */
-export function useRoomSocket(departmentId: string | null, me: Presence | undefined) {
-  const queryClient = useQueryClient();
+export function useRoomSocket(socketRoomId: string | null, me: Presence | undefined, handlers: SocketHandlers) {
+  const handlersRef = useRef(handlers);
+  useEffect(() => {
+    handlersRef.current = handlers;
+  });
   const [status, setStatus] = useState<SocketStatus>("offline");
   const [online, setOnline] = useState<Presence[]>([]);
   const [typing, setTyping] = useState<Record<string, { user: Presence; until: number }>>({});
@@ -204,21 +213,20 @@ export function useRoomSocket(departmentId: string | null, me: Presence | undefi
   const meInitials = me?.avatar_initials;
 
   useEffect(() => {
-    if (!departmentId || !meId || !meName || !meInitials) return;
+    if (!socketRoomId || !meId || !meName || !meInitials) return;
     const self = { id: meId, name: meName, avatar_initials: meInitials };
-    connection.current = connectRoom(departmentId, self, {
+    connection.current = connectRoom(socketRoomId, self, {
       onStatus: setStatus,
       onEvent: (event) => {
         if (event.type === "ready" || event.type === "presence") setOnline(event.presence);
         else if (event.type === "typing") {
           setTyping((current) => ({ ...current, [event.user.id]: { user: event.user, until: Date.now() + TYPING_VISIBLE_MS } }));
         } else if (event.type === "message.created") {
-          updateRoom(queryClient, departmentId, (view) => mergeMessages(view, [event.message]));
+          handlersRef.current.onMessage(event.message);
           const authorId = event.message.author?.id;
           setTyping((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== authorId)));
         } else if (event.type === "room.changed") {
-          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.room(departmentId) });
-          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.list });
+          handlersRef.current.onChanged(event.reason);
         }
       },
     });
@@ -229,7 +237,7 @@ export function useRoomSocket(departmentId: string | null, me: Presence | undefi
       setTyping({});
       setStatus("offline");
     };
-  }, [departmentId, meId, meName, meInitials, queryClient]);
+  }, [socketRoomId, meId, meName, meInitials]);
 
   // Expire typing indicators.
   useEffect(() => {
@@ -249,4 +257,18 @@ export function useRoomSocket(departmentId: string | null, me: Presence | undefi
   }, []);
 
   return { status, online, typing: Object.values(typing).map((t) => t.user), notifyTyping };
+}
+
+/** Socket handlers that keep a department room's cache current. */
+export function useRoomCacheHandlers(departmentId: string | null): SocketHandlers {
+  const queryClient = useQueryClient();
+  return {
+    onMessage: (message) => {
+      if (departmentId) updateRoom(queryClient, departmentId, (view) => mergeMessages(view, [message as RoomMessage]));
+    },
+    onChanged: () => {
+      if (departmentId) queryClient.invalidateQueries({ queryKey: queryKeys.rooms.room(departmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.rooms.list });
+    },
+  };
 }

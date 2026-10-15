@@ -1,0 +1,72 @@
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, status
+
+from app.core import realtime
+from app.core.db import SessionDep
+from app.modules.auth.deps import CurrentUser
+from app.modules.intelligence import llm_client, retrieval
+from app.modules.triage import service
+from app.modules.triage.schemas import CaseJobsOut, CommitIn, CommitOut, JobOut, ResolveIn
+
+router = APIRouter(prefix="/cases", tags=["memory"])
+memory_router = APIRouter(prefix="/memory", tags=["memory"])
+
+
+def _http(error: Exception) -> HTTPException:
+    code = status.HTTP_404_NOT_FOUND if isinstance(error, service.NotFoundError) else status.HTTP_409_CONFLICT
+    return HTTPException(code, str(error))
+
+
+@router.post("/{case_id}/resolve", status_code=status.HTTP_202_ACCEPTED)
+async def resolve(case_id: uuid.UUID, data: ResolveIn, user: CurrentUser, session: SessionDep) -> JobOut:
+    """Starts the SUMMARIZE job. Poll GET /cases/{id}/jobs for progress; the draft lands on the job for review."""
+    try:
+        job = await service.request_summary(session, user, case_id, data.job_id)
+    except (service.NotFoundError, service.ConflictError) as error:
+        raise _http(error) from None
+    return JobOut.model_validate(job)
+
+
+@router.get("/{case_id}/jobs")
+async def case_jobs(case_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> CaseJobsOut:
+    jobs = await service.latest_jobs(session, case_id)
+    return CaseJobsOut(
+        summarize=JobOut.model_validate(jobs["summarize"]) if jobs["summarize"] else None,
+        index=JobOut.model_validate(jobs["index"]) if jobs["index"] else None,
+    )
+
+
+@router.post("/{case_id}/commit")
+async def commit(case_id: uuid.UUID, data: CommitIn, user: CurrentUser, session: SessionDep) -> CommitOut:
+    """Commits the reviewed record: the case becomes RESOLVED (thread read-only) and an INDEX job starts."""
+    try:
+        case, job, warnings = await service.commit(session, user, case_id, data)
+    except (service.NotFoundError, service.ConflictError) as error:
+        raise _http(error) from None
+    await realtime.room_changed(realtime.thread_room(case_id), "threads")
+    for department_id in [case.department_id, *case.secondary_department_ids]:
+        await realtime.room_changed(department_id, "threads")
+    return CommitOut(
+        case_id=case.id,
+        case_code=case.case_code,
+        status=case.status,
+        index_job=JobOut.model_validate(job),
+        guard_warnings=warnings,
+    )
+
+
+@memory_router.get("/search")
+async def search_memory(
+    user: CurrentUser,
+    session: SessionDep,
+    q: Annotated[str, Query(min_length=3, max_length=2000)],
+    department_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 12,
+) -> dict:
+    """Semantic search over committed case memory (RAG retrieval). Similarity = 1 - cosine distance, in %."""
+    try:
+        return await retrieval.search(session, q, department_id, limit)
+    except llm_client.LLMError as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Embedding provider unavailable: {error}") from None

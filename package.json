@@ -9,6 +9,7 @@
     "logs": "bun scripts/docker.ts logs",
     "seed": "bun scripts/docker.ts seed",
     "seed:pdfs": "bun scripts/docker.ts seed-pdfs",
+    "reindex": "bun scripts/docker.ts reindex",
     "test": "bun scripts/docker.ts test",
     "lint": "bun scripts/docker.ts lint",
     "reset": "bun scripts/docker.ts reset",

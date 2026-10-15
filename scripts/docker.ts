@@ -1,6 +1,6 @@
 /**
  * Shared Docker Compose helpers, plus small subcommands:
- *   bun scripts/docker.ts stop | logs | seed | seed-pdfs | test [pytest args] | lint | reset [--yes]
+ *   bun scripts/docker.ts stop | logs | seed | reindex [--missing] | seed-pdfs | test [pytest args] | lint | reset [--yes]
  */
 import { randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -139,6 +139,9 @@ if (import.meta.main) {
     case "seed":
       await requireRunning("backend");
       process.exit(await execIn("backend", ["python", "-m", "app.seed"]));
+    case "reindex":
+      await requireRunning("backend");
+      process.exit(await execIn("backend", ["python", "-m", "app.reindex", ...rest]));
     case "seed-pdfs":
       await requireRunning("backend");
       process.exit(await execIn("backend", ["python", "-m", "app.seed_pdfs", ...rest]));
@@ -165,7 +168,7 @@ if (import.meta.main) {
       break;
     }
     default:
-      console.error("usage: bun scripts/docker.ts stop | logs | seed | seed-pdfs | test [args] | lint | reset [--yes]");
+      console.error("usage: bun scripts/docker.ts stop | logs | seed | reindex [--missing] | seed-pdfs | test [args] | lint | reset [--yes]");
       process.exit(1);
   }
 }

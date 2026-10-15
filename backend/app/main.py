@@ -4,12 +4,18 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.core.config import settings
 from app.core.db import engine
 from app.core.storage import ensure_bucket
 from app.health import router as health_router
 from app.modules.auth.router import router as auth_router
+from app.modules.cases.router import router as cases_router
 from app.modules.org.router import router as org_router
 from app.modules.rooms.router import router as rooms_router
+from app.modules.triage.router import memory_router
+from app.modules.triage.router import router as triage_router
+from app.modules.triage.service import sweep_once
+from app.modules.triage.worker import run_sweeper, run_worker
 from app.modules.vault.router import router as vault_router
 
 logger = logging.getLogger("uvicorn.error")
@@ -24,9 +30,14 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         # Storage outages shouldn't take the API down: /api/health reports them, and the next start retries.
         logger.warning("MinIO unavailable at startup, bucket not ensured: %s", exc)
-    # TODO(schema): once the triage job table exists, run sweep_once() here and start the worker and
-    # sweeper loops (see .claude/skills/anduin-memory-bank/references/backend-patterns.md).
+    tasks: list[asyncio.Task] = []
+    if settings.worker_enabled:
+        await sweep_once()  # recover jobs orphaned by a restart
+        tasks = [asyncio.create_task(run_worker()), asyncio.create_task(run_sweeper())]
     yield
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
     await engine.dispose()
 
 
@@ -39,6 +50,9 @@ app = FastAPI(
 )
 app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(cases_router, prefix="/api")
 app.include_router(org_router, prefix="/api")
 app.include_router(rooms_router, prefix="/api")
+app.include_router(triage_router, prefix="/api")
+app.include_router(memory_router, prefix="/api")
 app.include_router(vault_router, prefix="/api")
