@@ -27,6 +27,12 @@ const nextConfig: NextConfig = {
       { source: "/", destination: "/workbench", permanent: false },
       // The War Room merged into the Workbench.
       { source: "/war-room", destination: "/workbench", permanent: false },
+      {
+        source: "/workbench",
+        has: [{ type: "query", key: "case", value: "(?<caseId>[0-9a-f-]+)" }],
+        destination: "/workbench/cases/:caseId",
+        permanent: false,
+      },
     ];
   },
   async rewrites() {

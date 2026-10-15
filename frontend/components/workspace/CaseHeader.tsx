@@ -1,4 +1,4 @@
-import { CheckCheck, PanelLeft, PanelRight } from "lucide-react";
+import { ArrowLeft, CheckCheck, PanelLeft, PanelRight } from "lucide-react";
 import { ActionButton } from "@/components/brand/ActionButton";
 import { SeverityBadge } from "@/components/cases/SeverityBadge";
 import { PanelToggle } from "@/components/rooms/PanelToggle";
@@ -10,6 +10,7 @@ interface CaseHeaderProps {
   thread: ThreadView;
   status: SocketStatus;
   onComplete?: () => void;
+  onBack: () => void;
   leftOpen: boolean;
   onToggleLeft: () => void;
   rightOpen: boolean;
@@ -18,12 +19,14 @@ interface CaseHeaderProps {
 
 const DOT: Record<SocketStatus, string> = { live: "bg-reusable-dot", connecting: "bg-modified-dot", offline: "bg-net-new-dot" };
 
-/** `■ 02 / CASE WORKSPACE: #case-…` — what the case is, where it came from, and the way out (save to memory). */
-export function CaseHeader({ thread, status, onComplete, leftOpen, onToggleLeft, rightOpen, onToggleRight }: CaseHeaderProps) {
+export function CaseHeader({ thread, status, onComplete, onBack, leftOpen, onToggleLeft, rightOpen, onToggleRight }: CaseHeaderProps) {
   const source = SOURCE_TYPES.find((s) => s.id === thread.source_type)?.label;
   return (
     <div className="flex items-start gap-3 border-b px-4 py-3 sm:px-6">
-      <PanelToggle label={leftOpen ? "Hide intake and rooms" : "Show intake and rooms"} pressed={leftOpen} onClick={onToggleLeft}>
+      <PanelToggle label="Back to all cases" pressed={false} onClick={onBack}>
+        <ArrowLeft className="size-4" />
+      </PanelToggle>
+      <PanelToggle label={leftOpen ? "Hide case details" : "Show case details"} pressed={leftOpen} onClick={onToggleLeft}>
         <PanelLeft className="size-4" />
       </PanelToggle>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
