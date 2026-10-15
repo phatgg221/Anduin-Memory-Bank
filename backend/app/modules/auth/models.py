@@ -21,6 +21,8 @@ class User(Base):
     primary_department_id: Mapped[str | None] = mapped_column(
         ForeignKey("departments.id", ondelete="SET NULL"), index=True
     )
+    # The department view chosen in the header switcher; None = All Departments. Filters only, never access.
+    active_department_id: Mapped[str | None] = mapped_column(ForeignKey("departments.id", ondelete="SET NULL"))
     role: Mapped[str] = mapped_column(String(50), server_default=text("'MEMBER'"))
     job_title: Mapped[str | None] = mapped_column(String(120))
     avatar_initials: Mapped[str] = mapped_column(String(4))
@@ -31,7 +33,7 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    primary_department: Mapped[Department | None] = relationship(lazy="raise")
+    primary_department: Mapped[Department | None] = relationship(foreign_keys=[primary_department_id], lazy="raise")
 
 
 class RefreshToken(Base):

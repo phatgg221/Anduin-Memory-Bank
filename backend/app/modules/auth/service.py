@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.security import TokenError, create_token, decode_token, hash_password, verify_password
 from app.modules.auth.models import RefreshToken, User
 from app.modules.auth.schemas import LoginIn, RegisterIn
+from app.modules.org.models import Department
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -22,6 +23,10 @@ class AuthError(Exception):
 
 class EmailTakenError(Exception):
     """Registration with an existing email → 409."""
+
+
+class UnknownDepartmentError(Exception):
+    pass
 
 
 class RefreshRaceError(Exception):
@@ -106,6 +111,15 @@ async def logout(session: AsyncSession, raw_token: str | None) -> None:
         return
     await _revoke_family(session, stored.family_id, datetime.now(UTC))
     await session.commit()
+
+
+async def set_active_department(session: AsyncSession, user: User, department_id: str | None) -> User:
+    """Idempotent: setting the same value twice is a no-op."""
+    if department_id is not None and await session.get(Department, department_id) is None:
+        raise UnknownDepartmentError
+    user.active_department_id = department_id
+    await session.commit()
+    return user
 
 
 def _issue(session: AsyncSession, user: User, family_id: uuid.UUID) -> IssuedSession:

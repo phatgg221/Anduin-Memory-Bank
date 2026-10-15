@@ -3,6 +3,12 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  avatar_initials: string;
+  role: string;
+  job_title: string | null;
+  primary_department_id: string | null;
+  /** Department view chosen in the header switcher; null = All Departments. */
+  active_department_id: string | null;
   created_at: string;
 }
 

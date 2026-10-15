@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.core.db import SessionDep
 from app.modules.auth import service
 from app.modules.auth.deps import CurrentUser
-from app.modules.auth.schemas import AuthOut, LoginIn, RegisterIn, UserOut
+from app.modules.auth.schemas import ActiveDepartmentIn, AuthOut, LoginIn, RegisterIn, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -91,3 +91,12 @@ async def logout(session: SessionDep, refresh_token: RefreshCookie = None) -> Re
 @router.get("/me")
 async def me(user: CurrentUser) -> UserOut:
     return UserOut.model_validate(user)
+
+
+@router.put("/me/active-department")
+async def set_active_department(data: ActiveDepartmentIn, user: CurrentUser, session: SessionDep) -> UserOut:
+    try:
+        updated = await service.set_active_department(session, user, data.department_id)
+    except service.UnknownDepartmentError:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown department") from None
+    return UserOut.model_validate(updated)

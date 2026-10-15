@@ -3,14 +3,16 @@
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
 import { SessionSplash } from "@/components/auth/SessionSplash";
+import { DepartmentSwitcher } from "@/components/shell/DepartmentSwitcher";
 import { RoutedTopNav } from "@/components/shell/RoutedTopNav";
 import { TopNav, type NavItem } from "@/components/shell/TopNav";
 import { UserMenu } from "@/components/shell/UserMenu";
 import { useLogout, useSession } from "@/store/auth";
+import { useDepartments, useSetActiveDepartment } from "@/store/org";
 
 const NAV: NavItem[] = [
   { href: "/workbench", label: "Workbench" },
-  { href: "/vault", label: "Knowledge Vault", disabled: true },
+  { href: "/vault", label: "Knowledge Vault" },
   { href: "/ingest", label: "Ingest Archive", disabled: true },
 ];
 
@@ -29,13 +31,25 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const logout = useLogout();
   const user = session.data?.user;
   const signedOut = session.isSuccess && session.data === null;
+  const departments = useDepartments(Boolean(user));
+  const setDepartment = useSetActiveDepartment();
 
   useEffect(() => {
     if (signedOut) router.replace("/login");
   }, [signedOut, router]);
 
   const userMenu = user && (
-    <UserMenu name={user.name} email={user.email} onSignOut={() => logout.mutate()} isSigningOut={logout.isPending} />
+    <>
+      {departments.data && (
+        <DepartmentSwitcher
+          departments={departments.data}
+          activeId={user.active_department_id}
+          onChange={(departmentId) => setDepartment.mutate(departmentId)}
+          error={setDepartment.error?.message}
+        />
+      )}
+      <UserMenu name={user.name} email={user.email} onSignOut={() => logout.mutate()} isSigningOut={logout.isPending} />
+    </>
   );
 
   return (

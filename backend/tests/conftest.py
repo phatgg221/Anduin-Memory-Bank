@@ -59,3 +59,17 @@ def client(migrated_database):
     asyncio.run(_truncate_all())
     with TestClient(app) as test_client:  # runs the lifespan (bucket bootstrap)
         yield test_client
+
+
+async def _execute(statement: str, *args) -> None:
+    conn = await asyncpg.connect(_dsn(TEST_DB))
+    try:
+        await conn.execute(statement, *args)
+    finally:
+        await conn.close()
+
+
+@pytest.fixture
+def sql(client):
+    """Run raw SQL against the test database (after the client fixture has truncated it)."""
+    return lambda statement, *args: asyncio.run(_execute(statement, *args))

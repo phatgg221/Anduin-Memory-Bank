@@ -42,7 +42,18 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: str
     name: str
+    avatar_initials: str
+    role: str
+    job_title: str | None
+    primary_department_id: str | None
+    active_department_id: str | None
     created_at: datetime
+
+
+class ActiveDepartmentIn(BaseModel):
+    """null = All Departments."""
+
+    department_id: str | None
 
 
 class AuthOut(BaseModel):

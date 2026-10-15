@@ -42,3 +42,9 @@ export async function withApiErrors<T>(request: Promise<T>): Promise<T> {
     throw toApiRequestError(error);
   }
 }
+
+/** React Query `retry` for idempotent writes: retry network errors and 5xx only; a 4xx never succeeds on retry. */
+export function retryTransient(failureCount: number, error: unknown): boolean {
+  const { status } = toApiRequestError(error);
+  return failureCount < 2 && (status === undefined || status >= 500);
+}

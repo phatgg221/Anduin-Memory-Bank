@@ -18,12 +18,12 @@ interface TopNavProps {
 
 /** Persistent top bar: `▲ Dejavu // by Anduin   Workbench   Knowledge Vault   Ingest Archive   [actions]` */
 export function TopNav({ items, activeHref, actions }: TopNavProps) {
-  const cell = "relative flex items-center border-r px-5 text-sm";
+  const cell = "relative flex items-center border-r px-5 text-sm whitespace-nowrap";
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background">
       <div className="flex h-14 items-stretch">
-        <Link href="/" className="flex items-center border-r px-5 hover:bg-surface-2">
+        <Link href="/" className="flex items-center border-r px-5 whitespace-nowrap hover:bg-surface-2">
           <BrandMark />
         </Link>
         <nav aria-label="Primary" className="flex items-stretch">
