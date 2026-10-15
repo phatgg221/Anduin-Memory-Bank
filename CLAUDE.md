@@ -27,9 +27,11 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
   - `frontend/proxy.ts` (Next 16 Proxy) gates every page server-side, default-deny, by verifying the refresh cookie. New API routes take `user: CurrentUser`, which is the real enforcement.
   - `JWT_SECRET` must be the same for backend and frontend; compose passes it to both.
 - **Alembic owns the schema** (`backend/migrations/`). Every model change ships with a migration from `bun run db:revision`; `create_all` is never used.
-- **Domain tables (vault, triage) are intentionally undecided** because functionality is still being concluded.
-  - Do not invent those tables or columns without asking. Entity names in the docs (HistoricalCase, Person, Artifact, KnowledgeChunk, TriageJob) are working names only.
-  - As a result, the `vault`/`triage` routers are empty, the job worker and sweeper aren't wired, `seed.py` is a stub, and the workbench panes are empty.
+- **Domain schema built** (ARCHITECTURE §9.2): `departments` (module `org`), extended `users` (department, role, ALUMNI via `is_active`/`departed_at`), and in module `cases`: `case_records` (OPEN channel → RESOLVED memory), `case_artifacts`, `channel_messages`, `copilot_messages`, `knowledge_chunks` (pgvector, HNSW).
+  - Every user sees every department (no RBAC walls in the MVP); the department switcher only filters.
+  - Still undecided: the job table for ANALYZE/SUMMARIZE runs. Don't invent it without asking.
+- **Seed pack loaded by `bun run seed`:** 5 departments, 7 colleagues (2 ALUMNI) plus your account via `SEED_OPERATOR_EMAIL`, 8 resolved cases, 3 open demo channels with pre-computed `comparison_results`, 26 artifacts in MinIO. Knowledge chunks aren't embedded yet.
+- Not built yet: domain API routes, the job worker/sweeper, the intelligence pipeline, and the workbench panes.
 - `PLAN.md` is still to be written.
 - If a task needs a product decision (CONTEXT.md §7, DESIGN.md §8), ask instead of guessing.
 

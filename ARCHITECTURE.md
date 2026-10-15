@@ -35,7 +35,7 @@ Dev tools:  pgweb → postgres (:8081)   ·   Mailpit UI (:8025)   ·   MinIO co
 | `postgres` | `pgvector/pgvector:0.8.7-pg16` | **5433** → 5432 | Relational data + vector embeddings |
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | 9000 (S3 API), 9001 (console) | Case artifacts + intake uploads |
 | `mailpit` | `axllent/mailpit:v1.31.5` | 1025 (SMTP), 8025 (UI) | Captures outbound email in dev (purpose TBD — see CONTEXT §7) |
-| `pgweb` | `sosedoff/pgweb:0.17.0` | 8081 | DB browser for development |
+| `pgweb` | `sosedoff/pgweb:0.17.0` | 8081 (**127.0.0.1 only**) | DB browser for development: no auth, full read/write, so it's never exposed to the network |
 
 All host ports can be changed in `.env`. Postgres defaults to host port 5433 so it doesn't clash with a native Postgres on 5432. Inside the Docker network every service uses its standard port.
 
@@ -75,12 +75,15 @@ anduin-memory-bank/
 │   │   │                           storage.py (MinIO clients) · migrations.py (Alembic from code: reset / upgrade)
 │   │   ├── modules/
 │   │   │   ├── auth/             users, refresh tokens: models, schemas, service, router, deps (CurrentUser)
-│   │   │   ├── vault/            historical cases, artifacts, knowledge chunks, ingest, presigned links
-│   │   │   ├── triage/           intake API, job lifecycle, worker.py, sweeper.py
+│   │   │   ├── org/              departments
+│   │   │   ├── cases/            case records, channel + copilot messages, artifacts, knowledge chunks
+│   │   │   ├── vault/            memory vault API, ingest, presigned links (routes TBD)
+│   │   │   ├── triage/           (planned) job lifecycle, worker.py, sweeper.py
 │   │   │   └── intelligence/     4-step pipeline: service, retrieval, llm_client, prompts, schemas, guard
-│   │   ├── seed.py               loads the seed pack → DB + MinIO (waits on the domain schema)
+│   │   ├── seed.py               loads the seed pack → DB + MinIO (idempotent)
+│   │   ├── seed_pack.py          reads the seed pack (manifests, channel.txt parser)
 │   │   └── seed_pdfs.py          renders seed-pack legal excerpts (*.pdf.md → PDF, deterministic)
-│   ├── data/seed_pack/           fictional case memory: people.json, cases/<caseId>_<slug>/ (case.json + artifacts), incoming/ requests + expected.json
+│   ├── data/seed_pack/           departments.json, users.json, cases/<CASE-CODE>_<slug>/ (resolved), channels/<slug>/ (open demo channels)
 │   └── tests/
 ├── docker/postgres/              init SQL (CREATE EXTENSION vector)
 ├── scripts/                      Bun: setup.ts, dev.ts (--refresh-db), db.ts (migrations), docker.ts (helpers + stop/logs/seed/test/lint/reset)
@@ -256,17 +259,21 @@ There is one private bucket (`MINIO_BUCKET`, default `memory-bank`), and objects
 
 Expired and revoked token rows are not cleaned up yet. Add a periodic purge (e.g. in the sweeper) once volume matters.
 
-### 9.2 Domain tables — TBD
+### 9.2 Built: domain tables (migration `add departments, cases, and knowledge chunks`)
 
-**Not designed yet, on purpose** — the feature set is still being concluded. The working entity names below are for conversation only: **HistoricalCase, Person** (author; `ACTIVE` / `ALUMNI`), **Artifact, KnowledgeChunk** (text + embedding), and **TriageJob**.
+| Table | Module | Key columns | Notes |
+|---|---|---|---|
+| `departments` | `org` | `id` varchar PK (`CLIENT_OPERATIONS`, `LEGAL_COMPLIANCE`, `SALES_SOLUTIONS`, `CUSTOMER_SUCCESS`, `ENGINEERING_DATA`) · `code` unique · `name` · `description` · `accent_color` · `agent_system_hint` | Every user sees every department (no RBAC walls in the MVP); `agent_system_hint` scopes the agent's persona |
+| `users` (extended) | `auth` | + `primary_department_id` → departments (SET NULL) · `role` · `job_title` · `avatar_initials` · `tenure_note` · `departed_at` · `is_active` indexed | `is_active = false` = ALUMNI: can't sign in, history stays attributed. Seeded colleagues get `UNUSABLE_PASSWORD` |
+| `case_records` | `cases` | `case_code` unique (`CASE-2025-014`) · `channel_slug` unique · `department_id` · `secondary_department_ids` jsonb · `status` (`OPEN` \| `RESOLVED`, CHECK) · `created_by_user_id` · `lead_resolver_user_id` · `initial_request_brief` · `context_tags` jsonb · `comparison_results` jsonb · memory fields (`summary`, `how_it_went`, `resolution_steps`, `pitfalls`, `duration_days`, `resolved_at`) | One row for the case's whole life: OPEN channel → RESOLVED memory. CHECK ties `resolved_at` to `status`. Analysis/summarisation progress will live in a job table, not in `status` |
+| `case_artifacts` | `cases` | `case_id` (CASCADE) · `file_name` (unique per case) · `file_type` · `content_type` · `size_bytes` · `is_reusable` · `minio_object_key` unique · `preview_text` | Files in MinIO at `cases/{channel_slug}/artifacts/{file}` |
+| `channel_messages` | `cases` | `seq` identity (stable order) · `case_id` · `user_id` · `content` · `attached_artifact_id` · `is_resolution_milestone` | Human team discussion |
+| `copilot_messages` | `cases` | `seq` · `case_id` · `user_id` · `role` (`user` \| `assistant`, CHECK) · `content` · `cited_case_ids` · `cited_artifact_ids` | Citations are set by code from retrieved context, never by the LLM |
+| `knowledge_chunks` | `cases` | `case_id` · `department_id` · `artifact_id` / `message_id` (source) · `chunk_type` (CHECK) · `reference_label` · `content` · `embedding vector(EMBEDDING_DIM)` | HNSW cosine index (`m=16`, `ef_construction=64`). Not populated yet: embedding lands with the intelligence pipeline |
 
-Whatever the schema becomes, the architecture already needs it to support:
-- chunks that carry a `vector(EMBEDDING_DIM)` embedding plus a back-pointer to their case and source (for citations);
-- artifacts with a stable ID belonging to exactly one case (for the guard);
-- people with ACTIVE/ALUMNI status, reachable from the knowledge they authored (for badges);
-- a job record that answers the questions in §6.4.
-
-Schema changes go through Alembic migrations (§6.3a). The domain `Person` (case author, ACTIVE/ALUMNI) is a separate concept from the auth `users` table unless we decide to link them.
+- **JSONB shapes** (camelCase keys, as in the seed pack): `pitfalls[] = {warning, severity, reference, authorId, messageId}`; `comparison_results[] = {caseCode, caseId, similarityScore, howPastCaseWent, pitfallWarnings[], deltaItems[{category, pastApproach, currentRequirement, status, actionRecommendation, sourceArtifact, sourceArtifactId}]}`.
+- **Module dependencies:** `org` imports only `core`; `auth.models` references `org.Department`; `cases` imports `auth.models` and `org.models`. Relationships are `lazy="raise"`.
+- **Still to design:** the job table (§6.4) for ANALYZE / SUMMARIZE runs.
 
 ## 10. API Surface
 

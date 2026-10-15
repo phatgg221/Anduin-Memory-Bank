@@ -13,6 +13,8 @@ from app.core.db import Base
 
 # Import every module's models so autogenerate sees all tables. Add new modules here.
 from app.modules.auth import models as _auth_models  # noqa: F401
+from app.modules.cases import models as _cases_models  # noqa: F401
+from app.modules.org import models as _org_models  # noqa: F401
 
 if not logging.getLogger().handlers:  # CLI run (no alembic.ini): show "Running upgrade …" lines
     logging.basicConfig(level=logging.WARNING, format="%(levelname)-5.5s [%(name)s] %(message)s")

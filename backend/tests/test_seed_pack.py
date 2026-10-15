@@ -6,15 +6,120 @@ from pathlib import Path
 
 import pytest
 
-from app.seed_pdfs import SEED_PACK, render
+from app.seed_pack import (
+    DEPARTMENT_IDS,
+    FILE_TYPES,
+    SEED_PACK,
+    case_folders,
+    load_case,
+    load_departments,
+    load_users,
+    parse_timestamp,
+)
+from app.seed_pdfs import render
 
-CASES = sorted(p for p in (SEED_PACK / "cases").iterdir() if p.is_dir())
-PEOPLE = {p["handle"]: p for p in json.loads((SEED_PACK / "people.json").read_text())}
-SLACK_HEADER = re.compile(r"^\[(\d{4}-\d{2}-\d{2}) \d{2}:\d{2}\] @([a-z.]+)$")
+USERS = {u["handle"]: u for u in load_users()}
+AUTHORS = {handle for handle in USERS if handle != "operator"}
+RESOLVED = case_folders("cases")
+OPEN = case_folders("channels")
+SEVERITIES = {"HIGH", "MEDIUM", "LOW"}
+DELTA_STATUSES = {"REUSABLE", "MODIFIED", "NET_NEW"}
+CHAT_REFERENCE = re.compile(r"Chat #L(\d+)")
 
 
-def manifest(case_dir: Path) -> dict:
-    return json.loads((case_dir / "case.json").read_text())
+def folder_id(path: Path) -> str:
+    return path.name
+
+
+def test_departments_and_users():
+    assert {d["id"] for d in load_departments()} == DEPARTMENT_IDS
+    assert len(USERS) == len(load_users())
+    for handle, user in USERS.items():
+        assert user["primary_department_id"] in DEPARTMENT_IDS
+        if handle == "operator":
+            assert "email" not in user and "password_hash" not in user
+            continue
+        assert user["email"] and user["name"] and user["avatar_initials"]
+        assert user["is_active"] is (user["departed_at"] is None)
+
+
+@pytest.mark.parametrize("folder", RESOLVED + OPEN, ids=folder_id)
+def test_case_manifest(folder):
+    case = load_case(folder)
+    data = case.data
+    if case.resolved:
+        assert folder.name.startswith(f"{data['caseCode']}_")
+        for key in ("summary", "howItWent", "resolutionSteps", "pitfalls", "durationDays", "resolvedAt"):
+            assert data.get(key), key
+        created, resolved = parse_timestamp(data["createdAt"]), parse_timestamp(data["resolvedAt"])
+        assert (resolved - created).days == data["durationDays"]
+        for pitfall in data["pitfalls"]:
+            assert pitfall["author"] in AUTHORS and pitfall["severity"] in SEVERITIES
+        assert any(a["isReusable"] for a in data["artifacts"])
+        body_lines = {m.line + i for m in case.messages for i in range(len(m.body.splitlines()))}
+        for pitfall in data["pitfalls"]:
+            if (match := CHAT_REFERENCE.fullmatch(pitfall.get("reference") or "")):
+                assert int(match.group(1)) in body_lines, pitfall["reference"]
+    else:
+        assert data["status"] == "OPEN" and folder.name == data["channelSlug"]
+        assert "resolvedAt" not in data and data["comparisonResults"]
+    assert data["departmentId"] in DEPARTMENT_IDS
+    assert set(data["secondaryDepartmentIds"]) <= DEPARTMENT_IDS
+    assert data["createdBy"] in AUTHORS
+    assert data.get("leadResolver") in AUTHORS | {None}
+    for artifact in data["artifacts"]:
+        assert artifact["fileType"] in FILE_TYPES
+        assert (folder / artifact["file"]).is_file(), artifact["file"]
+        assert artifact["uploadedBy"] in AUTHORS
+        if artifact["file"].endswith(".pdf"):
+            assert (folder / artifact["source"]).is_file()
+
+
+@pytest.mark.parametrize("folder", RESOLVED + OPEN, ids=folder_id)
+def test_channel_messages(folder):
+    case = load_case(folder)
+    data = case.data
+    messages = case.messages
+    low, high = (10, 15) if case.resolved else (3, 6)
+    assert low <= len(messages) <= high
+    files = {a["file"] for a in data["artifacts"]}
+    start = parse_timestamp(data["createdAt"])
+    end = parse_timestamp(data["resolvedAt"]) if case.resolved else None
+    for previous, message in zip([None, *messages], messages, strict=False):
+        assert message.author in AUTHORS, message.author
+        assert message.body
+        departed = USERS[message.author]["departed_at"]
+        if departed:
+            assert message.at.date() <= date.fromisoformat(departed), (message.author, message.at)
+        assert message.at >= start and (end is None or message.at <= end), message.at
+        if previous:
+            assert message.at >= previous.at
+        if message.attachment:
+            assert message.attachment in files, message.attachment
+    if case.resolved:
+        assert 1 <= sum(m.milestone for m in messages) <= 3
+        attached = {m.attachment for m in messages}
+        assert {a["file"] for a in data["artifacts"] if a["isReusable"]} <= attached
+
+
+def test_codes_and_slugs_are_unique():
+    cases = [load_case(f).data for f in RESOLVED + OPEN]
+    assert len({c["caseCode"] for c in cases}) == len(cases)
+    assert len({c["channelSlug"] for c in cases}) == len(cases)
+
+
+@pytest.mark.parametrize("folder", OPEN, ids=folder_id)
+def test_comparison_results_reference_real_precedents(folder):
+    artifacts = {load_case(f).data["caseCode"]: {a["file"] for a in load_case(f).data["artifacts"]} for f in RESOLVED}
+    for match in load_case(folder).data["comparisonResults"]:
+        assert match["caseCode"] in artifacts
+        assert 0 <= match["similarityScore"] <= 100
+        for item in match["deltaItems"]:
+            assert item["status"] in DELTA_STATUSES
+            if item["status"] == "NET_NEW":
+                assert item["sourceArtifact"] is None
+            elif item["sourceArtifact"] is not None:
+                assert item["sourceArtifact"] in artifacts[match["caseCode"]], item["sourceArtifact"]
 
 
 @pytest.mark.parametrize("path", sorted(SEED_PACK.rglob("*.json")), ids=lambda p: str(p.relative_to(SEED_PACK)))
@@ -22,57 +127,23 @@ def test_json_files_parse(path):
     json.loads(path.read_text())
 
 
-@pytest.mark.parametrize("path", sorted(SEED_PACK.rglob("*.csv")), ids=lambda p: p.name)
+@pytest.mark.parametrize("path", sorted(SEED_PACK.rglob("*.csv")), ids=lambda p: str(p.relative_to(SEED_PACK)))
 def test_csv_rows_have_consistent_columns(path):
     rows = list(csv.reader(path.open()))
-    assert len({len(row) for row in rows}) == 1
+    assert len(rows) > 1 and len({len(row) for row in rows}) == 1
 
 
-@pytest.mark.parametrize("case_dir", CASES, ids=lambda p: p.name)
-def test_manifest_matches_folder(case_dir):
-    data = manifest(case_dir)
-    assert case_dir.name == f"{data['caseId']}_{data['slug']}"
-    assert data["author"] in PEOPLE
-    assert all(handle in PEOPLE for handle in data["contributors"])
-    for artifact in data["artifacts"]:
-        assert (case_dir / artifact["file"]).is_file(), artifact["file"]
-        if "source" in artifact:
-            assert (case_dir / artifact["source"]).is_file(), artifact["source"]
-    assert any(a["reusable"] for a in data["artifacts"])
-
-
-@pytest.mark.parametrize("source", sorted(SEED_PACK.rglob("*.pdf.md")), ids=lambda p: p.name)
+@pytest.mark.parametrize("source", sorted(SEED_PACK.rglob("*.pdf.md")), ids=lambda p: str(p.relative_to(SEED_PACK)))
 def test_pdfs_are_rendered_from_current_source(source, tmp_path):
     copy = tmp_path / source.name
     copy.write_text(source.read_text())
     rendered, pages = render(copy)
     assert rendered.read_bytes() == source.with_suffix("").read_bytes(), "run: bun run seed:pdfs"
-    assert 2 <= pages <= 3
-
-
-@pytest.mark.parametrize("path", sorted(SEED_PACK.rglob("slack_*.txt")), ids=lambda p: p.name)
-def test_slack_authors_exist_and_alumni_post_before_leaving(path):
-    headers = [m for line in path.read_text().splitlines() if (m := SLACK_HEADER.match(line))]
-    assert 12 <= len(headers) <= 15
-    for day, handle in (m.groups() for m in headers):
-        person = PEOPLE[handle]
-        if person["status"] == "ALUMNI":
-            assert date.fromisoformat(day) <= date.fromisoformat(person["leftOn"]), (handle, day)
+    assert 1 <= pages <= 4
 
 
 def test_demo_citation_line_42():
-    thread = SEED_PACK / "cases/AND-2025-014_sequoia-heritage-cayman-feeder-iv/slack_uat_fatca_deadlock.txt"
-    lines = thread.read_text().splitlines()
-    assert lines[40] == "[2025-04-14 23:48] @minh.nguyen"
+    folder = next(f for f in RESOLVED if f.name.startswith("CASE-2025-014_"))
+    lines = (folder / "channel.txt").read_text().splitlines()
+    assert lines[40].startswith("[2025-04-14 23:48] @minh.nguyen")
     assert lines[41].startswith("Found the UAT blocker:")
-
-
-def test_expected_outcomes_reference_real_cases_and_artifacts():
-    cases = {manifest(c)["caseId"]: {a["file"] for a in manifest(c)["artifacts"]} for c in CASES}
-    for request in json.loads((SEED_PACK / "incoming/expected.json").read_text()):
-        assert (SEED_PACK / "incoming" / request["file"]).is_file()
-        assert request["retrieval"]["mustRankFirst"] in cases
-        for row in request["expectedDelta"]:
-            assert row["status"] in {"REUSABLE", "MODIFIED", "NET_NEW"}
-            if row["sourceCase"]:
-                assert row["artifact"] in cases[row["sourceCase"]], (row["sourceCase"], row["artifact"])

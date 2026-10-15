@@ -21,7 +21,7 @@ This is an operational workbench, not a chatbot. The product is branded **Dejavu
 
 ## 0. Before writing code
 
-- **Domain tables are not decided yet.** Don't create vault/triage tables or lock in field names without asking the user. Use the working entity names (HistoricalCase, Person, Artifact, KnowledgeChunk, TriageJob). The auth tables (`users`, `refresh_tokens`) exist.
+- **Domain tables exist** (ARCHITECTURE.md §9.2): `departments`, `users` (with department/role/ALUMNI), `case_records`, `case_artifacts`, `channel_messages`, `copilot_messages`, `knowledge_chunks`. The job table is still undecided: ask before creating it or adding domain columns.
 - **Every schema change is an Alembic migration:** change `models.py` → `bun run db:revision "msg"` → review the file → `bun run db:migrate`. Never use `create_all`. Details: `references/backend-patterns.md` § Schema changes.
 - **Features are still being concluded.** If a task needs a product decision (CONTEXT.md §7), ask instead of guessing.
 - **Check `ARCHITECTURE.md` §14.** *Proposed* decisions can still change; say so when your change depends on one.

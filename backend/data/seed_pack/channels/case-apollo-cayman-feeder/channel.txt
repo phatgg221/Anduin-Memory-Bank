@@ -1,0 +1,19 @@
+# Channel export · #case-apollo-cayman-feeder
+# Case CASE-2026-047 · Apollo Crossover Feeder II — Cayman Master-Feeder Onboarding with Digital Asset Custody Annex
+# Times in ICT (UTC+7)
+
+[2026-10-12 14:10] @chloe.nguyen
+Apollo Global's intake brief for Apollo Crossover Feeder II is in. Cayman master-feeder, 60-80 investors and US$750M targeted at first close. Kickoff 19 Oct, UAT 16 Nov, first close 15 Dec.
+Scope: joint non-US signers on W-8BEN-E, sovereign side letters with an MFN bracket starting at US$15M, a 10% UBO look-through to four tiers, and a brand-new Annex D for digital-asset hardware wallet custody.
+[attached] apollo_crossover_feeder_ii_intake_brief.pdf
+
+[2026-10-12 15:02] @elena.rostova
+Legal read. The 10% look-through in 2.4 is counsel's interpretation of CIMA guidance, so we frame it as a client requirement, not law. The sovereign side letters in 2.3 look like the GIC/Temasek pattern, except the first MFN bracket drops from US$25M to US$15M.
+Both precedents were David's, and he left last November. I'd rather start from his approved clause-library text than from memory.
+
+[2026-10-13 09:30] @sarah.tran
+Engineering read. Joint-signer tax routing and the four-tier look-through both exist as schemas (Minh's cayman_fatca_v2 and David's ubo_4tier_lookthrough), so those should be parameter changes.
+Annex D has nothing behind it: per-chain address validation, signed-message proof of wallet control, multisig key holders linked to KYC records, and a chain-analytics screening upload. That needs real scoping before we quote a date.
+
+[2026-10-13 10:05] @chloe.nguyen
+The GP's first question is "have you done joint signers on a Cayman feeder, and what went wrong?" I'll answer from the Sequoia post-mortem: 9-day slip from a co-signer deadlock, fixed by giving the elections to one Designated Tax Signatory. Better they hear it from us at kickoff.

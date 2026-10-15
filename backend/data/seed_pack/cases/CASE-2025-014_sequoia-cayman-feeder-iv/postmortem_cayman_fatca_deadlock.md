@@ -2,9 +2,9 @@
 
 | Field | Value |
 |---|---|
-| **Case** | AND-2025-014 |
+| **Case** | CASE-2025-014 |
 | **Fund** | Sequoia Heritage Cayman Feeder IV, L.P. (feeder into Sequoia Heritage Master Fund IV, L.P.) |
-| **Author** | Minh Nguyen (@minh.nguyen), Senior Implementation Engineer. Contributors: @qa.linh, @pm.alex |
+| **Author** | Minh Nguyen (@minh.nguyen), Principal Operations Architect. Contributors: @sarah.tran (QA), @chloe.nguyen (client liaison) |
 | **Date** | 2025-05-07 |
 | **Status** | Final. Delivered late: UAT sign-off and initial close both slipped 9 days |
 
@@ -17,7 +17,7 @@
   - **Section 4.3(d):** entries made by any other Joint Signatory have no effect until the Designated Tax Signatory submits them.
   - **Annex B:** each other Joint Signatory only signs an acknowledgement (para 3).
 - **Our build.** A five-step FundSub flow: 1 Investor details, 2 AML/KYC (25% look-through, Section 3.2(b)), 3 Investor questionnaire, 4 Tax Certifications, 5 Review & Sign (DocuSign). Step 4 ran on schema `cayman_fatca_joint_signer` v1.4.1.
-- **Close.** The initial close targeted 31 LPs on 2025-04-23. Seven of them were non-US entities with joint authorized signers.
+- **Close.** The initial close targeted 31 LPs on 2025-04-23. Fourteen of them were non-US institutional entities with two joint authorized signers.
 
 ## Timeline
 
@@ -29,13 +29,13 @@ All times ICT (UTC+7).
 | 2025-03-21 | Final-form subscription agreement received, including Section 4.3(b), Annex B and Schedule A. |
 | 2025-04-04 | v1.4.1 code complete. Single-signer tax regression green. Joint accounts tested by one tester, one signer at a time. |
 | 2025-04-07 | UAT starts. |
-| 2025-04-14 23:02 | @qa.linh reports Step 4 stuck on "Waiting for other signers" for joint test LP Kestrel Ridge Holdings Ltd. Repro 3/3. |
+| 2025-04-14 23:02 | @sarah.tran reports Step 4 stuck on "Waiting for other signers" for joint test LP Kestrel Ridge Holdings Ltd. Repro 3/3. |
 | 2025-04-14 23:19 | Admin force-unlock gets past Step 4, but envelope generation fails with `ENVELOPE_PREFLIGHT_FAILED` (duplicate anchor `\ch4_sig\`). |
 | 2025-04-14 23:44 | Second joint test LP (Pellion Harbour Investments SA, 3 signers) shows the same failure. It only happens when a co-signer opens Part XXIX before the primary commits. |
-| 2025-04-14 23:48 | Root cause found (`slack_uat_fatca_deadlock.txt` L41–45). |
+| 2025-04-14 23:48 | Root cause found (`#case-sequoia-cayman-iv`, Chat #L42–46). |
 | 2025-04-15 00:14 | v2 patch on staging. |
 | 2025-04-15 00:31 | Both test LPs pass in both signer orders. The envelope generates with split anchors. |
-| 2025-04-15 00:40 | @pm.alex decides to tell the GP and Harbourline in the morning. Planned UAT sign-off (04-15) is missed. |
+| 2025-04-15 00:40 | @chloe.nguyen decides to tell the GP and Harbourline in the morning. Planned UAT sign-off (04-15) is missed. |
 | 2025-04-15 | 48-case regression (6 Chapter 4 statuses × 2 or 3 signers × 2 signer orders × Part XXIX open or closed). One extra defect: an Active NFFE / CRS Passive NFE pair was hard-blocked. It became a warning. |
 | 2025-04-16 | v2.0.0 finalised and deployed to the UAT environment. The 19 UAT test subscriptions created under v1 are reset. |
 | 2025-04-17 | Harbourline starts re-running its joint-signer UAT script on v2. |
@@ -71,7 +71,7 @@ We modelled "joint signatories" as N equal editors of the tax step. The subscrip
 
 ## How We Fixed It
 
-We shipped `cayman_fatca_joint_signer_v2.json` (v2.0.0, supersedes 1.4.1). It binds the tax step to the role split in the subscription agreement:
+We shipped `cayman_fatca_v2.json` (v2.0.0, supersedes 1.4.1). It binds the tax step to the role split in the subscription agreement:
 
 - **One elector.** `joint.designated_tax_signatory_index` (L21) captures the Annex B para 2 designation. That signer becomes `PRIMARY_TAX_COLLABORATOR`.
 - **Read-only co-signers.** `tax.ch4_status` is editable only by `PRIMARY_TAX_COLLABORATOR` and read-only for co-signers (L36–37). The other tax and CRS fields are restricted the same way.
@@ -85,8 +85,8 @@ We shipped `cayman_fatca_joint_signer_v2.json` (v2.0.0, supersedes 1.4.1). It bi
 ## Impact
 
 - **Schedule.** UAT sign-off moved from 2025-04-15 to 2025-04-24, and the initial close from 2025-04-23 to 2025-05-02. Both slipped 9 days. The patch took one night. Most of the slip came from Harbourline re-running its UAT, which the Cayman Easter holidays delayed.
-- **LPs affected.** 7 of the 31 initial-close LPs were non-US entities with joint authorized signers, about US$138M of commitments. None of them could have produced a DocuSign envelope on v1. We caught it in UAT, so no LP signed a v1 W-8BEN-E and nothing had to be re-papered.
-- **LPs moved but not affected.** The other 24 LPs (single-signer non-US entities and US tax-exempt W-9 investors) were not affected functionally. Their close moved because the initial close is a single event.
+- **LPs affected.** 14 of the 31 initial-close LPs were non-US institutional entities with two joint authorized signers, about US$212M of commitments. All 14 reached 98% completion and stalled at Step 4; none of them could have produced a DocuSign envelope on v1. We caught it in UAT, so no LP signed a v1 W-8BEN-E and nothing had to be re-papered.
+- **LPs moved but not affected.** The other 17 LPs (single-signer non-US entities and US tax-exempt W-9 investors) were not affected functionally. Their close moved because the initial close is a single event.
 - **Effort.** About 3 engineer-days (patch and migration), about 4 QA-days (regression matrix), and 2 extra UAT days at Harbourline. The GP asked for this written root cause as part of the sign-off pack.
 
 ## Reusable Rules for Future Funds

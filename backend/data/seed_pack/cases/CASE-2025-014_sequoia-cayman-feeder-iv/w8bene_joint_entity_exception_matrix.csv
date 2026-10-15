@@ -1,0 +1,17 @@
+scenario_id,ch4_status_line5,crs_classification,joint_signers,first_to_open_step4,part_xxix_path,expected_v2_behaviour,v1_result,administrator_review,notes
+JS-01,ACTIVE_NFFE,ACTIVE_NFE,2,PRIMARY,Hidden,Step 4 completes once co-signer attests (Annex B para 3),PASS,Accepted,Baseline joint account.
+JS-02,ACTIVE_NFFE,ACTIVE_NFE,2,CO_SIGNER,Hidden,Co-signer sees read-only line 5; completes on attestation,PASS,Accepted,Order-independent.
+JS-03,ACTIVE_NFFE,PASSIVE_NFE,2,PRIMARY,Hidden,Completes with FATCA/CRS mismatch warning (v2 rule tax.ch4_crs_mismatch),HARD_BLOCK,Accepted after admin confirmation,v1 blocked; regimes can legitimately differ.
+JS-04,ACTIVE_NFFE,PASSIVE_NFE,2,CO_SIGNER,Hidden for both signers,Co-signer draft discarded on primary commit; completes on attestation,DEADLOCK,Accepted,The Kestrel Ridge UAT-212 deadlock.
+JS-05,ACTIVE_NFFE,PASSIVE_NFE,3,CO_SIGNER,Hidden for all signers,Both co-signers re-rendered on commit; completes after 2 attestations,DEADLOCK,Accepted,The Pellion Harbour repro.
+JS-06,PASSIVE_NFFE,PASSIVE_NFE,2,PRIMARY,Line 40b (no substantial U.S. owners),Part XXIX hidden; CRS Controlling Persons required,PASS,Accepted,
+JS-07,PASSIVE_NFFE,PASSIVE_NFE,2,CO_SIGNER,Line 40c (owners listed),Part XXIX editable by primary only; co-signer read-only,DEADLOCK,Accepted,Co-signer cannot add Part XXIX rows.
+JS-08,PASSIVE_NFFE,PASSIVE_NFE,3,CO_SIGNER,Line 40c (owners listed),Part XXIX requires at least one owner row; completes after 2 attestations,DEADLOCK,Accepted,
+JS-09,PARTICIPATING_FFI,FINANCIAL_INSTITUTION,2,PRIMARY,Hidden,GIIN required (line 9a pattern check),PASS,Accepted,
+JS-10,PARTICIPATING_FFI,FINANCIAL_INSTITUTION,2,CO_SIGNER,Hidden,GIIN field read-only for co-signer,PASS,Accepted,
+JS-11,REPORTING_MODEL_1_FFI,FINANCIAL_INSTITUTION,3,CO_SIGNER,Hidden,GIIN required; completes after 2 attestations,PASS,Accepted,
+JS-12,EXEMPT_BENEFICIAL_OWNER,ACTIVE_NFE,2,CO_SIGNER,Hidden,Completes; administrator checks Part IX-XV claim manually,PASS,Returned once for missing Part XV,Sovereign-owned entities land here.
+JS-13,DIRECT_REPORTING_NFFE,PASSIVE_NFE,2,PRIMARY,Hidden,GIIN required; mismatch warning shown,HARD_BLOCK,Accepted,
+JS-14,ACTIVE_NFFE,ACTIVE_NFE,4,CO_SIGNER,Hidden,Envelope has 1 x \ch4_primary_sig\ and 3 x \cosigner_N_attest\,ENVELOPE_PREFLIGHT_FAILED,Accepted,Max joint signers (v2 parameters.maxJointSigners = 4).
+JS-15,ACTIVE_NFFE,ACTIVE_NFE,2,PRIMARY,Hidden,Annex B with no Designated Tax Signatory blocks Step 1 (validation on joint.designated_tax_signatory_index),NOT_CHECKED,n/a,Annex B para 2: exactly one designation.
+JS-16,ACTIVE_NFFE,ACTIVE_NFE,2,PRIMARY,Hidden,Annex B with two designations blocks Step 1,NOT_CHECKED,n/a,Annex B para 2.

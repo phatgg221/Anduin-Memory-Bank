@@ -1,0 +1,44 @@
+# Channel export · #case-brookfield-private-wealth
+# Case CASE-2026-003 · Brookfield Private Wealth — Retail RIA Aggregator & Delegated Advisor Scoping
+# Times in ICT (UTC+7)
+
+[2026-01-12 10:00] @ryan.miller
+Brookfield signed the SOW for their private wealth feeder: about 2,500 HNW investors, onboarded through wealth advisors. Scoped at 6 weeks on our institutional template (one investor, one signer, one form). Go-live 23 Feb, ahead of the fund's first monthly close on 1 Mar.
+
+[2026-01-20 15:30] @sarah.tran
+Discovery with Brookfield's home-office team changes the picture. About 60 advisors at 9 RIA firms, median 42 HNW accounts each. Advisors expect to prepare subscriptions in bulk for their whole book and then send them out for client signature.
+Our model makes the investor the owner and the advisor an invited collaborator on each subscription. That's 2,500 separate invitations, one at a time.
+
+[2026-01-20 15:52] @ryan.miller
+How big is the gap?
+
+[2026-01-21 11:10] @sarah.tran
+Four things we don't have: (1) an advisor role that spans many investors, with home-office oversight; (2) bulk create and prefill from the RIA's client list; (3) signing per account type: individual, JTWROS (both owners sign), IRA (investor, then custodian), revocable trust (trustee); (4) the advisor attests suitability, the client signs.
+Roughly 4 extra weeks.
+
+[2026-01-21 11:40] @chloe.nguyen
+The 23 Feb date is tied to their first close. If we slip it, Brookfield loses a month of inflows. Can we phase it?
+
+[2026-01-22 09:30] @ryan.miller
+Agreed with Brookfield: phase 1 on 23 Feb covers advisor delegation and single-account preparation for individual and joint accounts. Phase 2 on 23 Mar adds bulk intake and IRA custodian routing. Change order signed.
+Why we missed it: our scoping template asks "how many investors" but never "who fills in the forms".
+
+[2026-02-10 16:20] @sarah.tran
+Delegation model for phase 1: an advisor sees only clients linked to their active rep code; assistants act for the advisor but can't attest; the home office sees the whole firm but can't edit answers an investor has reviewed; and no advisor ever signs for a client.
+[attached] advisor_delegated_access_matrix.csv
+
+[2026-02-24 10:05] @chloe.nguyen
+Phase 1 is live. 14 advisors prepared 212 subscriptions in the first week. One escalation: an advisor who moved from Harrow Lane Wealth to Cobalt Ridge Advisors last month can still see his Harrow Lane clients.
+
+[2026-02-24 10:40] @sarah.tran
+His rep-code link wasn't end-dated on transfer. Access now derives from the current rep-code assignment, re-evaluated nightly and on every transfer event. I've added an ADVISOR_TRANSFERRED column to the matrix, and Marcus has checked the audit log: no data was viewed after the move date.
+
+[2026-03-23 18:00] @sarah.tran ★
+Phase 2 is live: bulk create from the RIA's CSV (up to 500 rows per upload, drafts only, nothing sent automatically) and IRA routing where the investor signs first and the custodian accepts after. Four weeks after the original single go-live date, as the change order said.
+
+[2026-03-26 15:00] @ryan.miller ★
+Scoping rubric for every private wealth / RIA deal from now on: discovery questions to ask before quoting, an effort multiplier on the institutional baseline, access-model defaults and the phasing pattern. On Brookfield it would have quoted about 13 weeks instead of 6.
+[attached] private_wealth_ria_scoping_rubric.pdf
+
+[2026-03-27 11:00] @chloe.nguyen
+Brookfield's March close went through with 1,140 advisor-prepared subscriptions and no access escalations since the rep-code fix. Closing the case.

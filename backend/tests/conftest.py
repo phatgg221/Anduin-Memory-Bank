@@ -11,7 +11,7 @@ import asyncpg
 import pytest
 from fastapi.testclient import TestClient
 
-_dev = urlsplit(os.environ["DATABASE_URL"])
+_dev = urlsplit(os.environ.get("DATABASE_URL", "postgresql+asyncpg://memory:memory@localhost:5433/memory_bank"))
 TEST_DB = _dev.path.lstrip("/") + "_test"
 os.environ["DATABASE_URL"] = urlunsplit(_dev._replace(path=f"/{TEST_DB}"))
 
@@ -43,7 +43,7 @@ async def _truncate_all() -> None:
         await conn.close()
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def migrated_database():
     """Fresh schema per test run, built by applying every migration (also proves they apply cleanly)."""
     from app.core.migrations import reset
@@ -53,7 +53,7 @@ def migrated_database():
 
 
 @pytest.fixture
-def client():
+def client(migrated_database):
     from app.main import app
 
     asyncio.run(_truncate_all())

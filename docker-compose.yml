@@ -50,7 +50,8 @@ services:
     environment:
       PGWEB_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
     ports:
-      - "${PGWEB_PORT:-8081}:8081"
+      # No auth and full DB access: reachable from this machine only.
+      - "127.0.0.1:${PGWEB_PORT:-8081}:8081"
     depends_on:
       postgres:
         condition: service_healthy

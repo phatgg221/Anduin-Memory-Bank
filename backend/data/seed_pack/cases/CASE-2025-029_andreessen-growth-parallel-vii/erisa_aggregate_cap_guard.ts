@@ -1,7 +1,7 @@
 /**
  * erisa_aggregate_cap_guard.ts · FundSub webhook: ERISA 25% Benefit Plan Investor (BPI) cap.
- * Case AND-2025-029 · Andreessen Growth Fund VII, L.P. (Main) + Andreessen Growth Parallel Fund VII, L.P.
- * Author: @sarah.tran · shipped 2025-07-25
+ * Case CASE-2025-029 · Andreessen Growth Fund VII, L.P. (Main) + Andreessen Growth Parallel Fund VII, L.P.
+ * Author: sarah.tran · shipped 2025-07-25
  * Sarah: 29 C.F.R. §2510.3-101(f) is tested per entity and class; Addendum Section 6.4 adds a contractual
  * AGGREGATE limit across Main + Parallel. We measure all three scopes and decide on the worst.
  */

@@ -1,0 +1,15 @@
+permission,HOME_OFFICE_ADMIN,ADVISOR,ADVISOR_ASSISTANT,INVESTOR,IRA_CUSTODIAN,GP_INVESTOR_RELATIONS,ADVISOR_TRANSFERRED,notes
+View client list,All clients of own RIA firm,Clients linked to own active rep code,Clients of the advisor they support,Own accounts only,Accounts it custodies,All,None from prior firm,Scope derives from the current rep-code assignment; re-evaluated nightly and on every transfer event.
+Create subscription for a client,No,Yes,Yes,Yes,No,No,No,
+Bulk create from RIA CSV (max 500 rows),Yes,Yes,No,No,No,No,No,Bulk creates drafts only; nothing is sent to investors automatically.
+Prefill investor questionnaire,No,Yes,Yes,Yes,No,No,No,Investor reviews every prefilled answer before signing.
+Edit investor answers after investor review,No,No,No,Yes,No,No,No,Prevents an advisor changing a reviewed answer.
+Upload KYC documents,No,Yes,Yes,Yes,No,No,No,
+Attest suitability / advisor certification,No,Yes,No,No,No,No,No,Personal attestation by the advisor of record; assistants cannot attest.
+Sign subscription on investor's behalf,No,No,No,n/a,No,No,No,Advisors never sign for clients; a power of attorney goes to GP review as an exception.
+Sign as investor,No,No,No,Yes,No,No,No,Joint (JTWROS) accounts: both owners sign.
+Sign custodian acceptance (IRA),No,No,No,No,Yes,No,No,Routed after the investor signs; custodian is record owner.
+Send for investor signature,No,Yes,Yes,No,No,No,No,
+View fund-level dashboard,Own firm totals,Own book totals,Advisor's book totals,No,No,All,No,
+Export client data,Own firm (masked TIN),Own book (masked TIN),No,Own accounts,No,All (masked TIN),No,Full TINs never exported.
+Receive status notifications,Firm digest (daily),Per subscription,Per subscription,Own subscriptions,Pending custodian actions,All,No,

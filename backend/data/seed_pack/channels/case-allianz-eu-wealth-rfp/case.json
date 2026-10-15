@@ -1,0 +1,94 @@
+{
+  "caseCode": "CASE-2026-048",
+  "channelSlug": "case-allianz-eu-wealth-rfp",
+  "title": "Allianz Global Investors — European Private Wealth Feeder Security & Scoping RFP",
+  "departmentId": "SALES_SOLUTIONS",
+  "secondaryDepartmentIds": ["LEGAL_COMPLIANCE", "ENGINEERING_DATA"],
+  "status": "OPEN",
+  "createdBy": "ryan.miller",
+  "leadResolver": null,
+  "initialRequestBrief": "Allianz Global Investors (€450k ARR) sent a 160-question security & scoping RFP for a European Private Wealth feeder platform (1,800 HNW investors managed by wealth advisors). Requires EU DORA compliance, Frankfurt data residency, and Swiss FINMA client confidentiality addendums.",
+  "contextTags": {
+    "Workflow": "Security RFP",
+    "Regulation": "EU DORA / GDPR / Swiss Banking Secrecy",
+    "Data Residency": "Frankfurt (eu-central-1)",
+    "Deal Size": "€450k ARR",
+    "Client Segment": "Private Wealth / Wealth Managers",
+    "Volume": "1,800 HNW Investors"
+  },
+  "createdAt": "2026-10-13T16:00:00+07:00",
+  "comparisonResults": [
+    {
+      "caseCode": "CASE-2025-081",
+      "similarityScore": 92,
+      "howPastCaseWent": "A 185-question EU DORA and AI sub-processor questionnaire stalled procurement for six weeks until two real residency gaps were fixed and a verified master response bank and Frankfurt architecture brief were published.",
+      "pitfallWarnings": [
+        "Re-verify every master answer before reuse; the bank's last_verified dates are October 2025.",
+        "Remote access from outside the EEA is a transfer; disclose and control it rather than deny it."
+      ],
+      "deltaItems": [
+        {
+          "category": "EU DORA & GDPR security answers",
+          "pastApproach": "Master response bank with DORA/GDPR references, evidence, owners and last-verified dates.",
+          "currentRequirement": "Allianz security tab: DORA register of information, incident timelines, exit, AI sub-processors.",
+          "status": "REUSABLE",
+          "actionRecommendation": "Reuse the master answers, re-verifying each one against the current architecture before submission.",
+          "sourceArtifact": "eu_dora_infosec_rfp_master_responses.csv"
+        },
+        {
+          "category": "Frankfurt data residency proof",
+          "pastApproach": "Architecture brief: eu-central-1 component locations, regional keys, EU-only zero-retention AI inference.",
+          "currentRequirement": "AGI-SEC-022 and AGI-SEC-048: every storage and processing location including AI inference.",
+          "status": "REUSABLE",
+          "actionRecommendation": "Send the brief after SRE re-exports the egress allow-list and confirms inference routing.",
+          "sourceArtifact": "eu_frankfurt_data_residency_architecture.pdf"
+        },
+        {
+          "category": "Swiss FINMA banking secrecy waiver addendum",
+          "pastApproach": "No precedent in the Memory Bank.",
+          "currentRequirement": "AGI-CH-131/132: client confidentiality addendum and banking secrecy waiver for Swiss-booked investors.",
+          "status": "NET_NEW",
+          "actionRecommendation": "Legal to draft with Allianz's Swiss counsel; scope which entities see client-identifying data and under whose consent.",
+          "sourceArtifact": null
+        }
+      ]
+    },
+    {
+      "caseCode": "CASE-2026-003",
+      "similarityScore": 86,
+      "howPastCaseWent": "Scoping on the institutional template underestimated delivery by four weeks because advisors needed 1-to-many delegated preparation; a phased delivery saved the first close and produced a scoping rubric and access matrix.",
+      "pitfallWarnings": [
+        "Ask who fills in the forms, not just how many investors there are, before quoting.",
+        "End-date advisor access when a relationship manager changes firm."
+      ],
+      "deltaItems": [
+        {
+          "category": "Delegated wealth advisor permissions",
+          "pastApproach": "Access matrix for about 60 US RIA advisors (2,500 investors), scoped by active rep code.",
+          "currentRequirement": "About 40 European wealth managers preparing subscriptions for 1,800 HNW investors.",
+          "status": "MODIFIED",
+          "actionRecommendation": "Start from the matrix but replace US rep codes with the wealth manager's firm and mandate (advisory or discretionary), and re-check who may attest.",
+          "sourceArtifact": "advisor_delegated_access_matrix.csv"
+        },
+        {
+          "category": "Private wealth effort estimate",
+          "pastApproach": "Rubric multiplier on the institutional baseline; Brookfield quoted 6 weeks, delivered 10.",
+          "currentRequirement": "1,800 investors, monthly closings, Swiss-booked clients.",
+          "status": "MODIFIED",
+          "actionRecommendation": "Run the rubric on Allianz's inputs before committing to a timeline in the RFP.",
+          "sourceArtifact": "private_wealth_ria_scoping_rubric.pdf"
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "allianz_rfp_questionnaire_extract.csv",
+      "source": null,
+      "fileType": "RFP_MATRIX_CSV",
+      "isReusable": false,
+      "description": "The 12 Allianz RFP questions that drive the deal, with client priority, closest master answer and draft status.",
+      "uploadedBy": "ryan.miller"
+    }
+  ]
+}

@@ -17,8 +17,8 @@ A standard Cayman feeder subscription booklet: subscriber information, accredite
 ### 2.2 Joint non-U.S. institutional signers (W-8BEN-E)
 Many non-U.S. institutional investors require two authorized signatories. Both signatories must be able to work in the same subscription, but only one of them may make the Chapter 4 FATCA and CRS elections on IRS Form W-8BEN-E (Part I, line 5), including the Part XXIX disclosure of substantial U.S. owners for Passive NFFEs. Both signatories must sign the final packet in DocuSign. The GP flagged that a previous administrator's portal "froze" when two signers edited tax sections at the same time; this must not happen.
 
-### 2.3 Affinity CRM prefill
-The GP's investor-relations team maintains LP records in Affinity. Investor legal name, entity type, domicile, contact persons, commitment amount and currency, and investor classification should prefill the subscription from Affinity, with the investor confirming every prefilled value.
+### 2.3 Sovereign wealth side letters and MFN (US$15M bracket)
+Two sovereign wealth investors are expected at the first closing. Their counsel has already indicated that neither can give the standard investor indemnity or submit to jurisdiction. The GP wants pre-agreed sovereign immunity language and an MFN in which fee terms are disclosed by commitment bracket. Unlike the GP's prior funds, the first bracket starts at **US$15 million** of aggregate commitment (previously US$25 million), with commitments of investors under common control aggregated. The GP needs the MFN compendium generated per bracket after the final closing.
 
 ### 2.4 Beneficial ownership look-through at 10% (client requirement)
 The GP's Cayman counsel has instructed that, following 2026 CIMA guidance as interpreted in counsel's memo of 30 September 2026, the Feeder must identify and verify every natural person holding, directly or indirectly, **10% or more** of an investing entity (instead of the 25% threshold used in the GP's prior funds). Ownership must be traced through intermediate entities until natural persons are reached, up to four tiers. Investors that have already started a subscription when the threshold changes must not lose their progress.
@@ -48,5 +48,5 @@ The GP is not aware of any existing template for this annex.
 
 - Have you built joint-signatory tax certification on a Cayman feeder before, and what went wrong?
 - Can the beneficial-ownership threshold be changed after launch without restarting investors' subscriptions?
-- Can the Affinity prefill be reused from other sponsors' launches?
+- Do you have pre-approved sovereign immunity language, and what changes when the MFN bracket starts at US$15M?
 - What is your estimate for the digital-asset custody annex, given it has not been done before?

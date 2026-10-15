@@ -3,10 +3,10 @@
   "schemaId": "cayman_fatca_joint_signer",
   "version": "2.0.0",
   "supersedes": "1.4.1",
-  "caseId": "AND-2025-014",
-  "author": "@minh.nguyen",
+  "caseCode": "CASE-2025-014",
+  "author": "minh.nguyen",
   "updated": "2025-04-16",
-  "_comment": "Author's note (Minh): v2 is the fix for the 2025-04-14 UAT deadlock (slack_uat_fatca_deadlock.txt). One idea: the Chapter 4 / CRS election belongs to exactly one role, PRIMARY_TAX_COLLABORATOR = the Designated Tax Signatory in Annex B (sub agreement Section 4.3(b)). Co-signers read and attest; they never elect. Reuse for any joint-signer W-8BEN-E flow by changing parameters only.",
+  "_comment": "Author's note (Minh): v2 is the fix for the 2025-04-14 UAT deadlock (#case-sequoia-cayman-iv, Chat #L42). One idea: the Chapter 4 / CRS election belongs to exactly one role, PRIMARY_TAX_COLLABORATOR = the Designated Tax Signatory in Annex B (sub agreement Section 4.3(b)). Co-signers read and attest; they never elect. Reuse for any joint-signer W-8BEN-E flow by changing parameters only.",
   "parameters": {
     "jurisdiction": "KY",
     "vehicleRole": "FEEDER",

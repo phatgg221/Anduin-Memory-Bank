@@ -40,9 +40,13 @@ class IssuedSession:
     refresh_expires_at: datetime
 
 
+def initials(name: str) -> str:
+    return "".join(word[0] for word in name.split()[:2]).upper()
+
+
 async def register(session: AsyncSession, data: RegisterIn) -> IssuedSession:
     password_hash = await asyncio.to_thread(hash_password, data.password)
-    user = User(email=data.email, name=data.name, password_hash=password_hash)
+    user = User(email=data.email, name=data.name, password_hash=password_hash, avatar_initials=initials(data.name))
     session.add(user)
     try:
         await session.flush()

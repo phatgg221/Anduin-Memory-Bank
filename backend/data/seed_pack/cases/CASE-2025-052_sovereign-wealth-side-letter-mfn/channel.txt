@@ -1,0 +1,51 @@
+# Channel export · #case-sovereign-side-letter-mfn
+# Case CASE-2025-052 · GIC & Temasek Sovereign Wealth Side Letter — Sovereign Immunity & MFN Tier Redlines
+# Times in ICT (UTC+7)
+
+[2025-08-21 09:40] @elena.rostova
+Meridian Global Infrastructure GP III has kicked off side letters for two sovereign wealth investors: Sovereign Investor A (US$80M) and Sovereign Investor B (US$35M). First close is 30 Sep. Ashcombe Lim LLP acts for both.
+Round 1 is due next week. Opening this channel so every redline lives in one place.
+
+[2025-08-25 16:20] @elena.rostova
+Round 1 is in. Ashcombe Lim struck the investor indemnity (Sub Agreement Section 6.2) and the submission to jurisdiction outright. They also want MFN visibility of every fee term granted to any LP, whatever its size.
+The GP has rejected both.
+
+[2025-08-25 17:05] @david.le
+Expected. Sovereigns usually can't give an open-ended indemnity: statutory immunity, and sometimes their own constitutive law, gets in the way. Don't fight the immunity. Reserve it, and carve the commercial obligations out of the reservation.
+Whether an FSIA exception (28 U.S.C. §1605(a)(1)-(2)) would apply is a question for a court. The GP's real protection is remedies exercised inside the partnership (default remedies, set-off against distributions), and those need no court.
+
+[2025-09-02 11:30] @elena.rostova
+Round 2 from Halvorsen Pryce (GP counsel): they simply waive 6.2 for the sovereigns in a plain side-letter clause, and leave the fee visibility question open.
+
+[2025-09-02 11:48] @david.le
+That's the trap. An untagged clause is an Electable Provision, so every LP at US$25M or more could elect "no indemnity" through the MFN. Any concession granted because of sovereign status has to be tagged as an Excluded Provision.
+I'll draft from our clause library tonight: an immunity reservation, plus set-off and a cap in place of the indemnity, both excluded.
+
+[2025-09-03 09:15] @david.le ★
+Round 3 draft is out. Section 2 is the Sovereign Immunity Reservation Clause: 2.1(a) reserves all immunities, 2.1(b) keeps the Commercial Obligations binding, and 2.1(c) preserves the GP's remedies against the Interest. Section 3 replaces the indemnity with set-off, capped at the value of the Interest.
+Both are Excluded Provisions under 6(b). Halvorsen Pryce is sending it today.
+
+[2025-09-08 14:10] @elena.rostova
+Round 3 accepted in principle by Ashcombe Lim. New ask, though: Sovereign B (US$35M) wants to see the fee terms granted to US$50M+ investors, i.e. the 15 bps step-down and 100% fee offset that A gets. The GP won't show US$50M+ terms to US$25M investors.
+
+[2025-09-08 14:32] @david.le
+Then split MFN fee disclosure into brackets. US$25M-49.99M sees the fee terms granted below US$50M; US$50M+ sees all of them, with excluded provisions marked. Aggregate commitments across vehicles controlled by the same state, or a sovereign can split its ticket across two vehicles to land in whichever bracket suits it.
+I'll build the clause-by-clause matrix so Ops can generate the compendium from it instead of from memory.
+
+[2025-09-09 18:45] @david.le
+Round 4 text plus the eligibility matrix: 22 clauses, each with its provision bracket, whether it's electable in each bracket, who sees the fee terms, and the Section 6 exclusion reason. SLC-12 and SLC-13 are the sovereign clauses: disclosed where Section 4.1 requires it, never electable.
+[attached] mfn_tier_eligibility_matrix.csv
+
+[2025-09-10 10:05] @chloe.nguyen
+Ops question for the compendium generator: it needs each LP's bracket before it runs. Where does that come from, and what happens if it's missing?
+
+[2025-09-10 10:20] @david.le
+Section 5(e): the administrator records each Eligible Investor's bracket before the compendium is generated, and no compendium goes out without one. Aggregation under 4.2 comes from the "affiliated investors" question in the subscription documents.
+So the generator should hard-fail on a missing bracket, not default to US$25M.
+
+[2025-09-12 17:30] @elena.rostova ★
+Round 4 approved by both counsel. The approved redlines are filed as the clause-library master, and Sections 2 and 3 are pre-approved for reuse with any Governmental Investor. Three weeks and four rounds, start to finish.
+[attached] sovereign_wealth_side_letter_approved_redlines.pdf
+
+[2025-09-12 17:41] @david.le
+For whoever handles the next sovereign: open with the Round 3 language, not a blank page. And never put a status-based concession in an untagged clause.

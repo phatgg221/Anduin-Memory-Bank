@@ -2,9 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Case | AND-2025-029 |
+| Case | CASE-2025-029 |
 | Fund | Andreessen Growth Fund VII, L.P. (Main) + Andreessen Growth Parallel Fund VII, L.P. (Parallel) |
-| Author | Sarah Tran (@sarah.tran), Senior Delivery Engineer |
+| Author | Sarah Tran (@sarah.tran), Senior Solutions Engineer |
 | Date | 2025-08-08 |
 | Status | Final. DELIVERED, 0 slip days (UAT sign-off 2025-07-28, initial close 2025-08-04, both on plan) |
 
@@ -14,7 +14,7 @@ Andreessen Growth Fund VII is a Delaware venture/growth program run as two limit
 
 The constraint that matters here is Section 6.4 of Addendum C ("Parallel Fund Aggregation"). The plan-asset rule in 29 C.F.R. §2510.3-101(f) is tested per entity and per class: Benefit Plan Investors (ERISA §3(42)) must hold less than 25% of each Partnership's limited partner Interests, after disregarding non-BPI interests held by the GP, the adviser and their affiliates. On top of that, both LPAs contain a **contractual covenant**: the GP manages the 25% limit on an aggregate basis across Main + Parallel, as if their LP Interests were one class. Fund counsel (Ostrander Vale LLP) confirmed the aggregate test is a GP policy written into the LPAs, not a regulatory requirement. The guard therefore applies both.
 
-Team: Sarah Tran (build), Jordan Ellis (PM, GP relationship), Linh Pham (QA), Maya Okafor (counsel and fund admin liaison).
+Team: Sarah Tran (build), Minh Nguyen (trust normalization), Chloe Nguyen (GP relationship), Marcus Vance (replay testing), Elena Rostova (counsel and fund admin liaison).
 
 ## Timeline
 
@@ -22,12 +22,14 @@ Team: Sarah Tran (build), Jordan Ellis (PM, GP relationship), Linh Pham (QA), Ma
 |---|---|
 | 2025-06-09 | Kickoff. Addendum C (form of June 2025) and the Affinity list "Growth VII – LP Pipeline" in scope. |
 | 2025-07-14 | UAT starts. Per-LP ERISA validation passes all scripted cases. |
+| 2025-07-15 | Legacy LP register import (400 rows from the GP's Excel into Affinity) fails on 37 rows: multi-trustee family trusts split across one row per trustee or with trustees jammed in one cell. |
+| 2025-07-16 | Trust normalization template ships: 400 rows become 371 investors, 29 duplicate trustee rows collapse, 8 go back to IR for confirmation. Affinity reloaded. |
 | 2025-07-21 | Dry-run baseline book loaded from Affinity and marked GP-approved (not countersigned): $357.75M eligible, $62.40M BPI, 17.44%. |
 | 2025-07-22 21:41–21:47 | Four US pension subscriptions submitted via Affinity prefill within 6 minutes. All pass validation; every review packet shows a green "Fund BPI %" between 19.69% and 21.24%. |
-| 2025-07-22 21:58 | Linh sums the book by hand: 28.40% aggregate. Thread in #deal-a16z-growth-vii (`slack_dryrun_erisa_cap.txt`). |
-| 2025-07-22 22:15 | Counsel, via Maya, confirms per-entity regulatory test plus the Section 6.4 aggregate covenant. |
-| 2025-07-25 | Fix shipped: `erisa_aggregate_cap_guard.ts` and `affinity_prefill_mapping.json` v1.1. |
-| 2025-07-26 | Linh replays the four submissions 50 times with random 0–500 ms jitter: every run ends with four HOLDs at 28.40%, no ALLOW. Duplicate webhook deliveries return the stored decision. |
+| 2025-07-22 21:58 | Marcus sums the book by hand: 28.40% aggregate. Thread in #case-a16z-growth-vii (Chat #L22). |
+| 2025-07-22 22:15 | Counsel, via Elena, confirms per-entity regulatory test plus the Section 6.4 aggregate covenant. |
+| 2025-07-25 | Fix shipped: `erisa_aggregate_cap_guard.ts` and `affinity_crm_to_fundsub_mapping.json` v1.1. |
+| 2025-07-26 | Marcus replays the four submissions 50 times with random 0–500 ms jitter: every run ends with four HOLDs at 28.40%, no ALLOW. Duplicate webhook deliveries return the stored decision. |
 | 2025-07-28 | UAT sign-off (planned = actual). |
 | 2025-07-30 | GP allocation decision under Section 6.4(d). Guard re-evaluates at 23.83%: WARN, acknowledged by the GP's CCO. |
 | 2025-08-04 | Initial close (planned = actual). Countersigned book at 23.83% aggregate, both vehicles below 25%. |
@@ -106,11 +108,17 @@ After calls with the four plans, the GP chose LP preference over order of receip
 
 Result: N = 62.40 + 15.00 + 5.00 + 10.00 = 92.40; D = 357.75 + 30.00 = 387.75; **92.40 / 387.75 = 23.83%** aggregate (Main 65.00 / 271.75 = 23.92%, Parallel 27.40 / 116.00 = 23.62%). That is under 25% in every scope but above the 22.50% soft threshold, so the guard returned WARN, which the GP's CCO acknowledged. The binding headroom after close is Parallel at $2.13M (aggregate $6.05M), which is why the Halvorsen remainder and Ironwood Ridge wait for second-closing non-BPI commitments to grow the denominator.
 
-### 3. `affinity_prefill_mapping.json` v1.1
+### 3. `affinity_crm_to_fundsub_mapping.json` v1.1
 
 Maps Affinity "Investor Type" to `erisa.bpi_class` (corporate and multiemployer pensions and 401(k)s → Title I plan; IRA/Keogh → Code §4975 plan; fund-of-funds and insurers → plan-asset entity with BPI %; public pensions → governmental plan, **not** a BPI under §3(42); church and non-US plans → not BPI). A bare "Pension" stays UNCLASSIFIED and is counted as a full BPI until Schedule A confirms. Schedule A always wins over CRM data. Tax IDs come across masked (last 4 only), and any CRM note matching an SSN/EIN pattern is dropped and alerted. Accredited and QP flags are hints only; Rule 506(c) verification still runs in FundSub (Addendum Section 3.2).
 
-## Impact
+## Legacy Trust Migration
+
+The prefill could only be as good as the Affinity records, and those came from a 400-row Excel register the GP's IR team had kept since Fund IV. 37 rows were multi-trustee family trusts. Some listed the trust once with every trustee in one cell ("J. Whitcombe & M. Whitcombe, Trustees"); others repeated the trust on one row per trustee, each carrying the full commitment, which would have double- or triple-counted those commitments in the ERISA aggregate as well.
+
+Minh Nguyen's rule from earlier Cayman work applied: the trust is the investor and the trustees are signatories. `legacy_lp_trust_migration_template.csv` normalizes one row per trust, with the legal name exactly as in the trust instrument, the instrument date, the trustee signing authority (all jointly, any one, or majority) and a dedupe key of normalized name + instrument date + TIN last 4. Rows with the same key and commitment collapse; rows with the same key and different commitments go back to IR. The rerun gave 371 investors, 29 collapsed rows and 8 confirmations.
+
+
 
 - **Caught before countersignature.** No Partnership ever held 25% or more BPI capital, and there was no plan-asset exposure. Zero slip: UAT sign-off 2025-07-28 and initial close 2025-08-04 landed as planned.
 - **LP impact:** $24.75M of pension demand moved out of the initial close ($7.50M Halvorsen scale-back, $17.25M Ironwood Ridge deferral). The GP handled both conversations with the 2025-07-30 numbers in hand.
@@ -126,3 +134,4 @@ Maps Affinity "Investor Type" to `erisa.bpi_class` (corporate and multiemployer 
 4. Classify BPIs at prefill from CRM investor types. Keep governmental, non-electing church and non-US plans out of the numerator, fail closed on unknowns, and let the LP's Schedule A override the CRM.
 5. Never prefill a full SSN or EIN from a CRM. Bring only the masked last 4 and scrub CRM notes for TIN patterns.
 6. Give the GP a soft threshold (22.50%) and the dollar headroom early, so reject/scale-back/defer decisions under Section 6.4(d) are made before closing week.
+7. Normalize legacy LP registers before they reach the CRM: one row per trust (the investor), trustees as signatories with their signing authority, and a dedupe key so a trust split across trustee rows is never counted twice.

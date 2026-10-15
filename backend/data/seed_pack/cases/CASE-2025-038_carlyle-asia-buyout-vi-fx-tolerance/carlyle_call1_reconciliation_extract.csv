@@ -1,0 +1,11 @@
+ref,limited_partner,remitting_currency,commitment_usd,call_1_due_usd,received_usd,variance_usd,variance_pct,mt103_71a_charges,v1_status,status_under_policy,cause
+CR-01,Hokuto Mutual Life Insurance Co.,JPY,40000000.00,6000000.00,5999612.40,-387.60,-0.0065,SHA,UNDERFUNDED,WITHIN_TOLERANCE,USD/JPY moved between instruction (23 Jul) and SWIFT settlement (25 Jul)
+CR-02,Sakuragawa Teachers' Pension Fund,JPY,25000000.00,3750000.00,3749781.15,-218.85,-0.0058,SHA,UNDERFUNDED,WITHIN_TOLERANCE,FX move plus one intermediary fee
+CR-03,Kansai Seaboard Bank Ltd,JPY,15000000.00,2250000.00,2249846.30,-153.70,-0.0068,OUR,UNDERFUNDED,WITHIN_TOLERANCE,FX move only
+CR-04,Rheinwerk Versorgungskasse VVaG,EUR,30000000.00,4500000.00,4499702.55,-297.45,-0.0066,SHA,UNDERFUNDED,WITHIN_TOLERANCE,EUR/USD moved between instruction and settlement
+CR-05,Societe Lumiere Prevoyance,EUR,20000000.00,3000000.00,3000212.80,212.80,0.0071,OUR,OVERFUNDED,WITHIN_TOLERANCE,FX move in the LP's favour; credited to next call
+CR-06,Van Arkel Pensioenfonds,EUR,35000000.00,5250000.00,5249641.10,-358.90,-0.0068,SHA,UNDERFUNDED,WITHIN_TOLERANCE,FX move plus correspondent lifting fee
+CR-07,Taipei Harbour Insurance Co.,USD,10000000.00,1500000.00,1499955.00,-45.00,-0.0030,SHA,UNDERFUNDED,WITHIN_TOLERANCE,Intermediary bank lifting fee only
+CR-08,Mirae Ocean Holdings Ltd,JPY,13333333.33,2000000.00,1940000.00,-60000.00,-3.0000,OUR,UNDERFUNDED,OUTSIDE_TOLERANCE,Genuine shortfall: LP instructed the wrong amount; standard LPA Section 3.4 notice
+CR-09,Osaka Bay Endowment Foundation,JPY,8000000.00,1200000.00,1199903.65,-96.35,-0.0080,SHA,UNDERFUNDED,WITHIN_TOLERANCE,FX move only
+CR-10,Fondazione Ca' Rezzonico,EUR,12000000.00,1800000.00,1799868.20,-131.80,-0.0073,SHA,UNDERFUNDED,WITHIN_TOLERANCE,FX move plus intermediary fee

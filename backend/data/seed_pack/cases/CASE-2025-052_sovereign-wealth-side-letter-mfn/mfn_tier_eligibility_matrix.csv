@@ -1,0 +1,23 @@
+clause_id,clause_title,category,provision_bracket,electable_25m_bracket,electable_50m_plus_bracket,fee_terms_disclosed_to,excluded_reason,notes
+SLC-01,Enhanced quarterly reporting with asset-level operating KPIs,Reporting,$25M,yes,yes,n/a,,Delivered via the data room within 60 days of quarter-end.
+SLC-02,ILPA fee and expense reporting template,Reporting,$25M,yes,yes,n/a,,Quarterly; reconciles to the fee terms in SLC-06 and SLC-09.
+SLC-03,"Disclosure of fund information to the LP's regulators, auditors and supervising ministry",Confidentiality,$25M,yes,yes,n/a,,Generic carve-out; distinct from public-records disclosure (SLC-15).
+SLC-04,Transfer to Affiliates without General Partner consent,Transfer,$25M,yes,yes,n/a,,Transferee must belong to the same aggregated group (Section 4.2).
+SLC-05,Annual ESG and climate-risk questionnaire response,Reporting,$25M,yes,yes,n/a,,One questionnaire per LP per fiscal year.
+SLC-06,Management Fee step-down to 1.40% (10 bps),Economics,$25M,yes,yes,$25M and $50M+ brackets,,Granted in the US$25M bracket; standard rate 1.50%.
+SLC-07,Key person event notice within 5 business days,Governance,$50M+,no,yes,n/a,,Standard LPA notice period is 10 business days.
+SLC-08,Excuse right for investments contrary to a written investment policy,Excuse,$50M+,no,yes,n/a,,"Conditional: the electing LP must deliver its own written policy of equivalent scope (Section 5(c))."
+SLC-09,Management Fee step-down to 1.35% (15 bps),Economics,$50M+,no,yes,$50M+ bracket only,,Not shown in the US$25M bracket Compendium (Section 4.1).
+SLC-10,Fee offset of 100% of transaction and monitoring fees (standard 80%),Economics,$50M+,no,yes,$50M+ bracket only,,Granted in the US$50M+ bracket.
+SLC-11,Successor fund capacity reservation,Economics,$50M+,no,yes,n/a,,Capped at the electing LP's own Commitment to this fund.
+SLC-12,Sovereign Immunity Reservation Clause,Legal,n/a,no,no,n/a,Section 6(b) - sovereign status,Section 2.1 text; offered to later Governmental Investors only by direct negotiation (Section 6 note).
+SLC-13,Indemnification carve-out (set-off and cap in lieu of investor indemnity),Legal,n/a,no,no,n/a,Section 6(b) - sovereign status,Section 3 text; disapplies Subscription Agreement Section 6.2 for the granting LP only.
+SLC-14,Section 892 information covenant,Tax,n/a,no,no,n/a,Section 6(a) - tax status,GP reports Partnership activities that could be commercial activities for Section 892 purposes.
+SLC-15,Public records / freedom of information disclosure carve-out,Confidentiality,n/a,no,no,n/a,Section 6(a) - public-records status,Governmental plans subject to public-records laws.
+SLC-16,ERISA plan-asset covenants and withdrawal right,Regulatory,n/a,no,no,n/a,Section 6(a) - ERISA status,Benefit-plan investor specific.
+SLC-17,Placement agent and pay-to-play representations,Regulatory,n/a,no,no,n/a,Section 6(a) - regulatory status,State and municipal pension plan specific.
+SLC-18,First Closing Management Fee discount (10 bps for 24 months),Economics,n/a,no,no,$50M+ bracket only,Section 6(c) - First Closing fee terms,Disclosed to the US$50M+ bracket as an Excluded Provision; never electable.
+SLC-19,Advisory Committee seat or observer right,Governance,n/a,no,no,n/a,Section 6(d) - Advisory Committee,Appointed by the General Partner.
+SLC-20,Co-investment allocation rights (no fee / no carry),Co-investment,n/a,no,no,n/a,Section 6(e) - co-investment,Allocated deal by deal under the co-investment policy.
+SLC-21,Management Fee waiver for GP affiliates and employees,Economics,n/a,no,no,$50M+ bracket only,Section 6(f) - GP-affiliate terms,Employee and affiliate interests only.
+SLC-22,Arbitration seat and governing law for side-letter disputes,Legal,n/a,no,no,n/a,Section 6(g) - governing law and forum,Partnership Agreement governing law is unchanged.

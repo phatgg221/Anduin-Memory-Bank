@@ -14,6 +14,8 @@ _hasher = PasswordHash.recommended()  # Argon2id
 # Verified against when the email doesn't exist, so a failed login costs the same either way (no user enumeration
 # through response timing).
 _DUMMY_HASH = _hasher.hash("dejavu-timing-equaliser")
+# Stored for accounts that must never sign in with a password (seeded colleagues). Not a valid Argon2 hash.
+UNUSABLE_PASSWORD = "!"
 
 
 class TokenError(Exception):
@@ -27,7 +29,7 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, password_hash: str | None) -> bool:
     """CPU-bound (~tens of ms): call via asyncio.to_thread. Pass None for an unknown user."""
-    if password_hash is None:
+    if password_hash is None or password_hash == UNUSABLE_PASSWORD:
         _hasher.verify(password, _DUMMY_HASH)
         return False
     return _hasher.verify(password, password_hash)

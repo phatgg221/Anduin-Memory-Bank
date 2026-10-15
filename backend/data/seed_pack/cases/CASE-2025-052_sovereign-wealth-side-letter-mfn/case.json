@@ -1,0 +1,74 @@
+{
+  "caseCode": "CASE-2025-052",
+  "channelSlug": "case-sovereign-side-letter-mfn",
+  "title": "GIC & Temasek Sovereign Wealth Side Letter — Sovereign Immunity & MFN Tier Redlines",
+  "departmentId": "LEGAL_COMPLIANCE",
+  "secondaryDepartmentIds": ["CLIENT_OPERATIONS"],
+  "status": "RESOLVED",
+  "createdBy": "elena.rostova",
+  "leadResolver": "david.le",
+  "initialRequestBrief": "Meridian Global Infrastructure GP III is negotiating side letters with two sovereign wealth fund investors ahead of the 30 September 2025 first close: Sovereign Investor A (US$80M) and Sovereign Investor B (US$35M), both represented by Ashcombe Lim LLP. Investor counsel has signalled that neither can accept the standard investor indemnity in Subscription Agreement Section 6.2 or a submission to jurisdiction, and both want visibility of fee terms granted to other LPs under the MFN. The GP needs compromise language that protects the partnership without making status-based concessions electable by every LP, and an MFN compendium Ops can generate after the final close.",
+  "contextTags": {
+    "Document": "Side Letter",
+    "Investor Type": "Sovereign Wealth Fund",
+    "Clauses": "Sovereign Immunity / MFN",
+    "Threshold": "$25M Tier",
+    "Counterparty": "External Counsel"
+  },
+  "summary": "Two sovereign wealth LPs rejected the standard investor indemnity on statutory-immunity grounds and demanded global MFN fee visibility. Four redline rounds over three weeks produced a pre-approved Sovereign Immunity Reservation Clause, a set-off-and-cap replacement for the indemnity, and MFN fee disclosure split into US$25M and US$50M+ brackets.",
+  "howItWent": "Round 1 from investor counsel struck the indemnity and the submission to jurisdiction and asked to see every fee term granted to any LP; the GP rejected both. Round 2 from GP counsel waived the indemnity in an untagged clause, which would have let every LP above US$25M elect it through the MFN, so it was withdrawn. David Le drafted Round 3 from Anduin's clause library: an immunity reservation that keeps the commercial obligations binding and preserves remedies against the Interest, plus set-off capped at the value of the Interest, both tagged as Excluded Provisions. Investor counsel accepted that in principle, but Sovereign Investor B then asked to see the US$50M+ fee terms. Round 4 split MFN fee disclosure into commitment brackets with affiliate aggregation, and both counsel approved it on 12 September 2025, three weeks after kickoff.",
+  "resolutionSteps": [
+    "Adopt the pre-approved Sovereign Immunity Reservation Clause: reserve all immunities while acknowledging that capital contributions, distribution clawbacks and set-off amounts remain binding commercial obligations, and preserve the GP's remedies against the Interest.",
+    "Replace the investor indemnity with a set-off right capped at the value of the investor's Interest and recovered only from that Interest.",
+    "Tag every status-based sovereign concession as an Excluded Provision so it is disclosed but never electable under the MFN.",
+    "Structure MFN fee disclosure into commitment brackets (US$25M-49.99M and US$50M+), aggregating commitments of vehicles controlled by the same state.",
+    "Generate the MFN compendium from the clause-by-clause eligibility matrix, and hard-fail when an LP has no recorded bracket."
+  ],
+  "pitfalls": [
+    {
+      "warning": "An untagged side-letter clause is an Electable Provision: waiving the indemnity for a sovereign in a plain clause lets every LP at the MFN threshold elect it.",
+      "author": "david.le",
+      "severity": "HIGH",
+      "reference": "Chat #L21"
+    },
+    {
+      "warning": "Don't negotiate the immunity itself. Reserve it, carve out the commercial obligations, and rely on remedies exercised inside the partnership, which need no court.",
+      "author": "david.le",
+      "severity": "MEDIUM",
+      "reference": "sovereign_wealth_side_letter_approved_redlines.pdf §2"
+    },
+    {
+      "warning": "Without affiliate aggregation a sovereign can split its commitment across two vehicles to pick its MFN bracket.",
+      "author": "david.le",
+      "severity": "MEDIUM",
+      "reference": "Chat #L33"
+    },
+    {
+      "warning": "The compendium generator must never default a missing bracket to US$25M; the administrator records each bracket first (Section 5(e)).",
+      "author": "chloe.nguyen",
+      "severity": "LOW",
+      "reference": "Chat #L44"
+    }
+  ],
+  "durationDays": 22,
+  "createdAt": "2025-08-21T09:00:00+07:00",
+  "resolvedAt": "2025-09-12T18:00:00+07:00",
+  "artifacts": [
+    {
+      "file": "sovereign_wealth_side_letter_approved_redlines.pdf",
+      "source": "sovereign_wealth_side_letter_approved_redlines.pdf.md",
+      "fileType": "LEGAL_REDLINE",
+      "isReusable": true,
+      "description": "Clause-library master: redline history, the Sovereign Immunity Reservation Clause, the indemnification carve-out, MFN fee disclosure brackets, election procedure and excluded provisions.",
+      "uploadedBy": "elena.rostova"
+    },
+    {
+      "file": "mfn_tier_eligibility_matrix.csv",
+      "source": null,
+      "fileType": "MATRIX_CSV",
+      "isReusable": true,
+      "description": "22 side-letter clauses with provision bracket, electability in the US$25M and US$50M+ brackets, fee-term visibility and Section 6 exclusion reason.",
+      "uploadedBy": "david.le"
+    }
+  ]
+}

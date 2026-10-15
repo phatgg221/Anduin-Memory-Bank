@@ -1,0 +1,13 @@
+question_id,section,question,client_priority,closest_master_answer,draft_status
+AGI-SEC-014,ICT third-party risk,Provide the information required for our DORA register of information.,HIGH,DORA-09,Reuse after re-verification
+AGI-SEC-022,Data location,List every location where investor personal data is stored or processed including backups and AI inference.,BLOCKER,DORA-31,Reuse after re-verification
+AGI-SEC-031,Incident management,State your ICT incident notification timelines to us.,HIGH,DORA-22,Reuse after re-verification
+AGI-SEC-047,AI sub-processors,Confirm that no investor data is used to train AI models and that AI providers retain no data.,BLOCKER,AI-12,Reuse after re-verification
+AGI-SEC-048,AI sub-processors,Confirm that AI inference for EU investors happens only in the EU.,BLOCKER,AI-07,Reuse after re-verification
+AGI-SEC-063,International transfers,Can staff outside the EEA or Switzerland access investor personal data?,HIGH,GDPR-19,Modify: add Switzerland (revFADP) to the transfer analysis
+AGI-SEC-071,Exit,Describe data return and deletion on termination.,MEDIUM,DORA-17,Reuse after re-verification
+AGI-SCO-104,Wealth advisor access,How do wealth managers prepare subscriptions for multiple clients and what can they see?,HIGH,advisor_delegated_access_matrix.csv,Modify: European wealth managers rather than US RIAs
+AGI-SCO-106,Wealth advisor access,How is access removed when a relationship manager changes firm?,MEDIUM,advisor_delegated_access_matrix.csv,Reuse
+AGI-SCO-112,Volume,Confirm support for 1800 HNW investors across about 40 wealth managers with monthly closings.,HIGH,private_wealth_ria_scoping_rubric.pdf,Modify: run the rubric on the new inputs
+AGI-CH-131,Swiss confidentiality,Provide the client confidentiality addendum for Swiss-booked investors including the banking secrecy waiver your platform requires.,BLOCKER,none,Net new
+AGI-CH-132,Swiss confidentiality,Which entities will see client-identifying data of Swiss-booked investors and under what consent?,BLOCKER,none,Net new

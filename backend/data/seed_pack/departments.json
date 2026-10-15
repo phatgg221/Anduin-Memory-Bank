@@ -1,0 +1,42 @@
+[
+  {
+    "id": "CLIENT_OPERATIONS",
+    "code": "OPS",
+    "name": "Client Operations & Onboarding",
+    "description": "Runs LP subscription workflows, tax-form validation, capital-call notices, and fund onboarding SOPs.",
+    "accent_color": "#0F2547",
+    "agent_system_hint": "Focus on LP subscription workflows, W-8/W-9 tax validation, capital call wire notices, and onboarding SOPs."
+  },
+  {
+    "id": "LEGAL_COMPLIANCE",
+    "code": "LEGAL",
+    "name": "Legal & Compliance",
+    "description": "Owns side letters, AML/KYC policy, counsel redlines, and regulatory interpretations.",
+    "accent_color": "#065F46",
+    "agent_system_hint": "Focus on LP Side Letters, Sovereign Immunity carve-outs, MFN tiers, AML/KYC beneficial ownership thresholds, and counsel redlines."
+  },
+  {
+    "id": "SALES_SOLUTIONS",
+    "code": "SALES",
+    "name": "Sales & Solutions Architecture",
+    "description": "Answers enterprise RFPs and security questionnaires, and scopes new client deployments.",
+    "accent_color": "#2998FF",
+    "agent_system_hint": "Focus on Enterprise InfoSec RFPs (SOC2, EU DORA, GDPR), data residency proofs, and deal scoping calculators."
+  },
+  {
+    "id": "CUSTOMER_SUCCESS",
+    "code": "CS",
+    "name": "Customer Success & Escalations",
+    "description": "Handles GP/LP escalations, tax-season distributions, deliverability, and access issues.",
+    "accent_color": "#92400E",
+    "agent_system_hint": "Focus on K-1 tax distribution runbooks, institutional bank email whitelisting, MFA lockouts, and GP/LP escalations."
+  },
+  {
+    "id": "ENGINEERING_DATA",
+    "code": "ENG",
+    "name": "Engineering & Data Integrations",
+    "description": "Builds data migrations, CRM integrations, webhooks, and conditional form schemas.",
+    "accent_color": "#525866",
+    "agent_system_hint": "Focus on legacy portfolio data migrations, CRM field mappings (Affinity/DealCloud), ERISA cap webhooks, and conditional form schemas."
+  }
+]

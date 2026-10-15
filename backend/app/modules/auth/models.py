@@ -1,10 +1,11 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid, func, text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Uuid, func, text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
+from app.modules.org.models import Department
 
 
 class User(Base):
@@ -14,12 +15,23 @@ class User(Base):
     # Stored lowercased (normalised in schemas.py), so the unique constraint is effectively case-insensitive.
     email: Mapped[str] = mapped_column(String(320), unique=True)
     name: Mapped[str] = mapped_column(String(100))
-    password_hash: Mapped[str] = mapped_column(String(255))  # Argon2id
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    password_hash: Mapped[str] = mapped_column(String(255))  # Argon2id, or UNUSABLE_PASSWORD
+    # False = left the company (ALUMNI): can't sign in, but their case history stays attributed to them.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), index=True)
+    primary_department_id: Mapped[str | None] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(50), server_default=text("'MEMBER'"))
+    job_title: Mapped[str | None] = mapped_column(String(120))
+    avatar_initials: Mapped[str] = mapped_column(String(4))
+    tenure_note: Mapped[str | None] = mapped_column(String(200))
+    departed_at: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    primary_department: Mapped[Department | None] = relationship(lazy="raise")
 
 
 class RefreshToken(Base):

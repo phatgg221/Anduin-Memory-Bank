@@ -8,7 +8,6 @@ from app.core.db import engine
 from app.core.storage import ensure_bucket
 from app.health import router as health_router
 from app.modules.auth.router import router as auth_router
-from app.modules.triage.router import router as triage_router
 from app.modules.vault.router import router as vault_router
 
 logger = logging.getLogger("uvicorn.error")
@@ -39,4 +38,3 @@ app = FastAPI(
 app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(vault_router, prefix="/api")
-app.include_router(triage_router, prefix="/api")

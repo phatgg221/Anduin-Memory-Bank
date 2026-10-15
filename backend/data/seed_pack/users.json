@@ -1,0 +1,94 @@
+[
+  {
+    "handle": "operator",
+    "matchEmailEnv": "SEED_OPERATOR_EMAIL",
+    "primary_department_id": "CLIENT_OPERATIONS",
+    "role": "OPERATIONS_DIRECTOR",
+    "job_title": "Operations Director",
+    "note": "Your own registered account. Never created or given a password by the seed: the loader only updates department/role/title on the existing user whose email is in SEED_OPERATOR_EMAIL."
+  },
+  {
+    "handle": "chloe.nguyen",
+    "name": "Chloe Nguyen",
+    "email": "chloe.nguyen@anduin.tech",
+    "primary_department_id": "CUSTOMER_SUCCESS",
+    "role": "CUSTOMER_SUCCESS_LEAD",
+    "job_title": "Customer Success Lead",
+    "avatar_initials": "CN",
+    "is_active": true,
+    "departed_at": null,
+    "tenure_note": null
+  },
+  {
+    "handle": "elena.rostova",
+    "name": "Elena Rostova",
+    "email": "elena.rostova@anduin.tech",
+    "primary_department_id": "LEGAL_COMPLIANCE",
+    "role": "LEGAL_COUNSEL",
+    "job_title": "Legal Counsel",
+    "avatar_initials": "ER",
+    "is_active": true,
+    "departed_at": null,
+    "tenure_note": null
+  },
+  {
+    "handle": "ryan.miller",
+    "name": "Ryan Miller",
+    "email": "ryan.miller@anduin.tech",
+    "primary_department_id": "SALES_SOLUTIONS",
+    "role": "SOLUTIONS_ARCHITECT",
+    "job_title": "Solutions Architect",
+    "avatar_initials": "RM",
+    "is_active": true,
+    "departed_at": null,
+    "tenure_note": null
+  },
+  {
+    "handle": "sarah.tran",
+    "name": "Sarah Tran",
+    "email": "sarah.tran@anduin.tech",
+    "primary_department_id": "ENGINEERING_DATA",
+    "role": "SOLUTIONS_ENGINEER",
+    "job_title": "Senior Solutions Engineer",
+    "avatar_initials": "ST",
+    "is_active": true,
+    "departed_at": null,
+    "tenure_note": null
+  },
+  {
+    "handle": "marcus.vance",
+    "name": "Marcus Vance",
+    "email": "marcus.vance@anduin.tech",
+    "primary_department_id": "ENGINEERING_DATA",
+    "role": "SRE_ENGINEER",
+    "job_title": "Site Reliability Engineer",
+    "avatar_initials": "MV",
+    "is_active": true,
+    "departed_at": null,
+    "tenure_note": null
+  },
+  {
+    "handle": "minh.nguyen",
+    "name": "Minh Nguyen",
+    "email": "minh.nguyen@anduin.tech",
+    "primary_department_id": "CLIENT_OPERATIONS",
+    "role": "PRINCIPAL_OPS_ARCHITECT",
+    "job_title": "Principal Operations Architect",
+    "avatar_initials": "MN",
+    "is_active": false,
+    "departed_at": "2026-02-13",
+    "tenure_note": "Former lead on Cayman onboarding, W-8BEN-E joint signers, and multi-currency capital-call wires."
+  },
+  {
+    "handle": "david.le",
+    "name": "David Le",
+    "email": "david.le@anduin.tech",
+    "primary_department_id": "LEGAL_COMPLIANCE",
+    "role": "COMPLIANCE_SOLUTIONS_LEAD",
+    "job_title": "Compliance Solutions Lead",
+    "avatar_initials": "DL",
+    "is_active": false,
+    "departed_at": "2025-11-07",
+    "tenure_note": "Authored the sovereign side-letter redlines, the Luxembourg 10% AML look-through, and the EU DORA RFP master responses."
+  }
+]
