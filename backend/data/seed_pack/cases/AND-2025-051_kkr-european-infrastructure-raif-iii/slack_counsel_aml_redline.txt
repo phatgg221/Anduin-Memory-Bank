@@ -1,0 +1,64 @@
+# Slack export · #deal-kkr-euro-infra-iii
+# Exported 2025-10-02 by @pm.alex · times in ICT (UTC+7)
+# Case AND-2025-051 · KKR European Infrastructure RAIF III
+
+[2025-09-29 13:52] @cs.maya
+Heads-up, terrible timing. Clausen Pfaffenthal (Lux counsel) just sent Revision 2 of the AML/KYC pack, timestamped 08:40 Lux time (13:40 ours). New Section 5.2(c): for High-Risk Exposure investors (domiciled in a listed jurisdiction, or funding through an account there, Section 3.2(a)/(b)) the UBO threshold drops from "more than 25%" to "10% or more", and Section 5.3(b) wants recursive look-through up to 4 tiers.
+Northlake compliance says it applies to the initial close. Go-live is Wed 01 Oct 09:00 Lux = 14:00 ICT. That is 48 hours.
+
+[2025-09-29 13:55] @pm.alex
+UAT was signed off Friday (26 Sep). We have 31 investor drafts in progress and 12 subscriptions already signed, and the sponsor will not move the close date.
+Are we really telling 31 investors to start their KYC section over?
+
+[2025-09-29 14:01] @qa.linh
+Looked at v1 (lux_aml_ubo_static_table 1.4.0). This is not a number change. The table has 3 rows because only three holders can each exceed 25%; at 10% you can have ten per entity. There is also exactly one look-through row per entity, so a 4-tier chain does not fit at all.
+And 25 is hard-coded in the validation expression, not read from anywhere.
+
+[2025-09-29 14:09] @david.le
+Nobody starts over. We do not edit the 25 in place. New schema lux_aml_ubo_repeater_schema.json v2.0.0 replaces the table with a recursive repeater (L28); an entity's children only open when it meets the threshold and sits at Tier 1-3 (L45).
+The threshold becomes ubo_threshold_pct (L11), default 25, resolved per investor by rule ubo.resolve_threshold (L56): if investor.high_risk_exposure (L22) is true it takes high_risk_threshold_pct = 10 (L13). Depth is max_depth = 4 (L14).
+
+[2025-09-29 14:15] @david.le
+How we change ubo_threshold_pct without breaking anyone's draft:
+1. Drafts are pinned to the schema version they started on, so publishing v2 does not touch them by itself.
+2. migrate.v1_to_v2 (L68) maps every v1 row into the repeater at its tier, keeps every value already entered, then re-runs ubo.resolve_threshold.
+3. Only drafts that gain new required rows go to NEEDS_INFO, and the email lists just those rows. Everyone else stays exactly as they were.
+4. Signed subscriptions are out of scope for the migration.
+If we flipped 25 to 10 in place, every half-filled high-risk draft would fail validation on its next save with no explanation. That is the restart we are avoiding.
+
+[2025-09-29 14:21] @cs.maya
+Checked with counsel: Section 7.2(a) was written for exactly this. In-progress investors keep what they entered and are asked only for the extra Section 5.2(c)/5.3 information. Under Section 7.2(b) signed subscriptions stay valid, and Northlake compliance will check the 12 signed ones themselves.
+One nuance from counsel: the new test is "10% or more", the standard one is "more than 25%".
+
+[2025-09-29 14:26] @david.le
+Good catch. That is why ubo_threshold_inclusive (L12) flips together with the number in ubo.resolve_threshold, and meets_threshold (L43) reads both. Exactly 10.00% is disclosable; exactly 25.00% is not under the standard rule.
+Effective % is multiplied down the chain (Section 5.3(c)), so a 40% holder of an entity at 26.10% sits at 10.44% and is in. Annex C Part 2 has that exact case.
+
+[2025-09-29 14:40] @qa.linh
+QA plan for tomorrow:
+1. Run the migration on a staging copy of all 31 drafts: only High-Risk Exposure drafts may change, everything else byte-identical.
+2. Boundaries: 9.99 / 10.00 / 10.01 for high-risk, 25.00 / 25.01 for standard.
+3. Annex C Part 2 worked example end-to-end: 4 tiers, Osei-Brandt (10.44%, PEP) must be disclosed and route the investor to the enhanced tier.
+4. Holdings over 100% for one entity are blocked (L48); a Tier 4 entity over threshold escalates per Section 5.3(d) instead of opening a Tier 5 (L49, L62).
+5. Changing the remitting account to a listed country mid-draft flips high_risk_exposure.
+
+[2025-09-29 16:05] @pm.alex
+Sponsor and Northlake agree the close date holds if v2 passes a walk-through with Northlake compliance and counsel on Tue 30 Sep 16:00 Lux (21:00 ICT). Go/no-go right after it.
+Fallback if no-go: high-risk investors move to the subsequent closing, everyone else closes on time.
+
+[2025-09-30 10:12] @david.le
+Dry run on the staging copy: 31 drafts migrated, 0 entered values lost, 24 unchanged, 7 moved to NEEDS_INFO. Of the 7, 5 are domiciled in a listed jurisdiction (3.2(a)) and 2 fund through a listed account (3.2(b)). Between them they need 19 additional owner rows; the deepest chain is 4 tiers.
+
+[2025-09-30 18:30] @qa.linh
+38/38 cases green on the second run. The first run found one migration bug: v1 look-through rows typed NATURAL_PERSON but holding an entity name were migrated as natural persons and closed the chain early. David changed migrate.v1_to_v2 to flag those for re-confirmation instead of guessing (note at L71). 2 of the 7 drafts had one.
+Boundaries and the Annex C Part 2 example behave as expected.
+
+[2025-09-30 21:40] @pm.alex
+Walk-through done with Northlake compliance and counsel. Go/no-go: GO for tonight's deploy. Initial close stays 01 Oct 09:00 Lux.
+
+[2025-09-30 22:47] @david.le
+Shipped. lux_aml_ubo_repeater_schema.json v2.0.0 is live and migrate.v1_to_v2 has run on the 31 drafts with the same result as staging: 7 NEEDS_INFO, 24 unchanged. The 7 investors got the "additional beneficial owners required" email listing only their missing owners.
+The threshold change is recorded in the audit entry at L17 (who, approver, reason). For whoever gets the next Lux fund: change parameters, never the expression at L43.
+
+[2025-10-01 14:20] @cs.maya
+Initial close held at 09:00 Lux. 6 of the 7 re-prompted investors completed before the cut-off. The 7th has a Tier 4 holding company that still meets the threshold, so it went to Northlake compliance under Section 5.3(d) and moves to the subsequent closing. Northlake also confirmed that none of the 12 signed subscriptions is High-Risk Exposure.

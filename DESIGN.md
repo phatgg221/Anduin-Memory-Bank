@@ -94,21 +94,21 @@ Primitives (Button, Badge, Card, Table, Select, Textarea, Input, Label, Checkbox
 | -------------------------------- | --------------------------------------------- | ----------------------------- |
 | [Preset: Cayman Feeder IV     ▾] | MATCHED HISTORICAL CASES (TOP 3)              | REUSABLE ASSETS (2 SELECTED)  |
 |                                  | +-------------------+-----------+-----------+ | +---------------------------+ |
-| +------------------------------+ | | #01 · 94% MATCH   | #02 · 78% | #03 · 64% | | | [x] cayman_fatca_v2.json  | |
+| +------------------------------+ | | #01 · 94% MATCH   | #02 · 78% | #03 · 64% | | | [x] FATCA joint-signer v2 | |
 | | Client: Apollo Global        | | | Sequoia Feeder IV | KKR Euro  | A16Z VII  | | |     Validation Schema     | |
-| | Request: Onboard new Cayman  | | | Cayman · Q3 2025  | Lux ·2025 | DE · 2026 | | |     [Preview]  [Export ↗] | |
+| | Request: Onboard new Cayman  | | | Cayman · Q2 2025  | Lux ·2025 | DE · 2025 | | |     [Preview]  [Export ↗] | |
 | | Master-Feeder fund. Must     | | +-------------------+-----------+-----------+ | +---------------------------+ |
-| | support joint non-US LP      | |                                               | | [x] joint_lp_routing.ts   | |
-| | signers (W-8BEN-E) and new   | | ┌─ HOW THIS PAST CASE WENT (#0F2547 Navy) ──┐ | |     Multi-signer hook     | |
+| | support joint non-US LP      | |                                               | | [x] Affinity prefill map  | |
+| | signers (W-8BEN-E) and new   | | ┌─ HOW THIS PAST CASE WENT (#0F2547 Navy) ──┐ | |     CRM field mapping     | |
 | | 2026 CIMA AML 10% beneficial | | | ■ ALUMNI RECORD: Minh Nguyen (Left 8m ago)| | |     [Preview]  [Export ↗] | |
 | | ownership look-through rule. | | | "UAT slipped 9 days because joint non-US  | | +---------------------------+ |
 | +------------------------------+ | |  LPs triggered conflicting W-8BEN-E Ch.4  | | [ Clone Starter Kit     [↗] ] |
 |                                  | |  status rules. Fixed in v2 schema."       | |                               |
-| [ Run Dejavu Analysis      [↗] ] | |  Source: [slack_uat_fatca_fix.txt #L42 ↗] | | ----------------------------- |
+| [ Run Dejavu Analysis      [↗] ] | |  Source: [slack_uat_fatca_deadlock #L42 ↗]| | ----------------------------- |
 |                                  | └───────────────────────────────────────────┘ | ■ SOURCE CITATION INSPECTOR   |
-| -------------------------------- |                                               | File: slack_uat_fatca_fix.txt |
+| -------------------------------- |                                               | File: slack_uat_fatca_deadlock|
 | ■ EXTRACTED PARAMETERS           | ■ WHAT'S DIFFERENT THIS TIME (DELTA MATRIX)   | +---------------------------+ |
-|                                  | +---------------+-------------+-------------+ | | @minh.nguyen [2025-11-04] | |
+|                                  | +---------------+-------------+-------------+ | | @minh.nguyen [2025-04-14] | |
 | JURISDICTION   [Cayman Islands]  | | DIMENSION     | PAST CASE   | THIS REQUEST| | | "Found the UAT blocker:   | |
 | STRUCTURE      [Master-Feeder ]  | +---------------+-------------+-------------+ | | Primary LP = Active NFFE  | |
 | TAX FORMS      [W-8BEN-E Joint]  | | ■ W-8BEN-E    | Joint Signer| Identical   | | | + Co-signer = Passive     | |
@@ -121,6 +121,12 @@ Primitives (Button, Badge, Card, Table, Select, Textarea, Input, Label, Checkbox
 |                                  | |   Attestation |             | [NET_NEW]   | | +-----------------------+---+ |
 +----------------------------------+-----------------------------------------------+-------------------------------+
 ```
+
+The mock shows seed-pack request **REQ-A**, and every value in it comes from `backend/data/seed_pack/`:
+- **Matches:** AND-2025-014 / AND-2025-051 / AND-2025-029.
+- **Assets:** `cayman_fatca_joint_signer_v2.json`, `affinity_prefill_mapping.json`.
+- **Citation:** `slack_uat_fatca_deadlock.txt` line 42.
+- **Expected delta:** `incoming/expected.json`.
 
 Component mapping when these panes get built:
 
@@ -170,7 +176,7 @@ These appear in the blueprint but aren't in ARCHITECTURE.md yet. Each needs a pr
 
 1. **Load Demo presets** — canned incoming requests (pairs with the seed data's demo trigger).
 2. **Ingest Archive / `+ Ingest`** — adding past cases to the vault from the UI (answers CONTEXT §7 "Growing the vault").
-3. **Source citation inspector with line anchors** (`slack_uat_fatca_fix.txt #L42`) — needs citations with chunk ID, quote, and line range (extends the proposed `Citation` contract).
+3. **Source citation inspector with line anchors** (`slack_uat_fatca_deadlock.txt #L42`) — needs citations with chunk ID, quote, and line range (extends the proposed `Citation` contract).
 4. **Ask scoped question** — LLM Q&A grounded in the selected case. This is a new pipeline, and it must stay grounded and guarded so it doesn't become a generic chatbot.
 5. **Clone Starter Kit** — bundling the selected artifacts (zip export, or a list of presigned links).
 6. **Vault stats** — counts of cases, alumni memories, and reusable artifacts.

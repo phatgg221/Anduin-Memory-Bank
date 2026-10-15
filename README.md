@@ -47,6 +47,7 @@ Ports clash with something already running? Change them in `.env`.
 | `bun run stop` | Stop containers |
 | `bun run logs [service]` | Follow logs |
 | `bun run seed` | Seed the vault |
+| `bun run seed:pdfs` | Re-render the seed pack's legal PDFs after editing a `*.pdf.md` source |
 | `bun run test [pytest args]` | Backend tests inside the container (`bun run test`, not `bun test`) |
 | `bun run lint` | ESLint (frontend) + ruff (backend) |
 | `bun run reset` | Delete containers **and all local data** (asks first) |

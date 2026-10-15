@@ -1,0 +1,21 @@
+clause_id,clause_title,category,min_tier,mfn_electable,excluded_reason,notes
+SLC-01,Enhanced quarterly reporting with loan-level data tape,Reporting,1,yes,,Tape delivered via the data room within 60 days of quarter-end; same timing as the granting LP.
+SLC-02,ILPA fee and expense reporting template,Reporting,1,yes,,Quarterly; reconciles to Class A-D Management Fee rates (Annex C Section 3.1).
+SLC-03,Monthly FX hedge mark-to-market report,Reporting,1,yes,,Electable only by LPs holding a non-USD Commitment on the Cayman Feeder (Section 2.2).
+SLC-04,Disclosure of fund information to the LP's own regulators and auditors,Confidentiality,1,yes,,Generic carve-out; distinct from public-records disclosure (SLC-14).
+SLC-05,Transfer to Affiliates without General Partner consent,Transfer,1,yes,,Transferee must belong to the same Affiliated Investor Group (Section 1.3).
+SLC-06,Annual ESG and climate-risk questionnaire response,Reporting,2,yes,,One questionnaire per LP per fiscal year.
+SLC-07,Key person event notice within 5 business days,Governance,2,yes,,Standard LPA notice period is 10 business days.
+SLC-08,Excuse right for investments contrary to a written investment policy,Excuse,2,yes,,"Conditional: electing LP must deliver its own written policy of equivalent scope (Section 4.2 conditions travel with the clause)."
+SLC-09,Successor fund capacity reservation,Economics,3,yes,,Capacity capped at the electing LP's own Commitment to this fund.
+SLC-10,Advisory Committee seat or observer right,Governance,n/a,no,Section 4.3(d) - Advisory Committee appointments,Appointed by the General Partner; never electable at any tier.
+SLC-11,Co-investment allocation rights (no fee / no carry),Co-investment,n/a,no,Section 4.3(e) - co-investment rights,Allocated deal by deal under the co-investment policy.
+SLC-12,Seed Investor Management Fee reduction (25 bps for fund life),Economics,n/a,no,Section 4.3(c) - Seed Investor fee terms,Outside the Fee Tier schedule; Fee Tier comes only from fx_mfn_tier_rules.json.
+SLC-13,Initial Closing fee discount (10 bps for first 24 months),Economics,n/a,no,Section 4.3(c) - Initial Closing fee terms,Applies only to LPs admitted at the 2026-02-06 Initial Closing.
+SLC-14,Public records / freedom of information disclosure carve-out,Confidentiality,n/a,no,Section 4.3(a) - governmental public-records status,Granted to US public pension plans subject to state public-records laws.
+SLC-15,ERISA plan-asset covenants and withdrawal right,Regulatory,n/a,no,Section 4.3(a) - ERISA status,Benefit-plan investor specific.
+SLC-16,UBTI minimization covenant,Tax,n/a,no,Section 4.3(a) - tax-exempt status,US tax-exempt LPs investing through the Cayman Feeder.
+SLC-17,Placement agent and pay-to-play representations,Regulatory,n/a,no,Section 4.3(a) - regulatory status,State and municipal pension plan specific.
+SLC-18,Sovereign immunity reservation,Legal,n/a,no,Section 4.3(b) - sovereign status,Granted to a sovereign wealth fund LP by reason of its status.
+SLC-19,Management Fee waiver for General Partner affiliates and employees,Economics,n/a,no,Section 4.3(f) - GP-affiliate terms,Employee and affiliate feeder interests only.
+SLC-20,LP home-jurisdiction governing law and forum for side letter disputes,Legal,n/a,no,Section 4.3(g) - governing law and forum,Partnership Agreements remain governed by Cayman Islands and Delaware law.

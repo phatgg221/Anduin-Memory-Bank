@@ -47,7 +47,7 @@ We are building a **Trigger-First Case Triage & Delta Intelligence Workbench**:
 3. The Top 3 precedents appear with `% Match` badges. The #1 case was built by an engineer who left 8 months ago (`ALUMNI`).
 4. "How it went": a 9-day UAT delay caused by W-8BEN-E Chapter 4 FATCA validation conflicts on joint subscriptions, with the Slack thread cited.
 5. The Delta Matrix shows green (reuse the FATCA validation schema), amber (ERISA 25% tracking exists, but for a different structure), and red (SFDR questionnaire: no precedent).
-6. One click exports `cayman_fatca_v2.json` (and the `joint_lp_routing.ts` hook) from the past case.
+6. One click exports `cayman_fatca_joint_signer_v2.json` from the past case, and the Affinity prefill mapping from the ERISA case.
 
 ## 6. Glossary
 

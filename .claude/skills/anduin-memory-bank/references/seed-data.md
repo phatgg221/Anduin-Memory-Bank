@@ -1,4 +1,6 @@
-# Seed Data — Anduin Private-Markets Scenarios (`backend/app/seed.py`)
+# Seed Data — Anduin Private-Markets Scenarios
+
+**Source of truth: `backend/data/seed_pack/`.** Its `README.md` is the authoring spec (manifest format, Slack/post-mortem/schema conventions, the Markdown subset for PDFs). This file summarises the rules and the demo contract.
 
 ## Rules
 
@@ -6,73 +8,52 @@
   - LP subscription packs and investor questionnaires;
   - W-8 / W-9 tax forms, FATCA / CRS;
   - AML/KYC and beneficial-ownership trees;
-  - ERISA, side letters, UAT incidents.
+  - ERISA, side letters, MFN, UAT incidents.
 
   Never use lorem ipsum, todo apps, or e-commerce examples.
-- **Every artifact a case names exists as a real file**, uploaded to MinIO under `cases/{case_slug}/artifacts/`, with plausible content — the demo will click it:
-  - JSON schemas with real-looking field names (`chapter4_status`, `giin`, `joint_subscriber_index`, …);
-  - Slack exports with timestamps, handles, and a back-and-forth that ends in the fix;
-  - post-mortems with a timeline, root cause, impact, fix, and "next time" section;
-  - PDFs, which can be short but must be real PDFs.
-- **Author status is explicit:** `ACTIVE`, or `ALUMNI` plus when they left. Alumni knowledge is the product's core value, so some of the most valuable warnings should come from alumni.
-- **Idempotent:** stable slugs (e.g. `sequoia-heritage-feeder-iv`) and upserts, so re-running never duplicates. `bun run dev --refresh-db` rebuilds from scratch.
-- **Survive schema changes:** keep scenario *content* in a data module (e.g. `app/seed_data/` with one file per case, plus artifact files on disk), separate from the loading code. The table/field mapping waits for the schema decision; the content shouldn't have to be rewritten.
-- **Ingest through the real path:** seeding goes through `vault` ingestion (chunk → embed → store), so retrieval is tested against the same code the app uses.
+- **Content is separate from loading.** Scenario content lives in `backend/data/seed_pack/cases/<caseId>_<slug>/` (`case.json` + artifact files). The loader (`app/seed.py`, waiting on the domain schema) reads `case.json` and uploads exactly the files in `artifacts` to MinIO at `cases/{slug}/artifacts/{file}`, then ingests them through the real vault path (chunk → embed → store).
+- **Every artifact exists as a real file.**
+  - Legal excerpts are `*.pdf.md` sources rendered by `python -m app.seed_pdfs` into real PDFs. Both are committed, and the output is deterministic.
+  - Every PDF carries a "fictional demo material" footer.
+- **People come from `seed_pack/people.json`** (ACTIVE / ALUMNI with `leftOn`). Alumni knowledge is the product's core value.
+- **Idempotent loading:** stable case IDs/slugs and upserts; `bun run dev --refresh-db` rebuilds from scratch.
+- **Fictional names only** for investors, counsel, and administrators. Real regulations are cited accurately; fictional rules (e.g. "2026 CIMA guidance") are framed as client or counsel requirements.
 
-## Anchor cases
+## Cases in the pack
 
-### Case 1 — Cayman Islands Master-Feeder LP Onboarding (`Sequoia Heritage Feeder IV`)
-- **Author:** Minh Nguyen — `ALUMNI`, left 8 months ago
-- **How it went:** delayed 9 days in UAT. Non-US institutional LPs signing **jointly** triggered conflicting W-8BEN-E Chapter 4 FATCA status validation rules.
-- **Reusable artifacts:** `cayman_fatca_v2.json` (W-8BEN-E validation schema, v2 = the UAT fix), `joint_lp_routing.ts` (multi-signer hook), `slack_uat_fatca_fix.txt`, `lp_sub_agreement_mapping.pdf` — names match the DESIGN.md mock
+| Case | Fund | Archetype | Author | Key reusable artifacts |
+|---|---|---|---|---|
+| `AND-2025-014` | Sequoia Heritage Cayman Feeder IV | Conditional-logic deadlock + multi-signer race (W-8BEN-E Ch. 4 / Part XXIX) | Minh Nguyen · ALUMNI | `cayman_fatca_joint_signer_v2.json` |
+| `AND-2025-029` | Andreessen Growth Parallel VII | ERISA 25% aggregate cap breach across parallel funds + Affinity prefill | Sarah Tran · ACTIVE | `erisa_aggregate_cap_guard.ts`, `affinity_prefill_mapping.json` |
+| `AND-2025-051` | KKR European Infrastructure RAIF III | Counsel redline 48h before go-live: UBO 25% → 10%, 4-tier look-through | David Le · ALUMNI | `lux_aml_ubo_repeater_schema.json` |
+| `AND-2026-008` | Blackstone Real Estate Debt X | Side-letter MFN + FX-normalized fee tiers (EUR/GBP vs USD thresholds) | Minh Nguyen · ALUMNI | `fx_mfn_tier_rules.json`, `side_letter_clause_matrix.csv` |
 
-### Case 2 — Delaware Parallel Venture Fund with ERISA 25% Benefit-Plan Limit (`Andreessen Growth VII`)
-- **Author:** Sarah Tran — `ACTIVE`
-- **How it went:** smooth launch, but it needed a custom dynamic calculation hook to track aggregate ERISA benefit-plan investor commitments across the parallel entities in real time.
-- **Reusable artifacts:** `erisa_25_percent_calculator.ts`, `delaware_erisa_postmortem.md`
+Each case also has a legal excerpt PDF, a Slack incident thread, and a post-mortem. See each `case.json` for the timeline, incident, root cause, and reusable rules.
 
-### Case 3 — Luxembourg RAIF Cross-Border PE Subscription (`KKR Euro Infra III`)
-- **Author:** David Le — `ALUMNI`, left 1 year ago
-- **How it went:** external counsel lowered the AML/KYC beneficial-ownership threshold from 25% to 10% for high-risk jurisdictions mid-onboarding, which required a hotfix to the entity look-through tree.
-- **Reusable artifacts:** `lux_aml_kyc_tree_schema.json`, `counsel_redline_notes.pdf`
+## Coverage & distractors
 
-## Distractors & coverage
-
-With only three cases, "Top 3" returns everything and the ranking proves nothing. Add **6–10 more cases**, including deliberate near-misses, and mix ACTIVE/ALUMNI authors with smooth and troubled outcomes. For example:
+Four cases make "Top 3" a weak ranking test.
+- **AND-2026-008 doubles as a metadata distractor for REQ-A:** it's a Cayman master-feeder, but its problem is MFN/FX, so it must not outrank AND-2025-014.
+- **Grow the pack to 8–10 cases** with deliberate near-misses (each as a full case folder), for example:
 
 | Near-miss case | Why it's there |
 |---|---|
-| Cayman open-ended hedge fund feeder (no joint-subscriber FATCA issue) | Same jurisdiction — must rank **below** Case 1 for a FATCA-heavy request |
-| Delaware single-entity buyout fund, no benefit-plan investors | Delaware but no ERISA logic — distractor for Case 2 |
-| Singapore VCC umbrella fund, CRS self-certification changes | Different tax regime with similar "tax form validation" vocabulary |
-| Ireland ICAV credit fund, professional-investor eligibility checks | Different questionnaire logic |
-| Delaware co-investment SPV, accelerated 5-day close | Same structure family, a timeline-driven pitfall |
-| Luxembourg SCSp evergreen fund, semi-annual liquidity windows | Same jurisdiction as Case 3, no AML threshold change |
+| Cayman open-ended hedge fund feeder (no joint-signer FATCA issue) | Same jurisdiction; must rank below AND-2025-014 for a FATCA-heavy request |
+| Delaware single-entity buyout fund, no benefit-plan investors | Delaware without ERISA logic; distractor for AND-2025-029 |
+| Singapore VCC umbrella fund, CRS self-certification changes | Similar "tax form validation" vocabulary, different regime |
+| Luxembourg SCSp evergreen fund, semi-annual liquidity windows | Same jurisdiction as AND-2025-051, no AML threshold change |
 
-## Demo triggers (the "Load Demo" presets)
+## Demo contract — incoming requests
 
-The Workbench mock in `DESIGN.md` §4 is the primary demo. Seed it so that the screen can be reproduced exactly.
+`backend/data/seed_pack/incoming/` holds the "Load Demo" presets. Each is a client intake brief (`.pdf.md` + rendered PDF). `expected.json` is the regression fixture:
+- `retrieval.mustRankFirst`, `shouldAppearInTop3`, and the metadata distractor;
+- the expected delta rows (status, source case, artifact);
+- the expected pitfalls.
 
-**Preset A — "Cayman Feeder IV" (matches the DESIGN.md mock):**
+| Request | Must rank first | Delta highlights |
+|---|---|---|
+| **REQ-A** Apollo Global Cayman Crossover Feeder II | `AND-2025-014` (~92%) | REUSABLE joint-signer W-8BEN-E (014) · REUSABLE Affinity prefill (029) · MODIFIED UBO 10% look-through (051 repeater, now applied to all investors) · **NET_NEW** hardware-wallet custody attestation annex |
+| **REQ-B** Bain Capital Tech Opportunities Parallel V | `AND-2025-029` | REUSABLE ERISA aggregate guard · MODIFIED CRM prefill (Affinity → DealCloud) · MODIFIED joint signers (W-9, not W-8BEN-E) · **NET_NEW** QP look-through for single-purpose vehicles |
 
-> Onboard a new Cayman master-feeder fund. It must support joint non-US LP signers (W-8BEN-E) and the new 2026 CIMA AML 10% beneficial-ownership look-through rule. Some LPs will hold assets via hardware-wallet custody and need a crypto custody attestation.
-
-Expected outcome:
-- **Ranking:** #01 Case 1 (Cayman FATCA) · #02 Case 3 (Lux AML tree) · #03 Case 2 (Delaware ERISA).
-- **REUSABLE:** W-8BEN-E joint-signer routing (`cayman_fatca_v2.json` + `joint_lp_routing.ts`, from Case 1).
-- **MODIFIED:** AML/KYC threshold. Case 1 used a 25% look-through; this request needs 10%. **Cross-case insight:** Case 3 already hot-fixed a look-through tree from 25% to 10% (`lux_aml_kyc_tree_schema.json`). The UI should surface that as a second precedent for this row.
-- **NET_NEW:** crypto / hardware custody attestation has no precedent.
-- **"How it went":** Minh Nguyen's (`ALUMNI`) 9-day UAT slip. The cited Slack line explains the Active NFFE + Passive co-signer conflict at step 4, fixed in the v2 schema.
-
-**Preset B — "Northwind Ventures Fund II" (ERISA / SFDR variant):**
-
-> Cayman master-feeder. Non-US institutional LPs, several subscribing jointly. US tax-exempt investors, including ERISA plans, come in through the offshore feeder. EU LPs require an SFDR Article 8 questionnaire.
-
-Expected outcome:
-- **REUSABLE:** W-8BEN-E joint-subscriber validation (Case 1).
-- **MODIFIED:** ERISA 25% tracking. Case 2's hook covers Delaware parallel entities; this request needs feeder and master level.
-- **NET_NEW:** SFDR Article 8.
-
-Store both presets as fixtures. The opt-in retrieval regression test asserts that Case 1 ranks #1 for each.
-
-For the Slack export behind the citation inspector, give the artifact real line numbers. The demo cites `slack_uat_fatca_fix.txt #L42`, so line 42 must be the fix message.
+- **The DESIGN.md Workbench mock is REQ-A.** The citation inspector cites `slack_uat_fatca_deadlock.txt #L42`, so line 42 of that file is the first line of Minh's "Found the UAT blocker:" message. Keep it there if you edit the thread.
+- **The opt-in retrieval test** (real embeddings) asserts `mustRankFirst` for both requests.

@@ -11,7 +11,7 @@ from app.modules.auth.schemas import AuthOut, LoginIn, RegisterIn, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-REFRESH_COOKIE = "dejavu_refresh"  
+REFRESH_COOKIE = "dejavu_refresh"
 REFRESH_COOKIE_PATH = "/"
 
 RefreshCookie = Annotated[str | None, Cookie(alias=REFRESH_COOKIE)]

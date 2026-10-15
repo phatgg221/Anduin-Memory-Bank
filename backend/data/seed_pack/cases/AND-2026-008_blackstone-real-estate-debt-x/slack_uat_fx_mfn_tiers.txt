@@ -1,0 +1,67 @@
+# Slack export · #deal-bx-redx
+# Exported 2026-01-27 by @pm.alex · times in ICT (UTC+7)
+# Case AND-2026-008 · Blackstone Real Estate Debt X
+
+[2026-01-20 14:12] @qa.tuan
+UAT side-letter regression, Cayman feeder: test LP Nordhafen Pensionskasse VVaG committed EUR 22,000,000 and got NO MFN election workflow, plus Fee Class A.
+At roughly 1.16 that is well over US$25M, so per the Annex C Section 3.1 table it should be Tier 1 / Class B. Screenshot in the ticket.
+
+[2026-01-20 14:20] @qa.tuan
+Two more from the same suite:
+- Pennant Hill Pension Trustees Limited, GBP 38,000,000 -> Tier 1 / Class B. Should be Tier 2 / Class C (about US$51M).
+- Wattlebrook Superannuation Trust, AUD 34,000,000 -> Tier 1 / Class B with the MFN workflow unlocked. That is only about US$22.7M, so it should be Standard / Class A with no MFN.
+All USD test LPs pass.
+
+[2026-01-20 14:41] @minh.nguyen
+Found it. The v1 tier rule compares commitment.amount straight against the USD thresholds, with no currency awareness at all. 22,000,000 < 25,000,000 so Nordhafen is Standard, 38,000,000 lands between 25M and 50M, and 34,000,000 AUD clears 25M.
+Every USD-only fund we shipped hid this. It cuts both ways: two LPs under-tiered, one over-tiered.
+
+[2026-01-20 14:58] @pm.alex
+The AUD one scares me most. A Standard LP receiving the MFN compendium is a confidentiality problem, not just a fee problem. Sign-off is Friday the 23rd.
+@minh.nguyen can we just pull a live rate from our market-data feed at evaluation time?
+
+[2026-01-20 15:10] @minh.nguyen
+That was my first instinct, but live spot makes the tier non-reproducible. If GBP/USD dips under 1.3158, Pennant Hill falls back to Tier 1, so a live rate could flip it between page loads. The administrator also could not tie out our number.
+We need whatever rate the side letter policy pins. @cs.maya can you check Annex C when you are online?
+
+[2026-01-20 20:36] @cs.maya
+Checked Annex C. Section 2.3(b): WM/Refinitiv 4:00 p.m. London closing spot (mid), 4 dp, on the London business day immediately preceding the Submission Date. 1.1(c) says Submission Date is fixed in London time.
+2.3(d): round to the nearest whole US Dollar first, then apply the thresholds. 2.3(e): an increase converts at its own fixing and the original amount is not restated. 2.3(f): no tier downgrade from FX moves alone.
+And Section 1.3: affiliated commitments across BOTH feeders aggregate, but only after each one is converted.
+
+[2026-01-20 20:44] @cs.maya
+Also 2.3(g): the administrator records rate, fixing date and USD Equivalent for every commitment. Halyard Point (fund admin) confirmed they use the same WM/R fix, so if we store it they can tie out line by line.
+
+[2026-01-20 20:52] @qa.tuan
+So for today's UAT submissions the fixing date is 2026-01-19? I want the expected values in the suite to be exact.
+
+[2026-01-20 21:05] @minh.nguyen
+Yes. Today's 4pm London fix will not publish until 23:00 ICT, which is exactly why 2.3(b) points at the prior London business day. 2026-01-19 fix: EUR/USD 1.1650, GBP/USD 1.3420, AUD/USD 0.6680.
+Nordhafen: 22,000,000 x 1.1650 = US$25,630,000 -> Tier 1 / Class B
+Pennant Hill: 38,000,000 x 1.3420 = US$50,996,000 -> Tier 2 / Class C
+Wattlebrook: 34,000,000 x 0.6680 = US$22,712,000 -> Standard / Class A, no MFN
+
+[2026-01-20 21:28] @minh.nguyen
+Draft evaluator is up: fx_mfn_tier_rules.json v2.
+- L12-L17: pinned rate source, 4 dp, London calendar. L15 derives the fixing date from submitted_at in Europe/London, not our ICT server clock, so a 06:00 Saigon submission is still the previous London day. Fallback per 2.3(c), half-up rounding before thresholds per 2.3(d).
+- L49-L50: usd_equivalent = fx(amount, currency, 'USD', fx_rate_date). USD commitments get rate 1.0000 too, so every row has the same audit trail.
+- L62-L63: rate, date and source are persisted once on submit, per 2.3(g).
+- L65: tier.assign runs on mfn.aggregate_usd only. commitment.amount never touches a threshold again.
+- L68-L71: the MFN workflow unlocks AND locks, so Wattlebrook loses the compendium.
+
+[2026-01-20 21:40] @qa.tuan
+What about an increase? Say a Nordhafen-type LP ups by EUR 5M in March after the euro weakens.
+
+[2026-01-20 21:52] @minh.nguyen
+L73-L74: the increase converts at its own fixing and is added to the stored USD Equivalent (2.3(e)). The original tranche is never restated. L72 then re-tiers the whole affiliated group, per 1.3.
+L76-L77: if the re-tier comes out lower purely because of FX, the previous tier stays (2.3(f)). Only a reduction or transfer can move someone down.
+Please add boundary fixtures too. GBP 37,257,824 x 1.3420 = 49,999,999.808, which rounds to US$50,000,000 and is Tier 2. One pound less is Tier 1.
+
+[2026-01-20 22:05] @pm.alex
+Good. I'll tell the client sign-off moves to Monday the 26th: fix ships Thursday, full side-letter regression Friday, and Maya gets counsel to confirm our reading of 2.3 in writing. Initial close on Feb 6 stays.
+
+[2026-01-20 22:17] @cs.maya
+Sending Harrow & Linden our reading of 2.3(b), (d) and (f) with the three worked examples tonight. I'll also map the Section 4.3 exclusions clause by clause into side_letter_clause_matrix.csv so the 4.2 election form only offers what each tier can actually elect.
+
+[2026-01-20 22:31] @minh.nguyen
+Thanks all. I'm out mid-Feb, so I'm putting the why into the _comment keys and the post-mortem. Whoever runs the next multi-currency fund: change parameters, not rules.

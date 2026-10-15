@@ -1,0 +1,80 @@
+{
+  "$schema": "https://schemas.anduin.example/fundsub/form-schema/v3.json",
+  "schemaId": "cayman_fatca_joint_signer",
+  "version": "2.0.0",
+  "supersedes": "1.4.1",
+  "caseId": "AND-2025-014",
+  "author": "@minh.nguyen",
+  "updated": "2025-04-16",
+  "_comment": "Author's note (Minh): v2 is the fix for the 2025-04-14 UAT deadlock (slack_uat_fatca_deadlock.txt). One idea: the Chapter 4 / CRS election belongs to exactly one role, PRIMARY_TAX_COLLABORATOR = the Designated Tax Signatory in Annex B (sub agreement Section 4.3(b)). Co-signers read and attest; they never elect. Reuse for any joint-signer W-8BEN-E flow by changing parameters only.",
+  "parameters": {
+    "jurisdiction": "KY",
+    "vehicleRole": "FEEDER",
+    "fatcaRegime": "KY_US_IGA_MODEL_1",
+    "reportingChannel": "KY_TIA_DITC_PORTAL",
+    "maxJointSigners": 4,
+    "ruleEvaluationState": "COMMITTED",
+    "_comment": "ruleEvaluationState is the core of the fix. v1 evaluated visibleWhen/requiredWhen against each collaborator's DRAFT, so two signers could see two different forms. Never set DRAFT on a joint account."
+  },
+  "fields": [
+    {
+      "id": "joint.designated_tax_signatory_index",
+      "type": "select",
+      "label": "Designated Tax Signatory (Annex B, para 2)",
+      "required": true,
+      "editableBy": ["SUBSCRIPTION_OWNER"],
+      "visibleWhen": "count(joint.signers) > 1",
+      "validation": [{ "expr": "count(joint.signers, s.is_designated_tax_signatory) == 1", "message": "Annex B must mark exactly one Designated Tax Signatory." }],
+      "_comment": "This signer is bound to PRIMARY_TAX_COLLABORATOR for Step 4. v1 had no such field: every signer could edit tax.*."
+    },
+    {
+      "id": "tax.ch4_status",
+      "type": "select",
+      "label": "Chapter 4 status (W-8BEN-E Part I, line 5)",
+      "options": ["ACTIVE_NFFE", "PASSIVE_NFFE", "PARTICIPATING_FFI", "REPORTING_MODEL_1_FFI", "DIRECT_REPORTING_NFFE", "EXEMPT_BENEFICIAL_OWNER"],
+      "required": true,
+      "editableBy": ["PRIMARY_TAX_COLLABORATOR"],
+      "readOnlyFor": ["CO_SIGNER"],
+      "visibleWhen": "investor.kind == 'ENTITY' && investor.us_person == false",
+      "_comment": "Co-signers see the committed value only. Their drafts of this field are discarded, never merged."
+    },
+    { "id": "tax.giin", "type": "text", "label": "GIIN (W-8BEN-E Part I, line 9a)", "pattern": "^[A-Z0-9]{6}\\.[A-Z0-9]{5}\\.[A-Z]{2}\\.[0-9]{3}$", "editableBy": ["PRIMARY_TAX_COLLABORATOR"], "requiredWhen": "committed.tax.ch4_status in ['PARTICIPATING_FFI', 'REPORTING_MODEL_1_FFI', 'DIRECT_REPORTING_NFFE']" },
+    { "id": "tax.passive_nffe_owner_cert", "type": "select", "label": "Passive NFFE (Part XXVI): line 40b no substantial U.S. owners / line 40c owners listed in Part XXIX", "options": ["NONE_40B", "LISTED_40C"], "editableBy": ["PRIMARY_TAX_COLLABORATOR"], "requiredWhen": "committed.tax.ch4_status == 'PASSIVE_NFFE'" },
+    {
+      "id": "tax.substantial_us_owners",
+      "type": "repeater",
+      "label": "Part XXIX: Substantial U.S. Owners of Passive NFFE",
+      "itemFields": ["owner_name", "owner_address", "owner_us_tin"],
+      "editableBy": ["PRIMARY_TAX_COLLABORATOR"],
+      "visibleWhen": "committed.tax.ch4_status == 'PASSIVE_NFFE' && committed.tax.passive_nffe_owner_cert == 'LISTED_40C'",
+      "validation": [{ "expr": "count(tax.substantial_us_owners) >= 1", "message": "Line 40c is checked: list at least one substantial U.S. owner." }],
+      "_comment": "THE BUG: v1 keyed this on draft.tax.ch4_status. Co-signer's draft still said PASSIVE_NFFE after the primary picked ACTIVE_NFFE, so Part XXIX stayed required and open for the co-signer while Step 4 waited on it."
+    },
+    { "id": "crs.entity_type", "type": "select", "label": "CRS entity self-certification: classification", "options": ["ACTIVE_NFE", "PASSIVE_NFE", "FINANCIAL_INSTITUTION", "INVESTMENT_ENTITY_NON_PARTICIPATING"], "required": true, "editableBy": ["PRIMARY_TAX_COLLABORATOR"] },
+    { "id": "crs.controlling_persons", "type": "repeater", "label": "CRS Controlling Persons", "itemFields": ["name", "residence_country", "tin", "control_type"], "editableBy": ["PRIMARY_TAX_COLLABORATOR"], "visibleWhen": "committed.crs.entity_type in ['PASSIVE_NFE', 'INVESTMENT_ENTITY_NON_PARTICIPATING']" },
+    {
+      "id": "joint.cosigner_attestation",
+      "type": "checkbox",
+      "scope": "PER_CO_SIGNER",
+      "label": "I have reviewed the Tax Certifications and have no authority to amend them (Annex B, para 3)",
+      "required": true,
+      "editableBy": ["CO_SIGNER"],
+      "_comment": "Each co-signer signs this, never W-8BEN-E Part XXX."
+    }
+  ],
+  "rules": [
+    { "id": "step4.completion", "when": "step == 'TAX_CERTIFICATIONS'", "then": "complete = valid(committed.tax.*) && valid(committed.crs.*) && all(co_signers, c.attestation == true)", "_comment": "Releases v1 rule step4.exclusive_lock (Step 4 locked while ANY collaborator had a Step 4 section open). An open co-signer view no longer blocks anything." },
+    { "id": "step4.refresh_on_commit", "when": "event == 'PRIMARY_COMMIT'", "then": "discardDrafts(co_signers, 'tax.*'); rerender(co_signers)", "_comment": "Co-signer state is re-derived from the committed primary election on every commit." },
+    { "id": "tax.ch4_crs_mismatch", "when": "committed.tax.ch4_status == 'ACTIVE_NFFE' && committed.crs.entity_type == 'PASSIVE_NFE'", "then": "warn('FATCA and CRS classifications differ; confirm with the Administrator')", "_comment": "Warning only. The two regimes can legitimately disagree." }
+  ],
+  "docusign": {
+    "routingOrder": ["PRIMARY_TAX_COLLABORATOR", "CO_SIGNER"],
+    "anchors": [
+      { "recipient": "PRIMARY_TAX_COLLABORATOR", "anchor": "\\ch4_primary_sig\\", "tab": "signHere", "document": "W-8BEN-E Part XXX" },
+      { "recipient": "CO_SIGNER[1]", "anchor": "\\cosigner_1_attest\\", "tab": "signHere", "document": "Annex B para 3" },
+      { "recipient": "CO_SIGNER[2]", "anchor": "\\cosigner_2_attest\\", "tab": "signHere", "document": "Annex B para 3" }
+    ],
+    "preflight": "all(anchors, count(anchors, b.anchor == a.anchor) == 1) && count(anchors, a.recipient == 'PRIMARY_TAX_COLLABORATOR') == 1",
+    "_comment": "v1 put \\ch4_sig\\ on every signer, so our envelope pre-flight rejected the duplicate anchor. One anchor per recipient, always."
+  }
+}

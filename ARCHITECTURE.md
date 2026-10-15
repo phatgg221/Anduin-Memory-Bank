@@ -78,7 +78,9 @@ anduin-memory-bank/
 │   │   │   ├── vault/            historical cases, artifacts, knowledge chunks, ingest, presigned links
 │   │   │   ├── triage/           intake API, job lifecycle, worker.py, sweeper.py
 │   │   │   └── intelligence/     4-step pipeline: service, retrieval, llm_client, prompts, schemas, guard
-│   │   └── seed.py               private-markets scenarios → DB + MinIO
+│   │   ├── seed.py               loads the seed pack → DB + MinIO (waits on the domain schema)
+│   │   └── seed_pdfs.py          renders seed-pack legal excerpts (*.pdf.md → PDF, deterministic)
+│   ├── data/seed_pack/           fictional case memory: people.json, cases/<caseId>_<slug>/ (case.json + artifacts), incoming/ requests + expected.json
 │   └── tests/
 ├── docker/postgres/              init SQL (CREATE EXTENSION vector)
 ├── scripts/                      Bun: setup.ts, dev.ts (--refresh-db), db.ts (migrations), docker.ts (helpers + stop/logs/seed/test/lint/reset)
@@ -361,6 +363,7 @@ There is one root `.env`, created from `.env.example` by `bun run setup` and git
 | `bun run db:reset [--yes]` | Wipe the dev DB's public schema and re-apply every migration (asks first) |
 | `bun run stop` / `bun run logs [svc]` | Stop containers / follow logs |
 | `bun run seed` | `docker compose exec backend python -m app.seed` |
+| `bun run seed:pdfs [file.pdf.md]` | Re-render seed-pack PDFs from their `*.pdf.md` sources (`python -m app.seed_pdfs`) |
 | `bun run test [pytest args]` | `docker compose exec backend pytest …` — note: `bun run test`, **not** `bun test` (Bun's built-in runner) |
 | `bun run lint` | Frontend ESLint (host) + backend `ruff check` (container) |
 | `bun run reset` | `docker compose down --volumes` after a y/N prompt — **deletes DB and MinIO volumes** |

@@ -1,0 +1,79 @@
+{
+  "$schema": "https://schemas.anduin.example/fundsub/form-schema/v3.json",
+  "schemaId": "fx_mfn_tier_rules",
+  "version": "2.0.0",
+  "caseId": "AND-2026-008",
+  "author": "@minh.nguyen",
+  "updated": "2026-01-22",
+  "_comment": "FX-normalized MFN / fee-tier evaluator. v1 (inherited from USD-only funds) compared commitment.amount raw against USD thresholds, so EUR/GBP/AUD LPs got the wrong tier in UAT on 2026-01-20. Every threshold now runs on the USD Equivalent at the rate the side-letter policy pins (Annex C Section 2.3), stored with the subscription. To reuse: copy and change PARAMETERS only. Rate source, fixing rule, rounding and tiers come from the new fund's side-letter policy, never from our market-data feed. If the policy is silent, get counsel to specify before UAT. -- Minh",
+  "parameters": {
+    "fundCurrency": "USD",
+    "permittedCurrencies": { "DELAWARE_FEEDER": ["USD"], "CAYMAN_FEEDER": ["USD", "EUR", "GBP", "AUD"] },
+    "rateSource": "WM/Refinitiv 4:00 p.m. London closing spot, mid (Annex C Section 2.3(b))",
+    "rateDecimals": 4,
+    "fixingCalendar": { "calendar": "LONDON", "timezone": "Europe/London" },
+    "fixingDateRule": "prev_business_day(local_date(subscription.submitted_at, 'Europe/London'), 'LONDON')",
+    "fixingFallback": { "lookbackBusinessDays": 5, "then": "GP_GOOD_FAITH_RATE_WITH_MEMO", "_comment": "Section 2.3(c)" },
+    "rounding": { "mode": "HALF_UP", "unit": 1, "applyBeforeThresholds": true, "_comment": "Section 2.3(d)" },
+    "tiers": [
+      { "tier": 0, "label": "Standard", "minUsd": 0, "feeClass": "A", "mgmtFeeBps": 125, "mfnEligible": false },
+      { "tier": 1, "label": "Tier 1", "minUsd": 25000000, "feeClass": "B", "mgmtFeeBps": 110, "mfnEligible": true },
+      { "tier": 2, "label": "Tier 2", "minUsd": 50000000, "feeClass": "C", "mgmtFeeBps": 100, "mfnEligible": true },
+      { "tier": 3, "label": "Tier 3", "minUsd": 100000000, "feeClass": "D", "mgmtFeeBps": 85, "mfnEligible": true }
+    ],
+    "mfnElection": { "compendiumDueDaysAfterFinalClose": 60, "electionWindowDays": 30, "matrix": "side_letter_clause_matrix.csv" },
+    "_comment": "Thresholds are inclusive and tested on the ROUNDED USD amount. UAT fixing 2026-01-19: EUR/USD 1.1650, GBP/USD 1.3420, AUD/USD 0.6680. Fixing date is taken on the London calendar: a 06:00 ICT submission is still the previous day in London."
+  },
+  "fields": [
+    {
+      "id": "commitment.amount", "type": "money", "currencyField": "commitment.currency", "required": true,
+      "label": "Capital Commitment (in commitment currency)", "editableBy": ["INVESTOR", "FUND_ADMIN"],
+      "validation": [{ "expr": "commitment.amount > 0", "message": "Commitment must be greater than zero." }]
+    },
+    {
+      "id": "commitment.currency", "type": "select", "required": true, "label": "Commitment currency (Annex C Section 2.2)",
+      "options": "params.permittedCurrencies[subscription.feeder]", "editableBy": ["INVESTOR", "FUND_ADMIN"]
+    },
+    {
+      "id": "commitment.affiliated_group_id", "type": "text", "required": false, "editableBy": ["FUND_ADMIN"],
+      "label": "Affiliated Investor Group (Annex C Section 1.3)",
+      "_comment": "Set by the admin once the GP accepts the affiliation evidence. Groups span BOTH feeders."
+    },
+    { "id": "commitment.fx_rate_date", "type": "date", "readOnly": true, "label": "Rate Fixing Date", "computed": "params.fixingDateRule" },
+    {
+      "id": "commitment.fx_rate", "type": "decimal", "precision": 4, "readOnly": true, "label": "Reference Rate applied (USD per 1 unit)",
+      "computed": "fx(1, commitment.currency, 'USD', commitment.fx_rate_date)",
+      "_comment": "Stored exactly as published. Never re-derive it from usd_equivalent / amount."
+    },
+    {
+      "id": "commitment.usd_equivalent", "type": "money", "currency": "USD", "readOnly": true, "label": "USD Equivalent",
+      "computed": "fx(commitment.amount, commitment.currency, 'USD', commitment.fx_rate_date)", "round": "params.rounding",
+      "_comment": "USD commitments still get rate 1.0000 and a fixing date, so every subscription carries the same audit trail."
+    },
+    {
+      "id": "mfn.aggregate_usd", "type": "money", "currency": "USD", "readOnly": true, "label": "Aggregate Commitment (USD Equivalent)",
+      "computed": "commitment.usd_equivalent + sum(affiliates.commitment.usd_equivalent)",
+      "_comment": "affiliates = other subscriptions with the same affiliated_group_id, both feeders. Convert each at ITS OWN fixing, then add. Never sum raw amounts across currencies."
+    },
+    { "id": "mfn.tier", "type": "select", "readOnly": true, "label": "MFN / Fee Tier", "options": [0, 1, 2, 3] },
+    { "id": "subscription.fee_class", "type": "select", "readOnly": true, "label": "Class of Interests", "options": ["A", "B", "C", "D"] }
+  ],
+  "rules": [
+    { "id": "fx.lock_on_submit", "when": "subscription.status == 'SUBMITTED' && commitment.fx_rate == null",
+      "then": "persist(commitment.fx_rate, commitment.fx_rate_date, commitment.usd_equivalent, params.rateSource)",
+      "_comment": "Written once, at submission (Section 2.3(g)); the admin ties out against this. Re-opening the form must never re-price it." },
+    { "id": "tier.assign", "when": "mfn.aggregate_usd != null", "then": "mfn.tier = count(params.tiers, mfn.aggregate_usd >= minUsd) - 1",
+      "_comment": "THE v1 BUG lived here: it tested commitment.amount. Thresholds only ever see USD Equivalents." },
+    { "id": "fee.route_class", "when": "mfn.tier != null", "then": "subscription.fee_class = params.tiers[mfn.tier].feeClass" },
+    { "id": "mfn.unlock_election", "when": "params.tiers[mfn.tier].mfnEligible", "then": "workflow.enable('MFN_ELECTION', params.mfnElection)",
+      "_comment": "Electable clauses = matrix rows with mfn_electable == 'yes' && min_tier <= mfn.tier (Sections 1.2, 4.3)." },
+    { "id": "mfn.lock_election", "when": "!params.tiers[mfn.tier].mfnEligible", "then": "workflow.disable('MFN_ELECTION')",
+      "_comment": "An over-tiered LP must never receive the compendium. Confidentiality, not just fees." },
+    { "id": "group.reevaluate", "when": "commitment.affiliated_group_id != null", "then": "reevaluate(affiliates, 'tier.assign')" },
+    { "id": "amend.increase", "when": "amendment.type == 'INCREASE'",
+      "then": "commitment.usd_equivalent = commitment.usd_equivalent + fx(amendment.delta, commitment.currency, 'USD', amendment.fx_rate_date)",
+      "_comment": "Increase converts at its own fixing (same rule, on amendment.submitted_at) and is persisted like fx.lock_on_submit. Original tranche is never restated (2.3(e))." },
+    { "id": "amend.no_fx_downgrade", "when": "mfn.tier < mfn.previous_tier && !(amendment.type in ['REDUCTION', 'TRANSFER'])",
+      "then": "mfn.tier = mfn.previous_tier", "_comment": "Section 2.3(f): only a reduction or transfer can move an LP down." }
+  ]
+}

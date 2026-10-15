@@ -1,0 +1,74 @@
+{
+  "$schema": "https://schemas.anduin.example/fundsub/form-schema/v3.json",
+  "schemaId": "lux_aml_ubo_repeater",
+  "version": "2.0.0",
+  "supersedes": "lux_aml_ubo_static_table@1.4.0",
+  "caseId": "AND-2025-051",
+  "author": "@david.le",
+  "updated": "2025-09-30",
+  "_comment": "David: v1 was a static 3-row UBO table (only three holders can each exceed 25%) with 25 hard-coded in the validation and one look-through row per entity. Counsel's Revision 2 (Pack Section 5.2(c), Section 5.3) needs 10% and up to 4 tiers for High-Risk Exposure investors. Threshold and depth are now parameters, the table is a recursive repeater, and migrate.v1_to_v2 upgrades live drafts in place. To reuse for another fund: change parameters (with an audit entry), never the field logic.",
+  "parameters": {
+    "ubo_threshold_pct": { "default": 25, "resolvedBy": "ubo.resolve_threshold", "_comment": "Statutory indicator: more than 25% (AML Law, Pack Section 5.2(a)). Resolved per investor. Never write 25 or 10 into an expr; read params.ubo_threshold_pct." },
+    "ubo_threshold_inclusive": { "default": false, "resolvedBy": "ubo.resolve_threshold", "_comment": "25% is exclusive ('more than'); counsel's 10% is inclusive ('10% or more'). The comparator travels with the number." },
+    "high_risk_threshold_pct": { "value": 10, "inclusive": true, "source": "Pack Section 5.2(c)", "_comment": "Counsel-specified Fund policy, not statute." },
+    "max_depth": { "value": 4, "source": "Pack Section 5.3(b)", "_comment": "Tier 1 = direct holders of the Investor. A legal person still over threshold at Tier 4 escalates (5.3(d)); there is no Tier 5 row." },
+    "high_risk_list_source": { "lists": ["EU_DEL_REG_2016_1675", "FATF_CALL_FOR_ACTION", "FATF_INCREASED_MONITORING", "AIFM_DESIGNATED"], "snapshotDate": "2025-09-29", "owner": "Northlake compliance", "source": "Pack Section 3.1" },
+    "audit": [
+      { "param": "high_risk_threshold_pct", "from": null, "to": 10, "at": "2025-09-30T22:40+07:00", "changedBy": "@david.le", "approvedBy": "Northlake compliance via @cs.maya", "reason": "Counsel redline rec'd 2025-09-29 08:40 CEST (Revision 2)" }
+    ]
+  },
+  "fields": [
+    {
+      "id": "investor.high_risk_exposure",
+      "type": "computed",
+      "expr": "investor.domicile in params.high_risk_list_source.countries || investor.funding_account_country in params.high_risk_list_source.countries",
+      "_comment": "Pack Section 3.2(a) domiciled / 3.2(b) routing capital. Recomputed on every save: changing the remitting bank account can flip it."
+    },
+    {
+      "id": "ubo.owners",
+      "type": "repeater",
+      "label": "Beneficial ownership: holders of the Investor (Annex C, Part 1)",
+      "recursive": true,
+      "childrenKey": "children",
+      "maxDepth": "params.max_depth",
+      "editableBy": ["PRIMARY_KYC_COLLABORATOR"],
+      "itemFields": [
+        { "id": "name", "type": "text", "required": true },
+        { "id": "person_type", "type": "select", "options": ["NATURAL_PERSON", "LEGAL_PERSON", "LEGAL_ARRANGEMENT"], "required": true },
+        { "id": "country", "type": "country", "required": true, "_comment": "Residence for natural persons, incorporation for entities." },
+        { "id": "ownership_pct", "type": "percent", "precision": 2, "min": 0, "max": 100, "requiredWhen": "item.control_only == false" },
+        { "id": "control_only", "type": "boolean", "default": false, "_comment": "Pack Section 5.2(b): control by other means, disclosed at any %." },
+        { "id": "pep", "type": "boolean", "requiredWhen": "item.person_type == 'NATURAL_PERSON'", "_comment": "Pack Section 4; true routes the investor to the enhanced tier." },
+        { "id": "effective_pct", "type": "computed", "expr": "item.ownership_pct * parent.effective_pct / 100", "_comment": "Pack Section 5.3(c); parent.effective_pct is 100 at the Investor." },
+        { "id": "meets_threshold", "type": "computed", "expr": "item.effective_pct > params.ubo_threshold_pct || (params.ubo_threshold_inclusive && item.effective_pct == params.ubo_threshold_pct)" },
+        { "id": "remainder_attested", "type": "boolean", "requiredWhen": "item.person_type != 'NATURAL_PERSON' && count(item.children) > 0", "_comment": "Pack Section 5.3(e)." },
+        { "id": "children", "type": "repeater", "ref": "ubo.owners", "requiredWhen": "item.person_type != 'NATURAL_PERSON' && item.meets_threshold && item.depth < params.max_depth" }
+      ],
+      "validation": [
+        { "expr": "sum(item.children.ownership_pct) <= 100", "message": "Holdings disclosed for one entity cannot exceed 100%." },
+        { "expr": "item.depth <= params.max_depth", "message": "Tier 4 is the last tier (Pack Section 5.3(d)): upload a certified structure chart instead." },
+        { "expr": "item.person_type == 'NATURAL_PERSON' || !item.meets_threshold || item.depth == params.max_depth || count(item.children) > 0", "message": "This entity meets the applicable threshold: disclose its own holders (Pack Section 5.2(c), Section 5.3(b))." }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "ubo.resolve_threshold",
+      "when": "investor.high_risk_exposure == true",
+      "then": "params.ubo_threshold_pct = params.high_risk_threshold_pct; params.ubo_threshold_inclusive = true",
+      "_comment": "The ONLY place the threshold switches. Not high-risk -> defaults (25, exclusive). Each resolution is logged with the list snapshotDate it used."
+    },
+    {
+      "id": "ubo.escalate_depth",
+      "when": "any(ubo.owners[*].depth == params.max_depth && ubo.owners[*].person_type != 'NATURAL_PERSON' && ubo.owners[*].meets_threshold)",
+      "then": "require kyc.structure_chart; kyc.review_queue = 'AIFM_COMPLIANCE'",
+      "_comment": "Pack Section 5.3(d). Do not add a Tier 5 to make the error go away."
+    },
+    {
+      "id": "migrate.v1_to_v2",
+      "when": "draft.schemaVersion < '2.0.0' && draft.status in ['DRAFT', 'NEEDS_INFO']",
+      "then": "map ubo_table.rows -> ubo.owners (depth 1) and lookthrough rows -> children (depth 2); keep every entered value; set draft.schemaVersion = '2.0.0'; re-run ubo.resolve_threshold; if new required items: status = 'NEEDS_INFO' and notify the investor listing only those items; else status unchanged",
+      "_comment": "Pack Section 7.2(a). Never edit a threshold in place on a published version: bump the version and migrate. SIGNED drafts are out of scope (7.2(b)). A v1 look-through row typed NATURAL_PERSON but named like an entity is flagged for re-confirmation, not auto-converted. Run 2025-09-30: 31 drafts, 0 values lost, 7 NEEDS_INFO, 24 unchanged."
+    }
+  ]
+}

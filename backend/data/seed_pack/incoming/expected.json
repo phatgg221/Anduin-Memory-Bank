@@ -1,0 +1,127 @@
+[
+  {
+    "requestId": "REQ-A",
+    "title": "Apollo Global Cayman Crossover Feeder II",
+    "file": "REQ-A_apollo-global-cayman-crossover-feeder-ii.pdf",
+    "source": "REQ-A_apollo-global-cayman-crossover-feeder-ii.pdf.md",
+    "expectedBrief": {
+      "jurisdiction": "Cayman Islands",
+      "fundStructure": "Master-Feeder",
+      "clientType": "Non-US institutional investors (joint signatories), US tax-exempt, family offices",
+      "keyRequirements": [
+        "Joint non-US institutional signers on W-8BEN-E with a single Chapter 4 / CRS election owner",
+        "Affinity CRM prefill",
+        "Beneficial-ownership look-through at 10% up to four tiers, changeable without losing drafts",
+        "Digital Asset Custody hardware wallet attestation annex"
+      ]
+    },
+    "retrieval": {
+      "mustRankFirst": "AND-2025-014",
+      "approxTopSimilarityPct": 92,
+      "shouldAppearInTop3": ["AND-2025-051", "AND-2025-029"],
+      "metadataDistractor": {
+        "caseId": "AND-2026-008",
+        "why": "Same jurisdiction and structure (Cayman master-feeder) but a different problem (MFN / FX tiers); must not outrank AND-2025-014."
+      }
+    },
+    "expectedDelta": [
+      {
+        "category": "W-8BEN-E joint-signer routing",
+        "status": "REUSABLE",
+        "sourceCase": "AND-2025-014",
+        "artifact": "cayman_fatca_joint_signer_v2.json",
+        "why": "Identical requirement: one role owns the Chapter 4 / CRS election, co-signers attest; decoupled DocuSign anchors."
+      },
+      {
+        "category": "Affinity CRM prefill",
+        "status": "REUSABLE",
+        "sourceCase": "AND-2025-029",
+        "artifact": "affinity_prefill_mapping.json",
+        "why": "Same CRM and same prefill-then-confirm pattern; review Cayman-specific entity types."
+      },
+      {
+        "category": "AML/KYC beneficial-ownership threshold",
+        "status": "MODIFIED",
+        "sourceCase": "AND-2025-051",
+        "artifact": "lux_aml_ubo_repeater_schema.json",
+        "why": "Recursive repeater with ubo_threshold_pct exists, but there 10% applied only to high-risk exposure; here 10% applies to every investor, under Cayman rather than Luxembourg rules."
+      },
+      {
+        "category": "Digital asset custody (hardware wallet) attestation",
+        "status": "NET_NEW",
+        "sourceCase": null,
+        "artifact": null,
+        "why": "No historical case covers wallet-control proofs, multi-sig key-holder KYC, or on-chain screening."
+      }
+    ],
+    "expectedPitfalls": [
+      "AND-2025-014 (Minh Nguyen, ALUMNI): two signers editing W-8BEN-E Part I / Part XXIX at once deadlocked Step 4 and blocked DocuSign — 9-day UAT slip.",
+      "AND-2025-051 (David Le, ALUMNI): changing the UBO threshold mid-flight requires a draft migration, or in-progress investors lose work.",
+      "AND-2025-029 (Sarah Tran): concurrent CRM-prefilled submissions can race past per-investor validation."
+    ]
+  },
+  {
+    "requestId": "REQ-B",
+    "title": "Bain Capital Tech Opportunities Parallel V",
+    "file": "REQ-B_bain-capital-tech-opportunities-parallel-v.pdf",
+    "source": "REQ-B_bain-capital-tech-opportunities-parallel-v.pdf.md",
+    "expectedBrief": {
+      "jurisdiction": "Delaware",
+      "fundStructure": "Parallel Fund",
+      "clientType": "US pension plans, endowments, US family offices (joint signatories), HNWIs",
+      "keyRequirements": [
+        "ERISA 25% Benefit Plan Investor limit monitored on an aggregate basis across Main and Parallel",
+        "Joint family-office signers with one designated tax (W-9) signatory",
+        "DealCloud CRM prefill",
+        "Rule 506(c) accredited-investor verification",
+        "Qualified-purchaser look-through for single-purpose vehicles"
+      ]
+    },
+    "retrieval": {
+      "mustRankFirst": "AND-2025-029",
+      "approxTopSimilarityPct": 90,
+      "shouldAppearInTop3": ["AND-2025-014"]
+    },
+    "expectedDelta": [
+      {
+        "category": "ERISA aggregate cap across parallel funds",
+        "status": "REUSABLE",
+        "sourceCase": "AND-2025-029",
+        "artifact": "erisa_aggregate_cap_guard.ts",
+        "why": "Same LPA covenant and late-closing pension rush; reuse the locked, idempotent pre-countersignature guard."
+      },
+      {
+        "category": "CRM prefill",
+        "status": "MODIFIED",
+        "sourceCase": "AND-2025-029",
+        "artifact": "affinity_prefill_mapping.json",
+        "why": "Prefill-then-confirm pattern carries over, but DealCloud entries, field names, and API differ from Affinity."
+      },
+      {
+        "category": "Joint signatories and tax certification ownership",
+        "status": "MODIFIED",
+        "sourceCase": "AND-2025-014",
+        "artifact": "cayman_fatca_joint_signer_v2.json",
+        "why": "Role-isolation and DocuSign anchor decoupling carry over; the tax form is W-9 for US family offices instead of W-8BEN-E."
+      },
+      {
+        "category": "Rule 506(c) accredited-investor verification",
+        "status": "REUSABLE",
+        "sourceCase": "AND-2025-029",
+        "artifact": "a16z_delaware_erisa_addendum.pdf",
+        "why": "Same 506(c) offering and verification approach."
+      },
+      {
+        "category": "Qualified-purchaser look-through for single-purpose vehicles",
+        "status": "NET_NEW",
+        "sourceCase": null,
+        "artifact": null,
+        "why": "No historical case collects per-owner QP representations for vehicles formed to invest."
+      }
+    ],
+    "expectedPitfalls": [
+      "AND-2025-029 (Sarah Tran): four pension subscriptions in six minutes nearly pushed aggregate BPI to 28.4% because validation was per investor.",
+      "AND-2025-014 (Minh Nguyen, ALUMNI): two signatories editing tax certifications concurrently can deadlock the tax step."
+    ]
+  }
+]
