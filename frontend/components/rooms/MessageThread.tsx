@@ -56,6 +56,7 @@ export function MessageThread({ messages, lastReadSeq, currentUserId, onOpenArti
         const day = DAY.format(new Date(message.created_at));
         const previous = messages[index - 1];
         const showDay = !previous || DAY.format(new Date(previous.created_at)) !== day;
+        const mine = message.author?.id === currentUserId;
         return (
           <li key={message.id} className="flex flex-col gap-4">
             {showDay && (
@@ -71,11 +72,16 @@ export function MessageThread({ messages, lastReadSeq, currentUserId, onOpenArti
                 <span className="micro-label text-navy">New</span>
               </div>
             )}
-            <article className={cn("flex gap-3", message.pending && "opacity-60")}>
+            <article
+              className={cn("flex gap-3", mine && "flex-row-reverse", message.pending && "opacity-60")}
+              aria-label={mine ? "Your message" : undefined}
+            >
               <Avatar initials={message.author?.avatar_initials ?? "?"} muted={!message.author?.is_active} />
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <header className="flex items-baseline gap-2">
-                  <span className="text-sm font-medium text-ink">{message.author?.name ?? "Former member"}</span>
+              <div className={cn("flex min-w-0 flex-1 flex-col gap-1", mine && "items-end")}>
+                <header className={cn("flex items-baseline gap-2", mine && "flex-row-reverse")}>
+                  <span className="text-sm font-medium text-ink">
+                    {mine ? "You" : (message.author?.name ?? "Former member")}
+                  </span>
                   <time className="text-xs text-muted-foreground" dateTime={message.created_at}>
                     {message.pending ? "Sending…" : TIME.format(new Date(message.created_at))}
                   </time>
@@ -85,7 +91,9 @@ export function MessageThread({ messages, lastReadSeq, currentUserId, onOpenArti
                     </span>
                   )}
                 </header>
-                <Content text={message.content} onCaseClick={onCaseClick} />
+                <div className={cn(mine && "max-w-[80%] border border-navy/20 bg-surface-2 px-3 py-2")}>
+                  <Content text={message.content} onCaseClick={onCaseClick} />
+                </div>
                 {message.attached_artifact && (
                   <button
                     type="button"
