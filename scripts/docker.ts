@@ -80,8 +80,10 @@ export function readEnv(): Record<string, string> {
 
 /**
  * Keep .env in step with .env.example: create it if missing, append keys added to the example since, and generate
- * a JWT_SECRET if it's empty. Never overwrites values you've set.
+ * any empty secret in GENERATED_SECRETS. Never overwrites values you've set.
  */
+const GENERATED_SECRETS = ["JWT_SECRET", "REALTIME_SECRET"];
+
 export function syncEnv(): void {
   const examplePath = join(ROOT, ".env.example");
   const envPath = join(ROOT, ".env");
@@ -102,9 +104,11 @@ export function syncEnv(): void {
     text = `${text.replace(/\n*$/, "\n")}\n# Added from .env.example\n${missing.join("\n")}\n`;
     console.log(`Added to .env: ${missing.map((line) => line.split("=")[0]).join(", ")}`);
   }
-  if (!/^JWT_SECRET=\S+/m.test(text)) {
-    text = text.replace(/^JWT_SECRET=.*$/m, `JWT_SECRET=${randomBytes(32).toString("hex")}`);
-    console.log("Generated a random JWT_SECRET in .env");
+  for (const key of GENERATED_SECRETS) {
+    if (!new RegExp(`^${key}=\\S+`, "m").test(text)) {
+      text = text.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${randomBytes(32).toString("hex")}`);
+      console.log(`Generated a random ${key} in .env`);
+    }
   }
   writeFileSync(envPath, text);
 }
@@ -118,6 +122,7 @@ export function printUrls(): void {
   MinIO console  http://localhost:${port("MINIO_CONSOLE_PORT", "9001")}
   Mailpit        http://localhost:${port("MAILPIT_UI_PORT", "8025")}
   pgweb          http://localhost:${port("PGWEB_PORT", "8081")}
+  realtime (ws)  ws://localhost:${port("REALTIME_PORT", "1999")}
   Postgres       localhost:${port("POSTGRES_PORT", "5433")}
 `);
 }
@@ -144,7 +149,8 @@ if (import.meta.main) {
       await requireRunning("backend");
       const frontend = await run(["bun", "run", "lint"], { cwd: join(ROOT, "frontend") });
       const backend = await execIn("backend", ["ruff", "check", "."]);
-      process.exit(frontend || backend);
+      const realtime = await run(["bunx", "tsc", "--noEmit"], { cwd: join(ROOT, "realtime") });
+      process.exit(frontend || backend || realtime);
     }
     case "reset": {
       const ok =

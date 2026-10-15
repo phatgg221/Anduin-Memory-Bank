@@ -1,0 +1,6 @@
+{
+  "$schema": "https://www.partykit.io/schema.json",
+  "name": "dejavu-realtime",
+  "main": "party/server.ts",
+  "compatibilityDate": "2026-10-01"
+}

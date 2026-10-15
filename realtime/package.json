@@ -1,0 +1,17 @@
+{
+  "name": "dejavu-realtime",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "partykit dev",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jose": "^6.2.12",
+    "partykit": "0.0.115"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261015.1",
+    "typescript": "^7.0.2"
+  }
+}

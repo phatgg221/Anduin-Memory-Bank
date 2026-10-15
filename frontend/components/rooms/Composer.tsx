@@ -9,11 +9,20 @@ import { cn } from "@/lib/utils";
 interface ComposerProps {
   roomName: string;
   onSend: (content: string, isMilestone: boolean) => void;
+  onTyping?: () => void;
+  /** Names of other people typing right now. */
+  typingNames?: string[];
   error?: string;
 }
 
+function typingLabel(names: string[]): string {
+  if (names.length === 1) return `${names[0]} is typing…`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+  return `${names.length} people are typing…`;
+}
+
 /** Message box: Enter sends, Shift+Enter adds a line. Tag a case with #CASE-2026-047. */
-export function Composer({ roomName, onSend, error }: ComposerProps) {
+export function Composer({ roomName, onSend, onTyping, typingNames = [], error }: ComposerProps) {
   const [text, setText] = useState("");
   const [milestone, setMilestone] = useState(false);
 
@@ -32,9 +41,15 @@ export function Composer({ roomName, onSend, error }: ComposerProps) {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-2 border-t bg-background px-6 py-4">
+      <p className="h-4 text-xs text-muted-foreground" aria-live="polite">
+        {typingNames.length > 0 && typingLabel(typingNames)}
+      </p>
       <Textarea
         value={text}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => {
+          setText(event.target.value);
+          if (event.target.value) onTyping?.();
+        }}
         onKeyDown={onKeyDown}
         placeholder={`Message #${roomName} · tag a case with #CASE-2026-047`}
         rows={2}

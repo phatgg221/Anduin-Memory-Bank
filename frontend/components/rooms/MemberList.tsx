@@ -19,23 +19,44 @@ interface MemberListProps {
   currentUserId: string;
   isMember: boolean;
   departmentCodes: Record<string, string>;
+  onlineIds: Set<string>;
   onAdd: (person: RoomPerson) => void;
   onRemove: (userId: string) => void;
 }
 
 /** Room members: the department lead first (always in, can't be removed), then everyone else. */
-export function MemberList({ members, people, currentUserId, isMember, departmentCodes, onAdd, onRemove }: MemberListProps) {
+export function MemberList({
+  members,
+  people,
+  currentUserId,
+  isMember,
+  departmentCodes,
+  onlineIds,
+  onAdd,
+  onRemove,
+}: MemberListProps) {
   const memberIds = new Set(members.map((m) => m.user.id));
   const candidates = people.filter((p) => !memberIds.has(p.id));
   const me = people.find((p) => p.id === currentUserId);
 
   return (
     <section className="flex flex-col gap-3">
-      <SectionLabel>Members · {members.length}</SectionLabel>
+      <SectionLabel>
+        Members · {members.length}
+        {onlineIds.size > 0 && ` · ${onlineIds.size} online`}
+      </SectionLabel>
       <ul className="flex flex-col gap-2">
         {members.map(({ user, role }) => (
           <li key={user.id} className="group flex items-center gap-2 text-sm">
-            <Avatar initials={user.avatar_initials} />
+            <span className="relative">
+              <Avatar initials={user.avatar_initials} />
+              {onlineIds.has(user.id) && (
+                <span
+                  aria-label="Online"
+                  className="absolute -right-0.5 -bottom-0.5 size-2.5 border-2 border-surface-2 bg-reusable-dot"
+                />
+              )}
+            </span>
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-ink">
                 {user.name}

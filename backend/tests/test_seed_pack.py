@@ -59,7 +59,7 @@ def test_case_manifest(folder):
         assert any(a["isReusable"] for a in data["artifacts"])
         body_lines = {m.line + i for m in case.messages for i in range(len(m.body.splitlines()))}
         for pitfall in data["pitfalls"]:
-            if (match := CHAT_REFERENCE.fullmatch(pitfall.get("reference") or "")):
+            if match := CHAT_REFERENCE.fullmatch(pitfall.get("reference") or ""):
                 assert int(match.group(1)) in body_lines, pitfall["reference"]
     else:
         assert data["status"] == "OPEN" and folder.name == data["channelSlug"]

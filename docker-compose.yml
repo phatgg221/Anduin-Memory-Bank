@@ -68,6 +68,7 @@ services:
       MINIO_PUBLIC_ENDPOINT: localhost:${MINIO_API_PORT:-9000}
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
+      REALTIME_URL: http://realtime:1999
     volumes:
       - ./backend:/app
     ports:
@@ -92,6 +93,7 @@ services:
     environment:
       BACKEND_INTERNAL_URL: http://backend:8000
       JWT_SECRET: ${JWT_SECRET}
+      NEXT_PUBLIC_REALTIME_HOST: localhost:${REALTIME_PORT:-1999}
     volumes:
       - ./frontend:/app
       # Keep the container's Linux node_modules and build cache instead of the host's.
@@ -107,6 +109,19 @@ services:
       timeout: 10s
       retries: 60
       start_period: 15s
+    restart: unless-stopped
+
+  # PartyKit: one websocket room per department war room. The API stays the source of truth and POSTs
+  # persisted events here; browsers connect directly (ws://localhost:REALTIME_PORT) and authenticate in-band.
+  realtime:
+    build: ./realtime
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      REALTIME_SECRET: ${REALTIME_SECRET}
+    volumes:
+      - ./realtime/party:/app/party
+    ports:
+      - "${REALTIME_PORT:-1999}:1999"
     restart: unless-stopped
 
 volumes:

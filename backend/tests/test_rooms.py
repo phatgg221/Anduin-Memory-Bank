@@ -120,3 +120,26 @@ def test_people_lists_only_active_users(client, sql):
     elena, _ = two_users(client, sql)
     names = [p["name"] for p in client.get("/api/rooms/people", headers=elena).json()]
     assert names == ["Elena Rostova", "Ryan Miller"]
+
+
+def test_writes_are_published_to_the_department_room(client, sql, monkeypatch):
+    from app.core import realtime
+
+    published = []
+
+    async def capture(department_id, event):
+        published.append((department_id, event["type"], event.get("reason")))
+
+    monkeypatch.setattr(realtime, "publish", capture)
+    elena, ryan = two_users(client, sql)
+    message = post(client, ryan, "Live? #CASE-2026-047").json()
+    ryan_id = client.get("/api/auth/me", headers=ryan).json()["id"]
+    client.delete(f"{ROOM}/members/{ryan_id}", headers=elena)
+    client.put(f"{ROOM}/pinned-case", json={"case_id": None}, headers=elena)
+
+    assert published == [
+        ("LEGAL_COMPLIANCE", "message.created", None),
+        ("LEGAL_COMPLIANCE", "room.changed", "members"),
+        ("LEGAL_COMPLIANCE", "room.changed", "pinned_case"),
+    ]
+    assert message["tagged_case_codes"] == ["CASE-2026-047"]

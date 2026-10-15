@@ -14,6 +14,8 @@ from fastapi.testclient import TestClient
 _dev = urlsplit(os.environ.get("DATABASE_URL", "postgresql+asyncpg://memory:memory@localhost:5433/memory_bank"))
 TEST_DB = _dev.path.lstrip("/") + "_test"
 os.environ["DATABASE_URL"] = urlunsplit(_dev._replace(path=f"/{TEST_DB}"))
+# Tests never publish to the running PartyKit server; test_rooms checks publishing with a stub.
+os.environ["REALTIME_URL"] = ""
 
 
 def _dsn(database: str) -> str:

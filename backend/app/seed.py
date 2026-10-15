@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import SessionLocal, engine
-from app.core.security import UNUSABLE_PASSWORD
+from app.core.security import UNUSABLE_PASSWORD, hash_password, verify_password
 from app.core.storage import ensure_bucket, internal
 from app.modules.auth.models import User
 from app.modules.cases.models import CaseArtifact, CaseRecord, ChannelMessage
@@ -58,10 +58,25 @@ async def seed_users(session: AsyncSession) -> dict[str, uuid.UUID]:
         for key in USER_FIELDS:
             setattr(user, key, row[key])
         user.departed_at = date.fromisoformat(row["departed_at"]) if row["departed_at"] else None
+        user.password_hash = await demo_password_hash(user)
         session.add(user)
         await session.flush()
         handles[row["handle"]] = user.id
     return handles
+
+
+async def demo_password_hash(user: User) -> str:
+    """Dev only: SEED_DEMO_PASSWORD lets you sign in as active seeded colleagues to test the war rooms.
+
+    Unset (the default) or alumni → unusable password, so nobody can sign in as them.
+    """
+    password = os.environ.get("SEED_DEMO_PASSWORD", "")
+    if not password or not user.is_active:
+        return UNUSABLE_PASSWORD
+    current = user.password_hash
+    if current and current != UNUSABLE_PASSWORD and await asyncio.to_thread(verify_password, password, current):
+        return current
+    return await asyncio.to_thread(hash_password, password)
 
 
 async def link_operator(session: AsyncSession, row: dict[str, Any]) -> uuid.UUID | None:

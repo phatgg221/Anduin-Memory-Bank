@@ -36,6 +36,7 @@ Dev tools:  pgweb → postgres (:8081)   ·   Mailpit UI (:8025)   ·   MinIO co
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | 9000 (S3 API), 9001 (console) | Case artifacts + intake uploads |
 | `mailpit` | `axllent/mailpit:v1.31.5` | 1025 (SMTP), 8025 (UI) | Captures outbound email in dev (purpose TBD — see CONTEXT §7) |
 | `pgweb` | `sosedoff/pgweb:0.17.0` | 8081 (**127.0.0.1 only**) | DB browser for development: no auth, full read/write, so it's never exposed to the network |
+| `realtime` | `./realtime` (PartyKit 0.0.115 on Node 22) | **1999** | War-room websockets: one PartyKit room per department. Stateless fan-out; the API publishes persisted events |
 
 All host ports can be changed in `.env`. Postgres defaults to host port 5433 so it doesn't clash with a native Postgres on 5432. Inside the Docker network every service uses its standard port.
 
@@ -277,6 +278,7 @@ Expired and revoked token rows are not cleaned up yet. Add a periodic purge (e.g
 | `room_messages` | `rooms` | `id` (client-generated, idempotent send) · `seq` identity (polling cursor) · `department_id` · `user_id` · `content` · `tagged_case_codes` jsonb · `attached_artifact_id` · `is_milestone` | `#CASE-YYYY-NNN` tags are validated by code on write |
 | `room_reads` | `rooms` | (`department_id`, `user_id`) PK · `last_read_seq` | Unread = messages by others above the marker; the marker only moves forward |
 
+- **Realtime (PartyKit, `realtime/party/server.ts`):** PartyKit room id = department id. After a room write commits, the API POSTs `message.created` / `room.changed` to `http://realtime:1999/parties/main/{dept}` with the shared `x-realtime-secret` (`app/core/realtime.py`, best effort, 1 s timeout). Browsers connect with `partysocket` and send `{type: "auth", token, user}` as the first frame; the room verifies the HS256 access token (same `JWT_SECRET`) and closes unauthenticated sockets after 5 s (code 4001). Rooms also relay presence and typing. Tokens never go in the socket URL.
 - **War Room API:** `GET /api/rooms` (summaries + unread) · `GET /api/rooms/people` · `GET /api/rooms/{dept}` (whole screen in one request) · `GET /api/rooms/{dept}/messages?after_seq=` (polled every 3 s) · `POST …/messages` · `PUT|DELETE …/members/{user_id}` · `PUT …/pinned-case` · `PUT …/read`.
 - **JSONB shapes** (camelCase keys, as in the seed pack): `pitfalls[] = {warning, severity, reference, authorId, messageId}`; `comparison_results[] = {caseCode, caseId, similarityScore, howPastCaseWent, pitfallWarnings[], deltaItems[{category, pastApproach, currentRequirement, status, actionRecommendation, sourceArtifact, sourceArtifactId}]}`.
 - **Module dependencies:** `org` imports only `core`; `auth.models` references `org.Department`; `cases` imports `auth.models` and `org.models`. Relationships are `lazy="raise"`.
@@ -411,7 +413,7 @@ Container dev notes:
 | # | Decision | Status | Why |
 |---|---|---|---|
 | D1 | Monorepo; everything in Docker Compose; root `bun` scripts | Accepted | Brief |
-| D2 | Browser → backend only via the Next `/api` rewrite; presigned MinIO GETs are the sole exception | Accepted | Brief; same-origin, no CORS |
+| D2 | Browser → backend only via the Next `/api` rewrite; exceptions: presigned MinIO GETs, and the PartyKit war-room websocket (ws://localhost:REALTIME_PORT, authenticated in-band) | Accepted | Brief; same-origin, no CORS |
 | D3 | FastAPI routes mounted under `/api`; the rewrite forwards the path unchanged | Proposed | One URL shape everywhere; Swagger reachable through the proxy |
 | D4 | Async SQLAlchemy 2.0 + asyncpg | Proposed | Matches async FastAPI + async LLM I/O |
 | D5 | Alembic migrations own the schema (config in `pyproject.toml`); the container runs `upgrade head` on start; `create_all` is never used | Accepted | Tables now exist (auth). Changes must apply to existing DBs, not just fresh ones |
@@ -421,7 +423,7 @@ Container dev notes:
 | D9 | Embeddings: one model + dim for the whole corpus, cosine distance | Proposed | `vector` columns have a fixed dimension |
 | D10 | The LLM never sets IDs or scores; code overwrites them after parsing | Proposed | Kills a whole class of hallucinations |
 | D11 | Two MinIO clients: internal + public signer | Accepted | Required for presigned links to work from the browser |
-| D12 | Polling (~2 s) rather than SSE / WebSockets | Proposed | Works through the rewrite proxy with no extra infra |
+| D12 | Job progress polls (~2 s). War rooms use PartyKit websockets, with polling kept as a fallback (3 s while offline, 30 s while live) | Accepted | Chat needs push; the DB stays the source of truth, so a realtime outage only delays updates |
 | D13 | The pipeline returns results; the triage worker persists them | Proposed | Keeps `intelligence` free of table writes (dependency direction) |
 | D14 | Object storage runs `pgsty/minio` (community MinIO build), pinned by release tag | Accepted | Official `minio/minio` images are gone from Docker Hub and Quay. S3 API and SDK are unchanged |
 | D15 | Keep Next's Cache Components + Partial Prefetching on; dynamic segments ship a `loading.tsx` | Accepted | create-next-app default; mandatory in the next major |

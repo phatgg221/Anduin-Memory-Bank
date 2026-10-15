@@ -1,10 +1,17 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { retryTransient, type ApiRequestError } from "@/lib/apiError";
+import { connectRoom, type RoomConnection } from "@/services/realtimeService";
 import { roomsService } from "@/services/roomsService";
+import type { Presence, SocketStatus } from "@/types/realtime";
 import type { RoomMessage, RoomPerson, RoomSummary, RoomView, SendMessageInput } from "@/types/rooms";
 import { queryKeys } from "./queryKeys";
 
 const POLL_MS = 3_000;
+/** While the socket is live, polling only backstops missed events. */
+const FALLBACK_POLL_MS = 30_000;
+const TYPING_VISIBLE_MS = 4_000;
+const TYPING_THROTTLE_MS = 2_000;
 
 export function useRooms(enabled = true) {
   return useQuery<RoomSummary[], ApiRequestError>({
@@ -52,7 +59,7 @@ function updateRoom(client: QueryClient, departmentId: string, update: (view: Ro
 }
 
 /** Polls for messages newer than the last one on screen and merges them into the room view. */
-export function useRoomPolling(departmentId: string | null, enabled: boolean) {
+export function useRoomPolling(departmentId: string | null, enabled: boolean, live = false) {
   const queryClient = useQueryClient();
   return useQuery({
     queryKey: queryKeys.rooms.poll(departmentId ?? ""),
@@ -64,7 +71,7 @@ export function useRoomPolling(departmentId: string | null, enabled: boolean) {
       return incoming.length;
     },
     enabled: enabled && departmentId !== null,
-    refetchInterval: POLL_MS,
+    refetchInterval: live ? FALLBACK_POLL_MS : POLL_MS,
     refetchIntervalInBackground: false,
   });
 }
@@ -179,4 +186,67 @@ export function useSetPinnedCase(departmentId: string) {
     mutationFn: (caseId) => roomsService.setPinnedCase(departmentId, caseId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.rooms.room(departmentId) }),
   });
+}
+
+/**
+ * Live connection to the department's PartyKit room: new messages and room changes land in the cache as they
+ * happen, plus who's online and who's typing. Polling keeps running as a fallback.
+ */
+export function useRoomSocket(departmentId: string | null, me: Presence | undefined) {
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState<SocketStatus>("offline");
+  const [online, setOnline] = useState<Presence[]>([]);
+  const [typing, setTyping] = useState<Record<string, { user: Presence; until: number }>>({});
+  const connection = useRef<RoomConnection | null>(null);
+  const lastTypingSent = useRef(0);
+  const meId = me?.id;
+  const meName = me?.name;
+  const meInitials = me?.avatar_initials;
+
+  useEffect(() => {
+    if (!departmentId || !meId || !meName || !meInitials) return;
+    const self = { id: meId, name: meName, avatar_initials: meInitials };
+    connection.current = connectRoom(departmentId, self, {
+      onStatus: setStatus,
+      onEvent: (event) => {
+        if (event.type === "ready" || event.type === "presence") setOnline(event.presence);
+        else if (event.type === "typing") {
+          setTyping((current) => ({ ...current, [event.user.id]: { user: event.user, until: Date.now() + TYPING_VISIBLE_MS } }));
+        } else if (event.type === "message.created") {
+          updateRoom(queryClient, departmentId, (view) => mergeMessages(view, [event.message]));
+          const authorId = event.message.author?.id;
+          setTyping((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== authorId)));
+        } else if (event.type === "room.changed") {
+          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.room(departmentId) });
+          queryClient.invalidateQueries({ queryKey: queryKeys.rooms.list });
+        }
+      },
+    });
+    return () => {
+      connection.current?.close();
+      connection.current = null;
+      setOnline([]);
+      setTyping({});
+      setStatus("offline");
+    };
+  }, [departmentId, meId, meName, meInitials, queryClient]);
+
+  // Expire typing indicators.
+  useEffect(() => {
+    if (Object.keys(typing).length === 0) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setTyping((current) => Object.fromEntries(Object.entries(current).filter(([, t]) => t.until > now)));
+    }, 1_000);
+    return () => clearInterval(timer);
+  }, [typing]);
+
+  const notifyTyping = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTypingSent.current < TYPING_THROTTLE_MS) return;
+    lastTypingSent.current = now;
+    connection.current?.sendTyping();
+  }, []);
+
+  return { status, online, typing: Object.values(typing).map((t) => t.user), notifyTyping };
 }

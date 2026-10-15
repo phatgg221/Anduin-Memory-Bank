@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Response, status
 
+from app.core import realtime
 from app.core.db import SessionDep
 from app.modules.auth.deps import CurrentUser
 from app.modules.rooms import service
@@ -56,7 +57,9 @@ async def post_message(department_id: str, data: MessageIn, user: CurrentUser, s
         message = await service.post_message(session, user, department_id, data.id, data.content, data.is_milestone)
     except (service.NotFoundError, service.ConflictError) as error:
         raise _http(error) from None
-    return MessageOut.model_validate(message)
+    out = MessageOut.model_validate(message)
+    await realtime.publish(department_id, {"type": "message.created", "message": out.model_dump(mode="json")})
+    return out
 
 
 @router.put("/{department_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -65,6 +68,7 @@ async def add_member(department_id: str, user_id: uuid.UUID, user: CurrentUser, 
         await service.add_member(session, department_id, user_id)
     except (service.NotFoundError, service.InvalidError) as error:
         raise _http(error) from None
+    await realtime.room_changed(department_id, "members")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -74,6 +78,7 @@ async def remove_member(department_id: str, user_id: uuid.UUID, user: CurrentUse
         await service.remove_member(session, department_id, user_id)
     except (service.NotFoundError, service.ConflictError) as error:
         raise _http(error) from None
+    await realtime.room_changed(department_id, "members")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -83,6 +88,7 @@ async def set_pinned_case(department_id: str, data: PinIn, user: CurrentUser, se
         await service.set_pinned_case(session, department_id, data.case_id)
     except service.NotFoundError as error:
         raise _http(error) from None
+    await realtime.room_changed(department_id, "pinned_case")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

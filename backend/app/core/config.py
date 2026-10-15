@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     openrouter_api_key: str | None = None
 
+    # PartyKit realtime service: the API POSTs persisted war-room events to it. Unset = realtime off (tests).
+    realtime_url: str | None = None
+    realtime_secret: str = ""
+
     # HS256 signing key. `bun run setup` / `bun run dev` generate one into .env.
     jwt_secret: str = Field(min_length=32)
     access_token_ttl_minutes: int = 15

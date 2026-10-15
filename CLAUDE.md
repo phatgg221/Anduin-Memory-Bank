@@ -31,14 +31,14 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
   - Every user sees every department (no RBAC walls in the MVP); the department switcher only filters.
   - Still undecided: the job table for ANALYZE/SUMMARIZE runs. Don't invent it without asking.
 - **Seed pack loaded by `bun run seed`:** 5 departments, 7 colleagues (2 ALUMNI) plus your account via `SEED_OPERATOR_EMAIL`, 8 resolved cases, 3 open demo channels with pre-computed `comparison_results`, 26 artifacts in MinIO. Knowledge chunks aren't embedded yet.
-- **Built UI:** War Room (landing tab: one chat per department, lead + department members by default, pinned case with its precedents, 3 s polling, optimistic send), Workbench (empty 3-pane frame), Knowledge Vault (resolved cases + files by department). The header department switcher is saved per user (`users.active_department_id`).
+- **Built UI:** War Room (landing tab: one chat per department, lead + department members by default, pinned case with its precedents, PartyKit websockets for live messages/presence/typing with polling as fallback, optimistic send), Workbench (empty 3-pane frame), Knowledge Vault (resolved cases + files by department). The header department switcher is saved per user (`users.active_department_id`).
 - Not built yet: file upload in chat, the job worker/sweeper, the intelligence pipeline, and the workbench panes.
 - `PLAN.md` is still to be written.
 - If a task needs a product decision (CONTEXT.md §7, DESIGN.md §8), ask instead of guessing.
 
 ## Non-negotiables
 
-- The browser reaches the backend only via the Next `/api/*` rewrite. The sole exception is presigned MinIO GETs for raw files.
+- The browser reaches the backend only via the Next `/api/*` rewrite. Exceptions: presigned MinIO GETs for raw files, and the PartyKit war-room websocket (`realtime/`, port 1999), which authenticates with the access token as its first message, never in the URL.
 - Frontend: `page → store hook (React Query) → service → lib/axiosClient → /api`. Components are presentational. ESLint enforces this.
 - **No N+1 fetching from the UI:** a fixed number of requests per screen, never one per row. The backend serves view-shaped endpoints with a fixed number of SQL queries.
 - **UI first:** mutations are optimistic. Update the cache, send the request, roll back and notify on error (after retrying transient failures), then re-sync. Writes are idempotent. Exceptions: auth, server-computed results, irreversible actions.
@@ -57,4 +57,4 @@ Migrations: `bun run db:revision "msg" [--empty]` · `db:migrate` · `db:downgra
 
 - Before calling a frontend route done, run `bun run build` in `frontend/`. Cache Components errors only show up at build time.
 - After adding frontend dependencies (`bun add`, `shadcn add`), run `bun run dev` so the container picks them up.
-- Postgres is published on host port 5433.
+- Postgres is published on host port 5433. PartyKit (`realtime` service) on 1999; `bun run dev` generates `REALTIME_SECRET` like `JWT_SECRET`.

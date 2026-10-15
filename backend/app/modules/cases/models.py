@@ -117,9 +117,7 @@ class ChannelMessage(Base):
     case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("case_records.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     content: Mapped[str] = mapped_column(Text)
-    attached_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("case_artifacts.id", ondelete="SET NULL")
-    )
+    attached_artifact_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("case_artifacts.id", ondelete="SET NULL"))
     is_resolution_milestone: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
