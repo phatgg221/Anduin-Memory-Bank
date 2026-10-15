@@ -15,6 +15,7 @@ interface CopilotPanelProps {
   onAsk: (question: string) => void;
   onCaseClick: (caseCode: string) => void;
   error?: string;
+  hideTitle?: boolean;
 }
 
 const CITATION = /(\[CASE-\d{4}-\d{3}\])/g;
@@ -36,7 +37,7 @@ function Answer({ text, onCaseClick }: { text: string; onCaseClick: (code: strin
 }
 
 /** `■ 03B / DEJAVU AI MEMORY COPILOT` — grounded Q&A over this case and the Memory Bank. */
-export function CopilotPanel({ messages, jobs, chips, onAsk, onCaseClick, error }: CopilotPanelProps) {
+export function CopilotPanel({ messages, jobs, chips, onAsk, onCaseClick, error, hideTitle }: CopilotPanelProps) {
   const [question, setQuestion] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const thinking = jobs.find((j) => j.status === "QUEUED" || j.status === "PROCESSING");
@@ -58,7 +59,7 @@ export function CopilotPanel({ messages, jobs, chips, onAsk, onCaseClick, error 
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3">
-      <SectionLabel>Dejavu memory copilot</SectionLabel>
+      {!hideTitle && <SectionLabel>Dejavu memory copilot</SectionLabel>}
       <div ref={listRef} className="flex min-h-32 flex-1 flex-col gap-3 overflow-y-auto">
         {messages.length === 0 && !thinking && (
           <p className="text-xs text-muted-foreground">

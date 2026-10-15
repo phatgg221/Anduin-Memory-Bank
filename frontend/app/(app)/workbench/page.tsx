@@ -3,6 +3,11 @@
 import { PanelLeft, PanelRight } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  useDefaultLayout,
+  usePanelRef,
+  type LayoutStorage,
+} from "react-resizable-panels";
+import {
   Suspense,
   useEffect,
   useMemo,
@@ -21,10 +26,15 @@ import { MessageThread } from "@/components/rooms/MessageThread";
 import { PanelToggle } from "@/components/rooms/PanelToggle";
 import { SystemStatus } from "@/components/system/SystemStatus";
 import { Button } from "@/components/ui/button";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CaseHeader } from "@/components/workspace/CaseHeader";
 import { CaseRoomList } from "@/components/workspace/CaseRoomList";
-import { CopilotPanel } from "@/components/workspace/CopilotPanel";
+import { CopilotPopup } from "@/components/workspace/CopilotPopup";
 import { EmptyWorkspace } from "@/components/workspace/EmptyWorkspace";
 import {
   IntakePanel,
@@ -71,6 +81,12 @@ import { useOpenArtifact } from "@/store/vault";
 import type { RoomPerson } from "@/types/rooms";
 
 type Panel = "left" | "right";
+
+const layoutStorage: LayoutStorage = {
+  getItem: (key) =>
+    typeof window === "undefined" ? null : window.localStorage.getItem(key),
+  setItem: (key, value) => window.localStorage.setItem(key, value),
+};
 type Tab = "delta" | "channel" | "details";
 
 // useSearchParams needs a Suspense boundary under Cache Components.
@@ -184,7 +200,7 @@ function Workbench() {
   }, [roomMode, roomView, newestRoomSeq, markReadUpTo]);
 
   // Panels: columns on wide screens (collapsible), drawers on narrow ones. The centre always stays.
-  const isWide = useMediaQuery("(min-width: 1024px)");
+  const isWide = useMediaQuery("(min-width: 1024px)", false);
   const [wideOpen, setWideOpen] = useState<Record<Panel, boolean>>({
     left: true,
     right: true,
@@ -192,10 +208,22 @@ function Workbench() {
   const [drawer, setDrawer] = useState<Panel | null>(null);
   const isOpen = (panel: Panel) =>
     isWide ? wideOpen[panel] : drawer === panel;
+  const panelRefs = { left: usePanelRef(), right: usePanelRef() };
   const toggle = (panel: Panel) => {
-    if (isWide) setWideOpen((open) => ({ ...open, [panel]: !open[panel] }));
-    else setDrawer((current) => (current === panel ? null : panel));
+    if (!isWide)
+      return setDrawer((current) => (current === panel ? null : panel));
+    const ref = panelRefs[panel].current;
+    if (ref?.isCollapsed()) ref.expand();
+    else ref?.collapse();
   };
+  const syncOpen = (panel: Panel, pixels: number) =>
+    setWideOpen((open) =>
+      open[panel] === pixels > 0 ? open : { ...open, [panel]: pixels > 0 },
+    );
+  const workspaceLayout = useDefaultLayout({
+    id: "dejavu-workspace",
+    storage: layoutStorage,
+  });
   useEffect(() => {
     if (!drawer) return;
     const onKey = (event: KeyboardEvent) =>
@@ -203,17 +231,11 @@ function Workbench() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [drawer]);
-  const panelClass = (panel: Panel) =>
+  const drawerClass = (panel: Panel) =>
     cn(
-      "flex-col overflow-y-auto",
-      !isOpen(panel) && "hidden",
-      isOpen(panel) &&
-        (isWide
-          ? "flex shrink-0"
-          : "fixed top-14 bottom-0 z-30 flex w-[min(360px,90vw)]"),
-      panel === "left"
-        ? "left-0 border-r bg-surface-2 lg:w-[320px]"
-        : "right-0 border-l bg-surface-2 lg:w-[340px]",
+      "fixed top-14 bottom-0 z-30 w-[min(360px,90vw)] flex-col overflow-y-auto bg-surface-2",
+      drawer === panel ? "flex" : "hidden",
+      panel === "left" ? "left-0 border-r" : "right-0 border-l",
     );
 
   const go = (query: string) => {
@@ -431,133 +453,114 @@ function Workbench() {
         </>
       );
     } else {
-      const tabs: { id: Tab; label: string }[] = [
-        { id: "delta", label: `Precedent & delta (${t.precedents.length})` },
-        { id: "channel", label: `Case channel (${t.messages.length})` },
-        { id: "details", label: "Details" },
-      ];
+      const deltaView = (
+        <div className="@container min-h-0 flex-1 overflow-y-auto">
+          <PrecedentDelta
+            key={t.id}
+            precedents={t.precedents}
+            departmentCodes={departmentCodes}
+            analysis={analysisJob}
+            onRunAnalysis={
+              isOpenCase
+                ? () =>
+                    analyze.mutate({
+                      caseId: t.id,
+                      jobId: crypto.randomUUID(),
+                    })
+                : undefined
+            }
+            isStarting={analyze.isPending}
+            onOpenFile={handleOpenArtifact}
+            onOpenVault={() => router.push("/vault")}
+            onOpenChannel={() => setTab("channel")}
+          />
+        </div>
+      );
+      const channelView = (
+        <>
+          {top && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-surface-2 px-6 py-2 text-xs text-muted-foreground">
+              <span className="micro-label text-navy">Dejavu</span>
+              Closest precedent:{" "}
+              <span className="font-medium text-ink">{top.case_code}</span> (
+              {top.similarity_score}%)
+              {top.lead_is_alumni &&
+                top.lead_name &&
+                ` · led by ${top.lead_name} (alumni)`}
+            </div>
+          )}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {t.messages.length === 0 ? (
+              <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+                No messages yet. Kick off {t.case_code} with the team.
+              </p>
+            ) : (
+              <MessageThread
+                messages={t.messages}
+                lastReadSeq={Infinity}
+                currentUserId={user!.id}
+                onOpenArtifact={handleOpenArtifact}
+                onCaseClick={handleCaseClick}
+              />
+            )}
+          </div>
+          {isOpenCase ? (
+            <Composer
+              roomName={t.channel_slug}
+              onSend={(content, isMilestone) =>
+                me && sendThread.mutate(newMessage(content, isMilestone))
+              }
+              onTyping={socket.notifyTyping}
+              typingNames={socket.typing.map((p) => p.name)}
+              error={sendThread.error?.message}
+            />
+          ) : (
+            <MemoryBanner
+              summary={t.summary}
+              resolvedAt={t.resolved_at}
+              indexJob={jobs.data?.index ?? null}
+            />
+          )}
+        </>
+      );
+      const detailsView = (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="max-w-3xl">
+            <CaseDetailsPanel
+              key={t.id}
+              thread={t}
+              departments={departments.data ?? []}
+              people={people.data ?? []}
+              onSave={(input) => updateCase.mutate(input)}
+              isSaving={updateCase.isPending}
+              error={updateCase.error?.message}
+              fieldErrors={updateCase.error?.fieldErrors}
+              onOpenFile={handleOpenArtifact}
+            />
+          </div>
+        </div>
+      );
+      const deltaTab = {
+        id: "delta" as const,
+        label: `Precedent & delta (${t.precedents.length})`,
+      };
+      const channelTab = {
+        id: "channel" as const,
+        label: `Case channel (${t.messages.length})`,
+      };
+      const detailsTab = { id: "details" as const, label: "Details" };
+
       centre = (
         <>
           {header}
-          <div
-            role="tablist"
-            aria-label="Case views"
-            className="flex shrink-0 border-b"
-          >
-            {tabs.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                role="tab"
-                aria-selected={tab === item.id}
-                onClick={() => setTab(item.id)}
-                className={cn(
-                  "micro-label relative flex items-center gap-2 border-r px-4 py-3 hover:bg-surface-2",
-                  tab === item.id
-                    ? "text-navy after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-navy"
-                    : "text-muted-foreground",
-                )}
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    "size-1.5",
-                    tab === item.id ? "bg-navy" : "bg-hairline",
-                  )}
-                />
-                {item.label}
-              </button>
-            ))}
-          </div>
-          {tab === "delta" && (
-            <div className="@container min-h-0 flex-1 overflow-y-auto">
-              <PrecedentDelta
-                key={t.id}
-                precedents={t.precedents}
-                departmentCodes={departmentCodes}
-                analysis={analysisJob}
-                onRunAnalysis={
-                  isOpenCase
-                    ? () =>
-                        analyze.mutate({
-                          caseId: t.id,
-                          jobId: crypto.randomUUID(),
-                        })
-                    : undefined
-                }
-                isStarting={analyze.isPending}
-                onOpenFile={handleOpenArtifact}
-                onOpenVault={() => router.push("/vault")}
-                onOpenChannel={() => setTab("channel")}
-              />
-            </div>
-          )}
-          {tab === "channel" && (
-            <>
-              {top && (
-                <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-surface-2 px-6 py-2 text-xs text-muted-foreground">
-                  <span className="micro-label text-navy">Dejavu</span>
-                  Closest precedent:{" "}
-                  <span className="font-medium text-ink">
-                    {top.case_code}
-                  </span>{" "}
-                  ({top.similarity_score}%)
-                  {top.lead_is_alumni &&
-                    top.lead_name &&
-                    ` · led by ${top.lead_name} (alumni)`}
-                </div>
-              )}
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                {t.messages.length === 0 ? (
-                  <p className="px-6 py-10 text-center text-sm text-muted-foreground">
-                    No messages yet. Kick off {t.case_code} with the team.
-                  </p>
-                ) : (
-                  <MessageThread
-                    messages={t.messages}
-                    lastReadSeq={Infinity}
-                    currentUserId={user!.id}
-                    onOpenArtifact={handleOpenArtifact}
-                    onCaseClick={handleCaseClick}
-                  />
-                )}
-              </div>
-              {isOpenCase ? (
-                <Composer
-                  roomName={t.channel_slug}
-                  onSend={(content, isMilestone) =>
-                    me && sendThread.mutate(newMessage(content, isMilestone))
-                  }
-                  onTyping={socket.notifyTyping}
-                  typingNames={socket.typing.map((p) => p.name)}
-                  error={sendThread.error?.message}
-                />
-              ) : (
-                <MemoryBanner
-                  summary={t.summary}
-                  resolvedAt={t.resolved_at}
-                  indexJob={jobs.data?.index ?? null}
-                />
-              )}
-            </>
-          )}
-          {tab === "details" && (
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="max-w-3xl">
-                <CaseDetailsPanel
-                  key={t.id}
-                  thread={t}
-                  departments={departments.data ?? []}
-                  people={people.data ?? []}
-                  onSave={(input) => updateCase.mutate(input)}
-                  isSaving={updateCase.isPending}
-                  error={updateCase.error?.message}
-                  fieldErrors={updateCase.error?.fieldErrors}
-                  onOpenFile={handleOpenArtifact}
-                />
-              </div>
-            </div>
-          )}
+          <TabBar
+            tabs={[deltaTab, channelTab, detailsTab]}
+            active={tab}
+            onSelect={setTab}
+          />
+          {tab === "delta" && deltaView}
+          {tab === "channel" && channelView}
+          {tab === "details" && detailsView}
         </>
       );
     }
@@ -634,42 +637,24 @@ function Workbench() {
   let right: ReactNode;
   if (t && !reviewing) {
     right = (
-      <div className="flex h-full flex-col">
-        <div className="max-h-[50%] shrink-0 overflow-y-auto border-b p-5">
-          <ReusableKit
-            precedents={t.precedents}
-            ownFiles={t.artifacts}
-            usedFileIds={usedFileIds}
-            canUse={isOpenCase}
-            onPreview={handleOpenArtifact}
-            onUse={(file) => {
-              sendThread.mutate(
-                newMessage(
-                  `Reusing ${file.name} from ${file.caseCode}.`,
-                  false,
-                  file.id,
-                ),
-              );
-              setTab("channel");
-            }}
-          />
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col p-5">
-          <CopilotPanel
-            messages={copilot.data?.messages ?? []}
-            jobs={copilot.data?.jobs ?? []}
-            chips={chips}
-            error={askCopilot.error?.message ?? copilot.error?.message}
-            onCaseClick={handleCaseClick}
-            onAsk={(question) =>
-              askCopilot.mutate({
-                message_id: crypto.randomUUID(),
-                job_id: crypto.randomUUID(),
-                question,
-              })
-            }
-          />
-        </div>
+      <div className="p-5">
+        <ReusableKit
+          precedents={t.precedents}
+          ownFiles={t.artifacts}
+          usedFileIds={usedFileIds}
+          canUse={isOpenCase}
+          onPreview={handleOpenArtifact}
+          onUse={(file) => {
+            sendThread.mutate(
+              newMessage(
+                `Reusing ${file.name} from ${file.caseCode}.`,
+                false,
+                file.id,
+              ),
+            );
+            setTab("channel");
+          }}
+        />
       </div>
     );
   } else if (roomMode && roomView && me) {
@@ -690,79 +675,196 @@ function Workbench() {
   } else {
     right = (
       <div className="flex flex-col gap-3 p-5">
-        <SectionLabel index={3}>Reusable kit &amp; copilot</SectionLabel>
+        <SectionLabel index={3}>Reusable kit</SectionLabel>
         <p className="text-sm text-muted-foreground">
           Open a case to see the deliverables rescued from its matched past
-          cases and to ask the memory copilot about it.
+          cases.
         </p>
       </div>
     );
   }
 
+  const leftBody = (
+    <div className="flex flex-col gap-6 p-5">
+      <IntakePanel
+        scenarios={DEMO_SCENARIOS}
+        fundSuggestions={fundSuggestions}
+        onRun={runIntake}
+        isRunning={runStage !== null}
+        runLabel={runStage ?? undefined}
+        error={runError}
+      />
+      <div className="border-t" />
+      {openCases.data ? (
+        <CaseRoomList
+          rooms={openCases.data}
+          activeCaseId={caseId}
+          departmentCodes={departmentCodes}
+          onSelect={(id) => openCase(id, tab)}
+          departmentRoom={
+            departmentRoom
+              ? {
+                  code: departmentRoom.code,
+                  unread: departmentRoom.unread_count,
+                }
+              : null
+          }
+          departmentRoomActive={roomMode}
+          onSelectDepartmentRoom={() => go("?room=1")}
+        />
+      ) : (
+        <Skeleton className="h-48" />
+      )}
+    </div>
+  );
+  const leftLabel = "Intake and active case rooms";
+  const rightLabel = "Reusable kit";
+
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
       <div className="relative flex min-h-0 flex-1">
-        {drawer && (
-          <button
-            type="button"
-            aria-label="Close panel"
-            onClick={() => setDrawer(null)}
-            className="fixed inset-x-0 top-14 bottom-0 z-20 bg-navy/20 lg:hidden"
-          />
-        )}
-
-        <aside
-          aria-label="Intake and active case rooms"
-          className={panelClass("left")}
-        >
-          <div className="flex flex-col gap-6 p-5">
-            <IntakePanel
-              scenarios={DEMO_SCENARIOS}
-              fundSuggestions={fundSuggestions}
-              onRun={runIntake}
-              isRunning={runStage !== null}
-              runLabel={runStage ?? undefined}
-              error={runError}
-            />
-            <div className="border-t" />
-            {openCases.data ? (
-              <CaseRoomList
-                rooms={openCases.data}
-                activeCaseId={caseId}
-                departmentCodes={departmentCodes}
-                onSelect={(id) => openCase(id, tab)}
-                departmentRoom={
-                  departmentRoom
-                    ? {
-                        code: departmentRoom.code,
-                        unread: departmentRoom.unread_count,
-                      }
-                    : null
-                }
-                departmentRoomActive={roomMode}
-                onSelectDepartmentRoom={() => go("?room=1")}
+        {isWide ? (
+          <ResizablePanelGroup
+            orientation="horizontal"
+            id="dejavu-workspace"
+            defaultLayout={workspaceLayout.defaultLayout}
+            onLayoutChanged={workspaceLayout.onLayoutChanged}
+          >
+            <ResizablePanel
+              id="left"
+              panelRef={panelRefs.left}
+              defaultSize="22"
+              minSize={260}
+              maxSize="40"
+              collapsible
+              collapsedSize={0}
+              onResize={(size) => syncOpen("left", size.inPixels)}
+            >
+              <aside
+                aria-label={leftLabel}
+                className="h-full overflow-y-auto bg-surface-2"
+              >
+                {leftBody}
+              </aside>
+            </ResizablePanel>
+            <SplitHandle />
+            <ResizablePanel id="centre" minSize="30">
+              <section className="flex h-full min-h-0 min-w-0 flex-col">
+                {centre}
+              </section>
+            </ResizablePanel>
+            <SplitHandle />
+            <ResizablePanel
+              id="right"
+              panelRef={panelRefs.right}
+              defaultSize="22"
+              minSize={260}
+              maxSize="40"
+              collapsible
+              collapsedSize={0}
+              onResize={(size) => syncOpen("right", size.inPixels)}
+            >
+              <aside
+                aria-label={rightLabel}
+                className="h-full overflow-y-auto bg-surface-2"
+              >
+                {right}
+              </aside>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        ) : (
+          <>
+            {drawer && (
+              <button
+                type="button"
+                aria-label="Close panel"
+                onClick={() => setDrawer(null)}
+                className="fixed inset-x-0 top-14 bottom-0 z-20 bg-navy/20"
               />
-            ) : (
-              <Skeleton className="h-48" />
             )}
-          </div>
-        </aside>
+            <aside aria-label={leftLabel} className={drawerClass("left")}>
+              {leftBody}
+            </aside>
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {centre}
+            </section>
+            <aside aria-label={rightLabel} className={drawerClass("right")}>
+              {right}
+            </aside>
+          </>
+        )}
+      </div>
+      {t && (
+        <CopilotPopup
+          key={t.id}
+          caseCode={t.case_code}
+          messages={copilot.data?.messages ?? []}
+          jobs={copilot.data?.jobs ?? []}
+          chips={chips}
+          error={askCopilot.error?.message ?? copilot.error?.message}
+          onCaseClick={handleCaseClick}
+          onAsk={(question) =>
+            askCopilot.mutate({
+              message_id: crypto.randomUUID(),
+              job_id: crypto.randomUUID(),
+              question,
+            })
+          }
+        />
+      )}
+      <SystemStatusBar />
+    </div>
+  );
+}
 
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {centre}
-        </section>
+function SplitHandle() {
+  return (
+    <ResizableHandle
+      withHandle
+      className="transition-colors hover:bg-brand-cyan data-[separator=active]:bg-brand-cyan"
+    />
+  );
+}
 
-        <aside
-          aria-label="Reusable kit and memory copilot"
+function TabBar({
+  tabs,
+  active,
+  onSelect,
+}: {
+  tabs: { id: Tab; label: string }[];
+  active: Tab;
+  onSelect?: (tab: Tab) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Case views"
+      className="flex shrink-0 overflow-x-auto border-b"
+    >
+      {tabs.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          role="tab"
+          aria-selected={active === item.id}
+          onClick={() => onSelect?.(item.id)}
           className={cn(
-            panelClass("right"),
-            t && !reviewing && "overflow-hidden",
+            "micro-label relative flex shrink-0 items-center gap-2 border-r px-4 py-3 hover:bg-surface-2",
+            active === item.id
+              ? "text-navy after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-navy"
+              : "text-muted-foreground",
           )}
         >
-          {right}
-        </aside>
-      </div>
-      <SystemStatusBar />
+          <span
+            aria-hidden
+            className={cn(
+              "size-1.5",
+              active === item.id ? "bg-navy" : "bg-hairline",
+            )}
+          />
+          {item.label}
+        </button>
+      ))}
     </div>
   );
 }

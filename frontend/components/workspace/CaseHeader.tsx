@@ -60,7 +60,7 @@ export function CaseHeader({ thread, status, onComplete, leftOpen, onToggleLeft,
           In memory
         </span>
       )}
-      <PanelToggle label={rightOpen ? "Hide kit and copilot" : "Show kit and copilot"} pressed={rightOpen} onClick={onToggleRight}>
+      <PanelToggle label={rightOpen ? "Hide reusable kit" : "Show reusable kit"} pressed={rightOpen} onClick={onToggleRight}>
         <PanelRight className="size-4" />
       </PanelToggle>
     </div>
