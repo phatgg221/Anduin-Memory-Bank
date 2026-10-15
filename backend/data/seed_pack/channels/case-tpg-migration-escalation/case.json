@@ -3,6 +3,8 @@
   "channelSlug": "case-tpg-migration-escalation",
   "title": "TPG Capital — DealCloud Legacy LP Migration, Multi-Currency Wires & Portal Invite Escalation",
   "client": "TPG Capital",
+  "fund": "TPG Capital legacy LP base (DealCloud migration)",
+  "sourceType": "CS_ESCALATION",
   "severity": "CRITICAL",
   "dueDate": "2026-10-31",
   "departmentId": "CUSTOMER_SUCCESS",

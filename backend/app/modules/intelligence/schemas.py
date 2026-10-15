@@ -84,3 +84,79 @@ class ThreadContext:
     due_date: str | None = None
     artifacts: list[str] = field(default_factory=list)
     room_mentions: list[TranscriptMessage] = field(default_factory=list)
+
+
+# --- ANALYZE: incoming request vs. top-3 precedents ------------------------------------------------------------
+
+
+class DeltaItemDraft(BaseModel):
+    category: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=120)] = Field(
+        description="The operational dimension, e.g. 'W-8BEN-E joint-signer routing'."
+    )
+    past_approach: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1200)]
+    current_requirement: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1200)]
+    status: Literal["REUSABLE", "MODIFIED", "NET_NEW"]
+    action_recommendation: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1200)]
+    source_artifact: str | None = Field(
+        default=None,
+        description="Exact file name from that precedent's <artifact> list, or null (always null for NET_NEW).",
+    )
+
+
+class PrecedentComparisonDraft(BaseModel):
+    case_code: str = Field(description="One of the precedent case codes given in the context.")
+    how_past_case_went: Annotated[str, StringConstraints(strip_whitespace=True, min_length=10, max_length=2000)]
+    pitfall_warnings: list[Annotated[str, StringConstraints(strip_whitespace=True, max_length=800)]] = Field(
+        default_factory=list, max_length=6
+    )
+    delta_items: list[DeltaItemDraft] = Field(default_factory=list, max_length=8)
+
+
+class CaseComparisonReport(BaseModel):
+    comparisons: list[PrecedentComparisonDraft] = Field(min_length=1, max_length=3)
+
+
+@dataclass
+class PrecedentContext:
+    """A retrieved past case, as the comparison sees it. Scores come from retrieval, never the model."""
+
+    case_id: uuid.UUID
+    case_code: str
+    title: str
+    client_name: str | None
+    summary: str
+    how_it_went: str
+    resolution_steps: list[str]
+    pitfalls: list[str]
+    artifacts: dict[str, uuid.UUID]  # file name → id
+    reusable_artifacts: list[str]
+    similarity: int
+    vector_similarity: float
+    boost: int
+
+
+@dataclass
+class IncomingRequest:
+    case_code: str
+    title: str
+    client_name: str | None
+    fund_name: str | None
+    source_type: str | None
+    brief: str
+    context_tags: dict[str, str]
+    file_texts: dict[str, str] = field(default_factory=dict)
+
+    def query_text(self) -> str:
+        files = "\n".join(f"{name}: {text[:1500]}" for name, text in self.file_texts.items())
+        tags = "; ".join(f"{k}: {v}" for k, v in self.context_tags.items())
+        return f"{self.title}\n{self.client_name or ''} · {self.fund_name or ''}\n{tags}\n{self.brief}\n{files}"[:8000]
+
+
+# --- COPILOT ---------------------------------------------------------------------------------------------------
+
+
+class CopilotAnswerDraft(BaseModel):
+    answer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)] = Field(
+        description="Plain text. Cite past cases inline as [CASE-YYYY-NNN] and files by exact file name."
+    )
+    cited_case_codes: list[str] = Field(default_factory=list, max_length=8)

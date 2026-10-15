@@ -3,6 +3,8 @@
   "channelSlug": "case-carlyle-asia-vi-fx",
   "title": "Carlyle Asia Buyout VI — Multi-Currency JPY/EUR Capital Call Wire FX Tolerance",
   "client": "The Carlyle Group",
+  "fund": "Carlyle Asia Buyout Partners VI, L.P.",
+  "sourceType": "CS_ESCALATION",
   "severity": "MEDIUM",
   "dueDate": "2025-10-15",
   "departmentId": "CLIENT_OPERATIONS",

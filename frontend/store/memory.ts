@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApiRequestError } from "@/lib/apiError";
 import { memoryService } from "@/services/memoryService";
-import type { CaseJob, CaseJobs, CommitResult, MemoryRecord } from "@/types/memory";
+import type { CaseJob, CaseJobs, CommitResult, CopilotMessage, CopilotView, MemoryRecord } from "@/types/memory";
 import { queryKeys } from "./queryKeys";
 
 const POLL_MS = 2_000;
@@ -16,7 +16,7 @@ export function useCaseJobs(caseId: string | null) {
     refetchInterval: (query) => {
       if (query.state.error) return false;
       const data = query.state.data;
-      return isLive(data?.summarize) || isLive(data?.index) ? POLL_MS : false;
+      return isLive(data?.analyze) || isLive(data?.summarize) || isLive(data?.index) ? POLL_MS : false;
     },
   });
 }
@@ -28,6 +28,7 @@ export function useResolve(caseId: string) {
     mutationFn: (jobId) => memoryService.resolve(caseId, jobId),
     onSuccess: (job) =>
       queryClient.setQueryData<CaseJobs>(queryKeys.cases.jobs(caseId), (old) => ({
+        analyze: old?.analyze ?? null,
         summarize: job,
         index: old?.index ?? null,
       })),
@@ -41,6 +42,7 @@ export function useCommitMemory(caseId: string) {
     mutationFn: (record) => memoryService.commit(caseId, record),
     onSuccess: (result) => {
       queryClient.setQueryData<CaseJobs>(queryKeys.cases.jobs(caseId), (old) => ({
+        analyze: old?.analyze ?? null,
         summarize: old?.summarize ?? null,
         index: result.index_job,
       }));
@@ -48,5 +50,64 @@ export function useCommitMemory(caseId: string) {
       queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.vault.all });
     },
+  });
+}
+
+/** Not optimistic: only the server can rank precedents. The job appears at once and is polled. */
+export function useAnalyze() {
+  const queryClient = useQueryClient();
+  return useMutation<CaseJob, ApiRequestError, { caseId: string; jobId: string }>({
+    mutationFn: ({ caseId, jobId }) => memoryService.analyze(caseId, jobId),
+    onSuccess: (job, { caseId }) =>
+      queryClient.setQueryData<CaseJobs>(queryKeys.cases.jobs(caseId), (old) => ({
+        analyze: job,
+        summarize: old?.summarize ?? null,
+        index: old?.index ?? null,
+      })),
+  });
+}
+
+/** Copilot conversation for a case; polls every 2 s while an answer is being written. */
+export function useCopilot(caseId: string | null) {
+  return useQuery<CopilotView, ApiRequestError>({
+    queryKey: queryKeys.cases.copilot(caseId ?? ""),
+    queryFn: () => memoryService.getCopilot(caseId!),
+    enabled: caseId !== null,
+    refetchInterval: (query) => {
+      if (query.state.error) return false;
+      return query.state.data?.jobs.some(isLive) ? POLL_MS : false;
+    },
+  });
+}
+
+/** The question shows at once (optimistic); the answer is server-produced and arrives through polling. */
+export function useAskCopilot(caseId: string) {
+  const queryClient = useQueryClient();
+  const key = queryKeys.cases.copilot(caseId);
+  return useMutation<CaseJob, ApiRequestError, { message_id: string; job_id: string; question: string }, { previous?: CopilotView }>({
+    mutationFn: (input) => memoryService.askCopilot(caseId, input),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<CopilotView>(key);
+      const optimistic: CopilotMessage = {
+        id: input.message_id,
+        role: "user",
+        content: input.question,
+        user_id: null,
+        cited_case_ids: [],
+        cited_artifact_ids: [],
+        created_at: new Date().toISOString(),
+        pending: true,
+      };
+      queryClient.setQueryData<CopilotView>(key, (old) => ({
+        messages: [...(old?.messages ?? []), optimistic],
+        jobs: old?.jobs ?? [],
+      }));
+      return { previous };
+    },
+    onError: (_error, _input, snapshot) => {
+      if (snapshot?.previous) queryClient.setQueryData(key, snapshot.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 }

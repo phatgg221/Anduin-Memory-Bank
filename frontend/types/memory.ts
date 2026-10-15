@@ -29,18 +29,26 @@ export interface SummarizeResult {
 export interface CaseJob {
   id: string;
   case_id: string;
-  kind: "SUMMARIZE" | "INDEX";
+  kind: "ANALYZE" | "SUMMARIZE" | "INDEX" | "COPILOT";
   status: JobStatus;
   step: string | null;
   steps: string[];
   attempts: number;
   error: string | null;
-  result: (SummarizeResult & { chunks?: number; embedding_provider?: string }) | null;
+  result:
+    | (Partial<SummarizeResult> & {
+        chunks?: number;
+        embedding_provider?: string;
+        matches?: { caseCode: string; similarityScore: number }[];
+        guard_warnings?: string[];
+      })
+    | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface CaseJobs {
+  analyze: CaseJob | null;
   summarize: CaseJob | null;
   index: CaseJob | null;
 }
@@ -51,4 +59,21 @@ export interface CommitResult {
   status: string;
   index_job: CaseJob;
   guard_warnings: string[];
+}
+
+export interface CopilotMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  user_id: string | null;
+  cited_case_ids: string[];
+  cited_artifact_ids: string[];
+  created_at: string;
+  /** Client-only: asked optimistically. */
+  pending?: boolean;
+}
+
+export interface CopilotView {
+  messages: CopilotMessage[];
+  jobs: CaseJob[];
 }

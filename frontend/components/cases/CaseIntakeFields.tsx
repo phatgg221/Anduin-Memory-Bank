@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { Department } from "@/types/org";
-import { SEVERITIES, type CaseIntake, type RoomPerson } from "@/types/rooms";
+import { SEVERITIES, SOURCE_TYPES, type CaseIntake, type RoomPerson } from "@/types/rooms";
 import { SEVERITY_HELP } from "./SeverityBadge";
 import { TagEditor } from "./TagEditor";
 
@@ -58,6 +58,38 @@ export function CaseIntakeFields({ value, onChange, people, departments, ownerDe
           />
           <FieldError message={fieldErrors.title} />
         </div>
+      </div>
+
+      <div className="grid gap-4 @xl:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={id("fund")}>Parent project / fund</Label>
+          <Input
+            id={id("fund")}
+            value={value.fund_name ?? ""}
+            onChange={(e) => set("fund_name", e.target.value || null)}
+            placeholder="Crossover Feeder II (Cayman master-feeder)"
+            maxLength={200}
+          />
+        </div>
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-2 text-sm font-medium text-ink">How it arrived</legend>
+          <div className="flex flex-wrap gap-1.5">
+            {SOURCE_TYPES.map((source) => (
+              <button
+                key={source.id}
+                type="button"
+                aria-pressed={value.source_type === source.id}
+                onClick={() => set("source_type", value.source_type === source.id ? null : source.id)}
+                className={cn(
+                  "micro-label border px-2 py-1",
+                  value.source_type === source.id ? "border-navy bg-navy text-white" : "text-muted-foreground hover:bg-surface-2",
+                )}
+              >
+                {source.label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
       </div>
 
       <div className="flex flex-col gap-2">

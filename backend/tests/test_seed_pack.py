@@ -66,6 +66,7 @@ def test_case_manifest(folder):
         assert "resolvedAt" not in data and data["comparisonResults"]
     assert data["departmentId"] in DEPARTMENT_IDS
     assert data["client"] and data["severity"] in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
+    assert data["fund"] and data["sourceType"] in {"CLIENT_EMAIL", "CS_ESCALATION", "LEGAL_REDLINE", "SECURITY_RFP"}
     assert date.fromisoformat(data["dueDate"])
     assert set(data["secondaryDepartmentIds"]) <= DEPARTMENT_IDS
     assert data["createdBy"] in AUTHORS

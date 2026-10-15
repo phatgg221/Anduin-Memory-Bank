@@ -30,6 +30,7 @@ from app.modules.org.models import Department
 
 CASE_STATUSES = ("OPEN", "RESOLVED")
 CASE_SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+SOURCE_TYPES = ("CLIENT_EMAIL", "CS_ESCALATION", "LEGAL_REDLINE", "SECURITY_RFP")
 COPILOT_ROLES = ("user", "assistant")
 CHUNK_TYPES = ("CASE_SUMMARY", "CHANNEL_DISCUSSION", "ARTIFACT_CONTENT", "RESOLUTION_PLAYBOOK")
 
@@ -45,6 +46,7 @@ class CaseRecord(Base):
         CheckConstraint(f"status IN {CASE_STATUSES}", name="status"),
         CheckConstraint("(status = 'RESOLVED') = (resolved_at IS NOT NULL)", name="resolved_at_matches_status"),
         CheckConstraint(f"severity IN {CASE_SEVERITIES}", name="severity"),
+        CheckConstraint(f"source_type IS NULL OR source_type IN {SOURCE_TYPES}", name="source_type"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -58,6 +60,9 @@ class CaseRecord(Base):
     client_name: Mapped[str | None] = mapped_column(String(200))
     severity: Mapped[str] = mapped_column(String(16), server_default=text("'MEDIUM'"))
     due_date: Mapped[date | None] = mapped_column(Date)
+    # The parent project / fund the request belongs to, and how it arrived.
+    fund_name: Mapped[str | None] = mapped_column(String(200))
+    source_type: Mapped[str | None] = mapped_column(String(32))
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     lead_resolver_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True

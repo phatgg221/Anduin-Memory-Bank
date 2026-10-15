@@ -20,6 +20,8 @@ class PersonOut(BaseModel):
 
 
 Severity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+SourceType = Literal["CLIENT_EMAIL", "CS_ESCALATION", "LEGAL_REDLINE", "SECURITY_RFP"]
+FundName = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
 MAX_TAGS = 8
 
 
@@ -80,21 +82,61 @@ class ThreadSummaryOut(BaseModel):
     title: str
     status: str
     client_name: str | None
+    fund_name: str | None
+    source_type: SourceType | None
     severity: Severity
     due_date: date | None
     department_id: str
     secondary_department_ids: list[str]
+    top_match_code: str | None
+    top_match_score: int | None
     message_count: int
     last_message_at: datetime | None
 
 
+class PrecedentFileOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    file_name: str
+    file_type: str
+    is_reusable: bool
+    description: str
+    uploaded_by: PersonOut | None
+
+
+class DeltaItemOut(BaseModel):
+    category: str
+    past_approach: str
+    current_requirement: str
+    status: Literal["REUSABLE", "MODIFIED", "NET_NEW"]
+    action_recommendation: str
+    source_artifact: str | None
+    source_artifact_id: uuid.UUID | None
+
+
 class PrecedentOut(BaseModel):
+    """One matched past case, with everything the delta tab and the reusable kit render."""
+
+    case_id: uuid.UUID | None
     case_code: str
     title: str
+    client_name: str | None
+    department_id: str | None
+    secondary_department_ids: list[str]
     similarity_score: int
+    score_breakdown: dict[str, float] | None
     how_past_case_went: str
+    pitfall_warnings: list[str]
+    summary: str | None
+    how_it_went: str | None
+    duration_days: int | None
+    resolved_at: datetime | None
+    lead: PersonOut | None
     lead_name: str | None
     lead_is_alumni: bool
+    delta_items: list[DeltaItemOut]
+    artifacts: list[PrecedentFileOut]
 
 
 class ThreadViewOut(BaseModel):
@@ -102,9 +144,12 @@ class ThreadViewOut(BaseModel):
 
     id: uuid.UUID
     case_code: str
+    channel_slug: str
     title: str
     status: str
     client_name: str | None
+    fund_name: str | None
+    source_type: SourceType | None
     severity: Severity
     due_date: date | None
     department_id: str
@@ -126,6 +171,8 @@ class ThreadMessageIn(BaseModel):
     id: uuid.UUID  # client-generated: retries are idempotent
     content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
     is_milestone: bool = False
+    # Any case's file: lets the team pull a precedent's deliverable into this thread ("Use in case").
+    attached_artifact_id: uuid.UUID | None = None
 
 
 class CaseCreateIn(BaseModel):
@@ -133,6 +180,8 @@ class CaseCreateIn(BaseModel):
 
     id: uuid.UUID  # client-generated: a retried create returns the same case
     client_name: ClientName
+    fund_name: FundName | None = None  # the parent project / fund
+    source_type: SourceType | None = None  # how the request arrived
     title: Title
     initial_request_brief: Brief  # the problem and its context
     severity: Severity = "MEDIUM"
@@ -147,6 +196,8 @@ class CaseUpdateIn(BaseModel):
     """Partial edit of an open case's details. Only the fields sent are changed (explicit state: safe to retry)."""
 
     client_name: ClientName | None = None
+    fund_name: FundName | None = None
+    source_type: SourceType | None = None
     title: Title | None = None
     initial_request_brief: Brief | None = None
     severity: Severity | None = None

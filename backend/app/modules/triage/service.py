@@ -10,16 +10,27 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.modules.auth.models import User
 from app.modules.cases import service as cases
-from app.modules.cases.models import CaseRecord, ChannelMessage
-from app.modules.intelligence import indexer, llm_client, summarizer
+from app.modules.cases.models import CaseRecord, ChannelMessage, CopilotMessage
+from app.modules.intelligence import analyzer, copilot, indexer, llm_client, summarizer
 from app.modules.intelligence.guard import guard_memory
-from app.modules.intelligence.schemas import CaseMemoryDraft, CaseMemoryRecord, ThreadContext, TranscriptMessage
+from app.modules.intelligence.schemas import (
+    CaseMemoryDraft,
+    CaseMemoryRecord,
+    IncomingRequest,
+    ThreadContext,
+    TranscriptMessage,
+)
 from app.modules.intelligence.transcript import build_transcript
 from app.modules.org.models import Department
 from app.modules.rooms import service as rooms
 from app.modules.triage.models import CaseJob
 
-STEPS = {"SUMMARIZE": summarizer.SUMMARIZE_STEPS, "INDEX": indexer.INDEX_STEPS}
+STEPS = {
+    "ANALYZE": analyzer.ANALYZE_STEPS,
+    "SUMMARIZE": summarizer.SUMMARIZE_STEPS,
+    "INDEX": indexer.INDEX_STEPS,
+    "COPILOT": copilot.COPILOT_STEPS,
+}
 
 CLAIM_SQL = text("""
     UPDATE case_jobs
@@ -49,18 +60,25 @@ class PermanentError(Exception):
 
 
 async def enqueue(
-    session: AsyncSession, job_id: uuid.UUID, case_id: uuid.UUID, kind: str, user: User | None
+    session: AsyncSession,
+    job_id: uuid.UUID,
+    case_id: uuid.UUID,
+    kind: str,
+    user: User | None,
+    job_input: dict | None = None,
 ) -> CaseJob:
     """Idempotent: a retried request (same id) or a second click while a job is live returns the existing job."""
     if existing := await session.get(CaseJob, job_id):
         return existing
     statement = (
         insert(CaseJob)
-        .values(id=job_id, case_id=case_id, kind=kind, requested_by_user_id=user.id if user else None)
+        .values(id=job_id, case_id=case_id, kind=kind, requested_by_user_id=user.id if user else None, input=job_input)
         .on_conflict_do_nothing()
     )
     await session.execute(statement)
     await session.commit()
+    if kind == "COPILOT":
+        return await session.get_one(CaseJob, job_id)
     live = await session.scalar(
         select(CaseJob).where(
             CaseJob.case_id == case_id, CaseJob.kind == kind, CaseJob.status.in_(("QUEUED", "PROCESSING"))
@@ -81,6 +99,43 @@ async def request_summary(session: AsyncSession, user: User, case_id: uuid.UUID,
     return await enqueue(session, job_id, case_id, "SUMMARIZE", user)
 
 
+async def request_analysis(session: AsyncSession, user: User, case_id: uuid.UUID, job_id: uuid.UUID) -> CaseJob:
+    case = await session.get(CaseRecord, case_id)
+    if case is None:
+        raise NotFoundError("Unknown case")
+    if case.status != "OPEN":
+        raise ConflictError("This case is already resolved")
+    return await enqueue(session, job_id, case_id, "ANALYZE", user)
+
+
+async def ask_copilot(
+    session: AsyncSession, user: User, case_id: uuid.UUID, message_id: uuid.UUID, job_id: uuid.UUID, question: str
+) -> CaseJob:
+    """Stores the question (idempotent on its id) and queues the answer job."""
+    if await session.get(CaseRecord, case_id) is None:
+        raise NotFoundError("Unknown case")
+    if existing := await session.get(CaseJob, job_id):
+        return existing
+    if not await session.get(CopilotMessage, message_id):
+        await cases.add_copilot_message(session, case_id, "user", question, message_id=message_id, user_id=user.id)
+    return await enqueue(
+        session, job_id, case_id, "COPILOT", user, {"question": question, "message_id": str(message_id)}
+    )
+
+
+async def copilot_view(session: AsyncSession, case_id: uuid.UUID) -> tuple[list, list[CaseJob]]:
+    messages = await cases.copilot_messages(session, case_id)
+    pending = list(
+        await session.scalars(
+            select(CaseJob)
+            .where(CaseJob.case_id == case_id, CaseJob.kind == "COPILOT")
+            .where(CaseJob.status.in_(("QUEUED", "PROCESSING", "FAILED")))
+            .order_by(CaseJob.created_at)
+        )
+    )
+    return messages, pending
+
+
 async def latest_jobs(session: AsyncSession, case_id: uuid.UUID) -> dict[str, CaseJob | None]:
     jobs = await session.scalars(
         select(CaseJob)
@@ -89,7 +144,7 @@ async def latest_jobs(session: AsyncSession, case_id: uuid.UUID) -> dict[str, Ca
         .ext(distinct_on(CaseJob.kind))
     )
     by_kind = {job.kind: job for job in jobs}
-    return {"summarize": by_kind.get("SUMMARIZE"), "index": by_kind.get("INDEX")}
+    return {"analyze": by_kind.get("ANALYZE"), "summarize": by_kind.get("SUMMARIZE"), "index": by_kind.get("INDEX")}
 
 
 # --- commit (human-reviewed record → RESOLVED, then INDEX) -------------------------------------------------------
@@ -135,7 +190,7 @@ async def complete(job_id: uuid.UUID, result: dict[str, Any]) -> None:
 
 async def record_failure(job_id: uuid.UUID, error: Exception) -> None:
     """Requeue while attempts remain, unless retrying can't help."""
-    permanent = isinstance(error, PermanentError | summarizer.EmptyThreadError)
+    permanent = isinstance(error, PermanentError | summarizer.EmptyThreadError | analyzer.NoPrecedentsError)
     async with SessionLocal.begin() as session:
         job = await session.get(CaseJob, job_id, with_for_update=True)
         if job is None:
@@ -169,7 +224,8 @@ async def process(job_id: uuid.UUID) -> None:
             return
         kind, case_id = job.kind, job.case_id
     try:
-        result = await (_summarize if kind == "SUMMARIZE" else _index)(job_id, case_id)
+        handler = {"ANALYZE": _analyze, "SUMMARIZE": _summarize, "INDEX": _index, "COPILOT": _copilot}[kind]
+        result = await handler(job_id, case_id)
     except llm_client.LLMError as error:
         message = str(error)
         retryable = "unavailable" in message or "never returned valid" in message
@@ -179,6 +235,67 @@ async def process(job_id: uuid.UUID) -> None:
         await record_failure(job_id, error)
         return
     await complete(job_id, result)
+
+
+async def _analyze(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
+    await heartbeat(job_id, analyzer.ANALYZE_STEPS[0])
+    async with SessionLocal() as session:
+        case = await session.get_one(CaseRecord, case_id)
+        incoming = IncomingRequest(
+            case_code=case.case_code,
+            title=case.title,
+            client_name=case.client_name,
+            fund_name=case.fund_name,
+            source_type=case.source_type,
+            brief=case.initial_request_brief,
+            context_tags=case.context_tags,
+            file_texts=await cases.case_files_text(session, case_id),
+        )
+        departments = [case.department_id, *case.secondary_department_ids]
+        await heartbeat(job_id, analyzer.ANALYZE_STEPS[1])
+        precedents = await analyzer.rank_precedents(session, incoming, departments, case_id)
+    await heartbeat(job_id, analyzer.ANALYZE_STEPS[2])
+    results, warnings = await analyzer.compare(incoming, precedents)
+    await heartbeat(job_id, analyzer.ANALYZE_STEPS[3])
+    async with SessionLocal() as session:
+        await cases.set_comparison_results(session, case_id, results)
+    return {
+        "matches": [{"caseCode": r["caseCode"], "similarityScore": r["similarityScore"]} for r in results],
+        "guard_warnings": warnings,
+        "provider": llm_client.provider_label(),
+        "embedding_model": llm_client.embedding_label(),
+    }
+
+
+async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
+    await heartbeat(job_id, copilot.COPILOT_STEPS[0])
+    async with SessionLocal() as session:
+        job = await session.get_one(CaseJob, job_id)
+        question = (job.input or {}).get("question", "")
+        case = await session.get_one(CaseRecord, case_id)
+        history = [(m.role, m.content) for m in await cases.copilot_messages(session, case_id)][:-1]
+        context = copilot.CopilotContext(
+            case_block=(
+                f"{case.case_code} · {case.title}\nCustomer: {case.client_name} · Fund: {case.fund_name}\n"
+                f"Severity: {case.severity} · Status: {case.status}\n{case.initial_request_brief}"
+            ),
+            precedents=await cases.precedents_for(session, case),
+            history=history,
+        )
+        result = await copilot.answer(session, context, question, lambda step: heartbeat(job_id, step))
+        message = await cases.add_copilot_message(
+            session,
+            case_id,
+            "assistant",
+            result["answer"],
+            cited_case_ids=result["cited_case_ids"],
+            cited_artifact_ids=result["cited_artifact_ids"],
+        )
+    return {
+        "message_id": str(message.id),
+        "uncited_case_codes": result["uncited_case_codes"],
+        "provider": llm_client.provider_label(),
+    }
 
 
 async def _summarize(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:

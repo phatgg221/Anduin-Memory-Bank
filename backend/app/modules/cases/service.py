@@ -1,3 +1,5 @@
+import asyncio
+import io
 import re
 import uuid
 from datetime import UTC, datetime
@@ -7,9 +9,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core import documents
+from app.core.config import settings
+from app.core.storage import internal
 from app.core.text import slugify
 from app.modules.auth.models import User
-from app.modules.cases.models import CaseRecord, ChannelMessage, KnowledgeChunk
+from app.modules.cases.models import CaseArtifact, CaseRecord, ChannelMessage, CopilotMessage, KnowledgeChunk
 from app.modules.org.models import Department
 
 PAGE = 100
@@ -36,34 +41,79 @@ def in_department(department_id: str | ColumnElement[str]) -> ColumnElement[bool
     )
 
 
+async def precedent_details(session: AsyncSession, case_ids: list) -> dict:
+    """Precedent cases with lead and files (uploaders included), batch-loaded: two or three queries for any count."""
+    if not case_ids:
+        return {}
+    query = (
+        select(CaseRecord)
+        .where(CaseRecord.id.in_(case_ids))
+        .options(
+            selectinload(CaseRecord.lead_resolver),
+            selectinload(CaseRecord.artifacts).selectinload(CaseArtifact.uploaded_by),
+        )
+        .execution_options(populate_existing=True)
+    )
+    return {
+        c.id: {"case": c, "artifacts": sorted(c.artifacts, key=lambda a: (not a.is_reusable, a.file_name))}
+        for c in await session.scalars(query)
+    }
+
+
 async def precedents_for(session: AsyncSession, case: CaseRecord) -> list[dict]:
-    """The case's stored top matches, enriched with each precedent's title and lead (one query)."""
+    """The case's stored top matches (comparison_results), enriched with each precedent's record, lead and files."""
     matches = case.comparison_results or []
     codes = [m["caseCode"] for m in matches]
-    query = select(CaseRecord).where(CaseRecord.case_code.in_(codes)).options(selectinload(CaseRecord.lead_resolver))
-    past = {c.case_code: c for c in await session.scalars(query)} if codes else {}
+    ids = list(await session.scalars(select(CaseRecord.id).where(CaseRecord.case_code.in_(codes)))) if codes else []
+    details = {d["case"].case_code: d for d in (await precedent_details(session, ids)).values()}
     precedents = []
     for match in matches:
-        precedent = past.get(match["caseCode"])
-        lead = precedent.lead_resolver if precedent else None
+        detail = details.get(match["caseCode"])
+        past = detail["case"] if detail else None
+        lead = past.lead_resolver if past else None
         precedents.append(
             {
+                "case_id": past.id if past else None,
                 "case_code": match["caseCode"],
-                "title": precedent.title if precedent else match["caseCode"],
+                "title": past.title if past else match["caseCode"],
+                "client_name": past.client_name if past else None,
+                "department_id": past.department_id if past else None,
+                "secondary_department_ids": past.secondary_department_ids if past else [],
                 "similarity_score": match["similarityScore"],
+                "score_breakdown": match.get("scoreBreakdown"),
                 "how_past_case_went": match["howPastCaseWent"],
+                "pitfall_warnings": match.get("pitfallWarnings", []),
+                "summary": past.summary if past else None,
+                "how_it_went": past.how_it_went if past else None,
+                "duration_days": past.duration_days if past else None,
+                "resolved_at": past.resolved_at if past else None,
+                "lead": lead,
                 "lead_name": lead.name if lead else None,
                 "lead_is_alumni": bool(lead and not lead.is_active),
+                "delta_items": [
+                    {
+                        "category": item["category"],
+                        "past_approach": item["pastApproach"],
+                        "current_requirement": item["currentRequirement"],
+                        "status": item["status"],
+                        "action_recommendation": item["actionRecommendation"],
+                        "source_artifact": item.get("sourceArtifact"),
+                        "source_artifact_id": item.get("sourceArtifactId"),
+                    }
+                    for item in match.get("deltaItems", [])
+                ],
+                "artifacts": detail["artifacts"] if detail else [],
             }
         )
     return precedents
 
 
-async def thread_summaries(session: AsyncSession, department_id: str) -> list[dict]:
-    """Open case threads a department is involved in, newest activity first (two queries)."""
-    cases = list(
-        await session.scalars(select(CaseRecord).where(CaseRecord.status == "OPEN", in_department(department_id)))
-    )
+async def thread_summaries(session: AsyncSession, department_id: str | None) -> list[dict]:
+    """Open case threads (a department's, or all), newest activity first (two queries)."""
+    query = select(CaseRecord).where(CaseRecord.status == "OPEN")
+    if department_id:
+        query = query.where(in_department(department_id))
+    cases = list(await session.scalars(query))
     stats = {}
     if cases:
         rows = await session.execute(
@@ -79,10 +129,14 @@ async def thread_summaries(session: AsyncSession, department_id: str) -> list[di
             "title": c.title,
             "status": c.status,
             "client_name": c.client_name,
+            "fund_name": c.fund_name,
+            "source_type": c.source_type,
             "severity": c.severity,
             "due_date": c.due_date,
             "department_id": c.department_id,
             "secondary_department_ids": c.secondary_department_ids,
+            "top_match_code": (c.comparison_results or [{}])[0].get("caseCode"),
+            "top_match_score": (c.comparison_results or [{}])[0].get("similarityScore"),
             "message_count": stats.get(c.id, (0, None))[0],
             "last_message_at": stats.get(c.id, (0, None))[1],
         }
@@ -117,8 +171,10 @@ async def thread_view(session: AsyncSession, case_id: uuid.UUID) -> dict:
     messages = list(reversed(latest))
     participants = {m.author.id: m.author for m in messages if m.author}
     return {
-        **{key: getattr(case, key) for key in ("id", "case_code", "title", "status", "department_id")},
+        **{key: getattr(case, key) for key in ("id", "case_code", "channel_slug", "title", "status", "department_id")},
         "client_name": case.client_name,
+        "fund_name": case.fund_name,
+        "source_type": case.source_type,
         "severity": case.severity,
         "due_date": case.due_date,
         "lead": case.lead_resolver,
@@ -143,7 +199,13 @@ async def thread_messages_after(session: AsyncSession, case_id: uuid.UUID, after
 
 
 async def post_thread_message(
-    session: AsyncSession, user: User, case_id: uuid.UUID, message_id: uuid.UUID, content: str, is_milestone: bool
+    session: AsyncSession,
+    user: User,
+    case_id: uuid.UUID,
+    message_id: uuid.UUID,
+    content: str,
+    is_milestone: bool,
+    attached_artifact_id: uuid.UUID | None = None,
 ) -> tuple[ChannelMessage, CaseRecord]:
     """Idempotent on the client-generated id. Resolved cases are read-only memory."""
     case = await _case(session, case_id)
@@ -154,9 +216,16 @@ async def post_thread_message(
     else:
         if case.status != "OPEN":
             raise ConflictError("This case is resolved; its thread is read-only")
+        if attached_artifact_id and await session.get(CaseArtifact, attached_artifact_id) is None:
+            raise NotFoundError("Unknown file")
         session.add(
             ChannelMessage(
-                id=message_id, case_id=case_id, user_id=user.id, content=content, is_resolution_milestone=is_milestone
+                id=message_id,
+                case_id=case_id,
+                user_id=user.id,
+                content=content,
+                is_resolution_milestone=is_milestone,
+                attached_artifact_id=attached_artifact_id,
             )
         )
         await session.commit()
@@ -189,6 +258,8 @@ async def create_case(session: AsyncSession, user: User, data) -> CaseRecord:
             channel_slug=f"case-{slugify(data.title, 50)}-{code[-3:]}",
             title=data.title,
             client_name=data.client_name,
+            fund_name=data.fund_name or None,
+            source_type=data.source_type,
             severity=data.severity,
             due_date=data.due_date,
             lead_resolver_user_id=lead_id,
@@ -234,7 +305,15 @@ async def update_case(session: AsyncSession, case_id: uuid.UUID, data) -> tuple[
         raise ConflictError("This case is committed to memory; its details are read-only")
     before = [case.department_id, *case.secondary_department_ids]
     fields = data.model_fields_set
-    for key in ("client_name", "title", "initial_request_brief", "severity", "context_tags"):
+    for key in (
+        "client_name",
+        "fund_name",
+        "source_type",
+        "title",
+        "initial_request_brief",
+        "severity",
+        "context_tags",
+    ):
         if key in fields and getattr(data, key) is not None:
             setattr(case, key, getattr(data, key))
     if "due_date" in fields:
@@ -292,7 +371,7 @@ async def replace_chunks(session: AsyncSession, case: CaseRecord, chunks: list[d
 
 
 async def nearest_chunks(
-    session: AsyncSession, vector: list[float], department_id: str | None, limit: int
+    session: AsyncSession, vector: list[float], department_id: str | None, limit: int, *, resolved_only: bool = False
 ) -> list[tuple[KnowledgeChunk, CaseRecord, float]]:
     """Cosine-nearest chunks (HNSW index) with their case, in one query. Returns (chunk, case, distance)."""
     distance = KnowledgeChunk.embedding.cosine_distance(vector).label("distance")
@@ -305,4 +384,94 @@ async def nearest_chunks(
     )
     if department_id:
         query = query.where(in_department(department_id))
+    if resolved_only:
+        query = query.where(CaseRecord.status == "RESOLVED")
     return [(chunk, case, float(dist)) for chunk, case, dist in await session.execute(query)]
+
+
+# --- files ----------------------------------------------------------------------------------------------------------
+
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+FILE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+async def upload_file(
+    session: AsyncSession, user: User, case_id: uuid.UUID, file_name: str, data: bytes, file_type: str
+) -> CaseArtifact:
+    """Stores a file on an open case (MinIO + case_artifacts). Re-uploading the same name replaces it."""
+    case = await _case(session, case_id)
+    if case.status != "OPEN":
+        raise ConflictError("This case is committed to memory; its files are read-only")
+    name = FILE_NAME.sub("_", file_name).strip("._")[:200]
+    if not name or documents.suffix(name) not in documents.CONTENT_TYPES:
+        raise InvalidError("Upload a PDF, CSV, Markdown, text, JSON, email, DOCX or XLSX file")
+    if not data or len(data) > MAX_UPLOAD_BYTES:
+        raise InvalidError("Files must be between 1 byte and 15 MB")
+    content_type = documents.CONTENT_TYPES[documents.suffix(name)]
+    key = f"cases/{case.channel_slug}/artifacts/{name}"
+    await asyncio.to_thread(
+        internal.put_object, settings.minio_bucket, key, io.BytesIO(data), len(data), content_type=content_type
+    )
+    artifact = await session.scalar(
+        select(CaseArtifact).where(CaseArtifact.case_id == case_id, CaseArtifact.file_name == name)
+    )
+    if artifact is None:
+        artifact = CaseArtifact(case_id=case_id, file_name=name)
+        session.add(artifact)
+    artifact.file_type = file_type
+    artifact.content_type = content_type
+    artifact.size_bytes = len(data)
+    artifact.is_reusable = False
+    artifact.description = f"Uploaded by {user.name}"
+    artifact.minio_object_key = key
+    artifact.preview_text = await asyncio.to_thread(documents.extract_text, name, data)
+    artifact.uploaded_by_user_id = user.id
+    await session.commit()
+    return artifact
+
+
+async def set_comparison_results(session: AsyncSession, case_id: uuid.UUID, results: list[dict]) -> None:
+    case = await session.get_one(CaseRecord, case_id)
+    case.comparison_results = results
+    await session.commit()
+
+
+async def case_files_text(session: AsyncSession, case_id: uuid.UUID) -> dict[str, str]:
+    files = await session.scalars(select(CaseArtifact).where(CaseArtifact.case_id == case_id))
+    return {f.file_name: f.preview_text for f in files if f.preview_text}
+
+
+# --- copilot ----------------------------------------------------------------------------------------------------
+
+
+async def copilot_messages(session: AsyncSession, case_id: uuid.UUID) -> list[CopilotMessage]:
+    return list(
+        await session.scalars(
+            select(CopilotMessage).where(CopilotMessage.case_id == case_id).order_by(CopilotMessage.seq)
+        )
+    )
+
+
+async def add_copilot_message(
+    session: AsyncSession,
+    case_id: uuid.UUID,
+    role: str,
+    content: str,
+    *,
+    message_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
+    cited_case_ids: list[str] | None = None,
+    cited_artifact_ids: list[str] | None = None,
+) -> CopilotMessage:
+    message = CopilotMessage(
+        id=message_id or uuid.uuid4(),
+        case_id=case_id,
+        user_id=user_id,
+        role=role,
+        content=content,
+        cited_case_ids=cited_case_ids or [],
+        cited_artifact_ids=cited_artifact_ids or [],
+    )
+    session.add(message)
+    await session.commit()
+    return message

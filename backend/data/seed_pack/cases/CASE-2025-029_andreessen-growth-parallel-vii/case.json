@@ -3,6 +3,8 @@
   "channelSlug": "case-a16z-growth-vii",
   "title": "Andreessen Growth Parallel VII — 400-LP Legacy Trust Migration & ERISA 25% Cap Guard",
   "client": "Andreessen Horowitz (AGF VII GP)",
+  "fund": "Andreessen Growth Fund VII (Delaware Main + Parallel)",
+  "sourceType": "CLIENT_EMAIL",
   "severity": "HIGH",
   "dueDate": "2025-08-04",
   "departmentId": "ENGINEERING_DATA",

@@ -3,6 +3,8 @@
   "channelSlug": "case-blackstone-redx-k1",
   "title": "Blackstone Real Estate Debt X — Tax Season K-1 Bulk Distribution & Bank Firewall Runbook",
   "client": "Blackstone",
+  "fund": "Blackstone Real Estate Debt X",
+  "sourceType": "CS_ESCALATION",
   "severity": "HIGH",
   "dueDate": "2026-03-15",
   "departmentId": "CUSTOMER_SUCCESS",

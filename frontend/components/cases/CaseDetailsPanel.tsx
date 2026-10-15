@@ -6,7 +6,7 @@ import { SectionLabel } from "@/components/brand/SectionLabel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Department } from "@/types/org";
-import type { CaseIntake, RoomPerson, ThreadView, UpdateCaseInput } from "@/types/rooms";
+import { SOURCE_TYPES, type CaseIntake, type RoomPerson, type ThreadView, type UpdateCaseInput } from "@/types/rooms";
 import { CaseIntakeFields } from "./CaseIntakeFields";
 import { deadlineLabel, SeverityBadge } from "./SeverityBadge";
 
@@ -35,6 +35,8 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 function toIntake(thread: ThreadView): CaseIntake {
   return {
     client_name: thread.client_name ?? "",
+    fund_name: thread.fund_name,
+    source_type: thread.source_type,
     title: thread.title,
     initial_request_brief: thread.initial_request_brief,
     severity: thread.severity,
@@ -115,6 +117,10 @@ export function CaseDetailsPanel({ thread, departments, people, onSave, isSaving
 
       <dl className="flex flex-col gap-2.5">
         <Row label="Customer">{thread.client_name ?? <span className="text-muted-foreground">Not recorded</span>}</Row>
+        <Row label="Project">{thread.fund_name ?? <span className="text-muted-foreground">Not recorded</span>}</Row>
+        <Row label="Source">
+          {SOURCE_TYPES.find((s) => s.id === thread.source_type)?.label ?? <span className="text-muted-foreground">Not recorded</span>}
+        </Row>
         <Row label="Deadline">
           {thread.due_date ? (
             <span className="flex flex-wrap items-center gap-1.5">

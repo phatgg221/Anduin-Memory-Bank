@@ -8,28 +8,30 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 
-JOB_KINDS = ("SUMMARIZE", "INDEX")
+JOB_KINDS = ("ANALYZE", "SUMMARIZE", "INDEX", "COPILOT")
 JOB_STATUSES = ("QUEUED", "PROCESSING", "COMPLETED", "FAILED")
 
 
 class CaseJob(Base):
     """LLM / embedding work for one case, never run inside a request.
 
+    ANALYZE matches the incoming request to the top-3 precedents and writes the delta (case.comparison_results);
     SUMMARIZE drafts a Case Memory Record from the case thread (result = draft + guard warnings, for human review);
-    INDEX chunks and embeds a committed record into knowledge_chunks.
+    INDEX chunks and embeds a committed record into knowledge_chunks; COPILOT answers one question (input.question).
     """
 
     __tablename__ = "case_jobs"
     __table_args__ = (
         CheckConstraint(f"kind IN {JOB_KINDS}", name="kind"),
         CheckConstraint(f"status IN {JOB_STATUSES}", name="status"),
-        # At most one live job per case and kind: a double-clicked Resolve can't start two summaries.
+        # At most one live job per case and kind (a double click can't start two analyses or summaries). Copilot
+        # questions are exempt: several can queue.
         Index(
             "uq_case_jobs_one_active",
             "case_id",
             "kind",
             unique=True,
-            postgresql_where=text("status IN ('QUEUED', 'PROCESSING')"),
+            postgresql_where=text("status IN ('QUEUED', 'PROCESSING') AND kind <> 'COPILOT'"),
         ),
         Index("ix_case_jobs_queue", "status", "created_at"),
     )
@@ -41,6 +43,7 @@ class CaseJob(Base):
     step: Mapped[str | None] = mapped_column(String(64))
     attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    input: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     error: Mapped[str | None] = mapped_column(Text)
     requested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))

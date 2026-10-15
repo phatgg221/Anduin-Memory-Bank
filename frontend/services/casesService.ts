@@ -1,6 +1,7 @@
 import { withApiErrors } from "@/lib/apiError";
 import { axiosClient } from "@/lib/axiosClient";
 import type {
+  CaseFile,
   CreateCaseInput,
   SendMessageInput,
   ThreadMessage,
@@ -12,6 +13,20 @@ import type {
 const thread = (caseId: string) => `/cases/${caseId}/thread`;
 
 export const casesService = {
+  /** Active case rooms: open cases for a department (null = all), newest activity first. */
+  async listOpen(departmentId: string | null): Promise<ThreadSummary[]> {
+    const params = departmentId ? { department_id: departmentId } : undefined;
+    return (await withApiErrors(axiosClient.get<ThreadSummary[]>("/cases", { params }))).data;
+  },
+
+  /** Attach a file to an open case. Re-uploading the same file name replaces it. */
+  async uploadFile(caseId: string, file: File, fileType = "CLIENT_BRIEF"): Promise<CaseFile> {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("file_type", fileType);
+    return (await withApiErrors(axiosClient.post<CaseFile>(`/cases/${caseId}/files`, form))).data;
+  },
+
   async getThread(caseId: string): Promise<ThreadView> {
     return (await withApiErrors(axiosClient.get<ThreadView>(thread(caseId)))).data;
   },

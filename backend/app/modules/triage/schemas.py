@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, StringConstraints, computed_field
 
 from app.modules.intelligence.schemas import CaseMemoryDraft
 from app.modules.triage.service import STEPS
@@ -30,8 +30,36 @@ class JobOut(BaseModel):
 
 
 class CaseJobsOut(BaseModel):
+    analyze: JobOut | None
     summarize: JobOut | None
     index: JobOut | None
+
+
+class AnalyzeIn(BaseModel):
+    job_id: uuid.UUID
+
+
+class CopilotAskIn(BaseModel):
+    message_id: uuid.UUID  # the question's id (client-generated)
+    job_id: uuid.UUID  # the answer job's id (client-generated)
+    question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=2000)]
+
+
+class CopilotMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    role: str
+    content: str
+    user_id: uuid.UUID | None
+    cited_case_ids: list[str]
+    cited_artifact_ids: list[str]
+    created_at: datetime
+
+
+class CopilotViewOut(BaseModel):
+    messages: list[CopilotMessageOut]
+    jobs: list[JobOut]  # questions still being answered (or failed)
 
 
 class ResolveIn(BaseModel):

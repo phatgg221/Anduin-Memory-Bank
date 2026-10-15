@@ -3,6 +3,8 @@
   "channelSlug": "case-bnp-am-dora-rfp",
   "title": "BNP Paribas Asset Management — EU DORA & Cloud Data Residency Security RFP",
   "client": "BNP Paribas Asset Management",
+  "fund": "BNP Paribas AM — European fund platform",
+  "sourceType": "SECURITY_RFP",
   "severity": "HIGH",
   "dueDate": "2025-09-29",
   "departmentId": "SALES_SOLUTIONS",

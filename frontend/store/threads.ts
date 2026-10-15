@@ -137,3 +137,24 @@ export function useUpdateCase(caseId: string) {
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all }),
   });
 }
+
+/** Active case rooms for the left pane: one request for the whole list. */
+export function useOpenCases(departmentId: string | null, enabled = true) {
+  return useQuery<ThreadSummary[], ApiRequestError>({
+    queryKey: queryKeys.cases.open(departmentId),
+    queryFn: () => casesService.listOpen(departmentId),
+    refetchInterval: 15_000,
+    enabled,
+  });
+}
+
+/** Uploads files to a case (not optimistic: the server stores and extracts them). */
+export function useUploadFiles() {
+  const queryClient = useQueryClient();
+  return useMutation<void, ApiRequestError, { caseId: string; files: File[] }>({
+    mutationFn: async ({ caseId, files }) => {
+      for (const file of files) await casesService.uploadFile(caseId, file);
+    },
+    onSuccess: (_result, { caseId }) => queryClient.invalidateQueries({ queryKey: queryKeys.cases.thread(caseId) }),
+  });
+}

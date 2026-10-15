@@ -39,6 +39,13 @@ export interface ThreadMessage extends ChatMessage {
 
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 export const SEVERITIES: Severity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+export type SourceType = "CLIENT_EMAIL" | "CS_ESCALATION" | "LEGAL_REDLINE" | "SECURITY_RFP";
+export const SOURCE_TYPES: { id: SourceType; label: string }[] = [
+  { id: "CLIENT_EMAIL", label: "Client email" },
+  { id: "CS_ESCALATION", label: "CS escalation" },
+  { id: "LEGAL_REDLINE", label: "Legal redline" },
+  { id: "SECURITY_RFP", label: "Security RFP" },
+];
 
 /** An open case's sub-chat, listed under every department it involves. */
 export interface ThreadSummary {
@@ -47,10 +54,14 @@ export interface ThreadSummary {
   title: string;
   status: string;
   client_name: string | null;
+  fund_name: string | null;
+  source_type: SourceType | null;
   severity: Severity;
   due_date: string | null;
   department_id: string;
   secondary_department_ids: string[];
+  top_match_code: string | null;
+  top_match_score: number | null;
   message_count: number;
   last_message_at: string | null;
 }
@@ -63,12 +74,52 @@ export interface CaseFile {
   description: string;
 }
 
+export interface DeltaItem {
+  category: string;
+  past_approach: string;
+  current_requirement: string;
+  status: "REUSABLE" | "MODIFIED" | "NET_NEW";
+  action_recommendation: string;
+  source_artifact: string | null;
+  source_artifact_id: string | null;
+}
+
+export interface PrecedentFile extends CaseFile {
+  uploaded_by: RoomPerson | null;
+}
+
+/** A matched past case with everything the delta tab and the reusable kit show. */
+export interface PrecedentDetail {
+  case_id: string | null;
+  case_code: string;
+  title: string;
+  client_name: string | null;
+  department_id: string | null;
+  secondary_department_ids: string[];
+  similarity_score: number;
+  score_breakdown: { vector: number; metadataBoost: number } | null;
+  how_past_case_went: string;
+  pitfall_warnings: string[];
+  summary: string | null;
+  how_it_went: string | null;
+  duration_days: number | null;
+  resolved_at: string | null;
+  lead: RoomPerson | null;
+  lead_name: string | null;
+  lead_is_alumni: boolean;
+  delta_items: DeltaItem[];
+  artifacts: PrecedentFile[];
+}
+
 export interface ThreadView {
   id: string;
   case_code: string;
+  channel_slug: string;
   title: string;
   status: string;
   client_name: string | null;
+  fund_name: string | null;
+  source_type: SourceType | null;
   severity: Severity;
   due_date: string | null;
   department_id: string;
@@ -83,7 +134,7 @@ export interface ThreadView {
   /** Set once the case is committed to memory. */
   summary: string | null;
   resolved_at: string | null;
-  precedents: Precedent[];
+  precedents: PrecedentDetail[];
   participants: RoomPerson[];
   messages: ThreadMessage[];
 }
@@ -91,6 +142,8 @@ export interface ThreadView {
 /** The intake fields shared by "New case thread" and "Edit details". */
 export interface CaseIntake {
   client_name: string;
+  fund_name: string | null;
+  source_type: SourceType | null;
   title: string;
   initial_request_brief: string;
   severity: Severity;
@@ -157,4 +210,6 @@ export interface SendMessageInput {
   id: string;
   content: string;
   is_milestone: boolean;
+  /** A file from any case, e.g. a precedent's deliverable reused here. */
+  attached_artifact_id?: string;
 }

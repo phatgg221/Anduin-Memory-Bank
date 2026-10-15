@@ -8,7 +8,17 @@ from app.core.db import SessionDep
 from app.modules.auth.deps import CurrentUser
 from app.modules.intelligence import llm_client, retrieval
 from app.modules.triage import service
-from app.modules.triage.schemas import CaseJobsOut, CommitIn, CommitOut, JobOut, ResolveIn
+from app.modules.triage.schemas import (
+    AnalyzeIn,
+    CaseJobsOut,
+    CommitIn,
+    CommitOut,
+    CopilotAskIn,
+    CopilotMessageOut,
+    CopilotViewOut,
+    JobOut,
+    ResolveIn,
+)
 
 router = APIRouter(prefix="/cases", tags=["memory"])
 memory_router = APIRouter(prefix="/memory", tags=["memory"])
@@ -32,10 +42,36 @@ async def resolve(case_id: uuid.UUID, data: ResolveIn, user: CurrentUser, sessio
 @router.get("/{case_id}/jobs")
 async def case_jobs(case_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> CaseJobsOut:
     jobs = await service.latest_jobs(session, case_id)
-    return CaseJobsOut(
-        summarize=JobOut.model_validate(jobs["summarize"]) if jobs["summarize"] else None,
-        index=JobOut.model_validate(jobs["index"]) if jobs["index"] else None,
+    return CaseJobsOut(**{kind: JobOut.model_validate(job) if job else None for kind, job in jobs.items()})
+
+
+@router.post("/{case_id}/analyze", status_code=status.HTTP_202_ACCEPTED)
+async def analyze(case_id: uuid.UUID, data: AnalyzeIn, user: CurrentUser, session: SessionDep) -> JobOut:
+    """Starts precedent matching: top-3 past cases + delta, written to the case. Poll GET /cases/{id}/jobs."""
+    try:
+        job = await service.request_analysis(session, user, case_id, data.job_id)
+    except (service.NotFoundError, service.ConflictError) as error:
+        raise _http(error) from None
+    return JobOut.model_validate(job)
+
+
+@router.get("/{case_id}/copilot")
+async def copilot_view(case_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> CopilotViewOut:
+    messages, jobs = await service.copilot_view(session, case_id)
+    return CopilotViewOut(
+        messages=[CopilotMessageOut.model_validate(m) for m in messages],
+        jobs=[JobOut.model_validate(j) for j in jobs],
     )
+
+
+@router.post("/{case_id}/copilot", status_code=status.HTTP_202_ACCEPTED)
+async def ask_copilot(case_id: uuid.UUID, data: CopilotAskIn, user: CurrentUser, session: SessionDep) -> JobOut:
+    """Asks the Memory Copilot about this case. The answer arrives as a copilot message when the job completes."""
+    try:
+        job = await service.ask_copilot(session, user, case_id, data.message_id, data.job_id, data.question)
+    except service.NotFoundError as error:
+        raise _http(error) from None
+    return JobOut.model_validate(job)
 
 
 @router.post("/{case_id}/commit")

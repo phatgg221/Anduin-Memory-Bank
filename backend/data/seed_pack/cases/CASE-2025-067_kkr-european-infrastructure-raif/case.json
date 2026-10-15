@@ -3,6 +3,8 @@
   "channelSlug": "case-kkr-euro-infra-raif",
   "title": "KKR European Infrastructure RAIF — CSSF 10% AML/KYC Beneficial Ownership Look-Through",
   "client": "KKR (Northlake Infrastructure Management)",
+  "fund": "KKR European Infrastructure RAIF III SCSp (Luxembourg)",
+  "sourceType": "LEGAL_REDLINE",
   "severity": "CRITICAL",
   "dueDate": "2025-10-01",
   "departmentId": "LEGAL_COMPLIANCE",

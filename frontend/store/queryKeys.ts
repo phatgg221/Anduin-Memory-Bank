@@ -16,6 +16,8 @@ export const queryKeys = {
     thread: (caseId: string) => ["cases", "thread", caseId] as const,
     poll: (caseId: string) => ["cases", "poll", caseId] as const,
     jobs: (caseId: string) => ["cases", "jobs", caseId] as const,
+    copilot: (caseId: string) => ["cases", "copilot", caseId] as const,
+    open: (departmentId: string | null) => ["cases", "open", departmentId ?? "ALL"] as const,
   },
   vault: {
     all: ["vault"] as const,

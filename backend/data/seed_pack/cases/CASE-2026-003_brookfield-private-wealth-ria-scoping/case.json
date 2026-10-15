@@ -3,6 +3,8 @@
   "channelSlug": "case-brookfield-private-wealth",
   "title": "Brookfield Private Wealth — Retail RIA Aggregator & Delegated Advisor Scoping",
   "client": "Brookfield",
+  "fund": "Brookfield private wealth feeder",
+  "sourceType": "CLIENT_EMAIL",
   "severity": "MEDIUM",
   "dueDate": "2026-02-23",
   "departmentId": "SALES_SOLUTIONS",
