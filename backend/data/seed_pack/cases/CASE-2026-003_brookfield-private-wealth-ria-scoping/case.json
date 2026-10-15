@@ -2,8 +2,14 @@
   "caseCode": "CASE-2026-003",
   "channelSlug": "case-brookfield-private-wealth",
   "title": "Brookfield Private Wealth — Retail RIA Aggregator & Delegated Advisor Scoping",
+  "client": "Brookfield",
+  "severity": "MEDIUM",
+  "dueDate": "2026-02-23",
   "departmentId": "SALES_SOLUTIONS",
-  "secondaryDepartmentIds": ["ENGINEERING_DATA", "CUSTOMER_SUCCESS"],
+  "secondaryDepartmentIds": [
+    "ENGINEERING_DATA",
+    "CUSTOMER_SUCCESS"
+  ],
   "status": "RESOLVED",
   "createdBy": "ryan.miller",
   "leadResolver": "ryan.miller",

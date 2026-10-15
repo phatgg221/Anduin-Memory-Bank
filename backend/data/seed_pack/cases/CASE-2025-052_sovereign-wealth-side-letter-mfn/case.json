@@ -2,8 +2,13 @@
   "caseCode": "CASE-2025-052",
   "channelSlug": "case-sovereign-side-letter-mfn",
   "title": "GIC & Temasek Sovereign Wealth Side Letter — Sovereign Immunity & MFN Tier Redlines",
+  "client": "Meridian Global Infrastructure GP III (GIC & Temasek side letters)",
+  "severity": "MEDIUM",
+  "dueDate": "2025-09-30",
   "departmentId": "LEGAL_COMPLIANCE",
-  "secondaryDepartmentIds": ["CLIENT_OPERATIONS"],
+  "secondaryDepartmentIds": [
+    "CLIENT_OPERATIONS"
+  ],
   "status": "RESOLVED",
   "createdBy": "elena.rostova",
   "leadResolver": "david.le",

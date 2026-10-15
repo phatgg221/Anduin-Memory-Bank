@@ -2,8 +2,13 @@
   "caseCode": "CASE-2025-014",
   "channelSlug": "case-sequoia-cayman-iv",
   "title": "Sequoia Cayman Feeder IV — Joint Non-US Signer W-8BEN-E Deadlock",
+  "client": "Sequoia Heritage",
+  "severity": "HIGH",
+  "dueDate": "2025-04-23",
   "departmentId": "CLIENT_OPERATIONS",
-  "secondaryDepartmentIds": ["ENGINEERING_DATA"],
+  "secondaryDepartmentIds": [
+    "ENGINEERING_DATA"
+  ],
   "status": "RESOLVED",
   "createdBy": "chloe.nguyen",
   "leadResolver": "minh.nguyen",

@@ -2,8 +2,14 @@
   "caseCode": "CASE-2026-047",
   "channelSlug": "case-apollo-cayman-feeder",
   "title": "Apollo Crossover Feeder II — Cayman Master-Feeder Onboarding with Digital Asset Custody Annex",
+  "client": "Apollo Global Management",
+  "severity": "HIGH",
+  "dueDate": "2026-12-15",
   "departmentId": "CLIENT_OPERATIONS",
-  "secondaryDepartmentIds": ["LEGAL_COMPLIANCE", "ENGINEERING_DATA"],
+  "secondaryDepartmentIds": [
+    "LEGAL_COMPLIANCE",
+    "ENGINEERING_DATA"
+  ],
   "status": "OPEN",
   "createdBy": "chloe.nguyen",
   "leadResolver": null,

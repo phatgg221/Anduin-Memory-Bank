@@ -2,8 +2,13 @@
   "caseCode": "CASE-2026-011",
   "channelSlug": "case-blackstone-redx-k1",
   "title": "Blackstone Real Estate Debt X — Tax Season K-1 Bulk Distribution & Bank Firewall Runbook",
+  "client": "Blackstone",
+  "severity": "HIGH",
+  "dueDate": "2026-03-15",
   "departmentId": "CUSTOMER_SUCCESS",
-  "secondaryDepartmentIds": ["ENGINEERING_DATA"],
+  "secondaryDepartmentIds": [
+    "ENGINEERING_DATA"
+  ],
   "status": "RESOLVED",
   "createdBy": "chloe.nguyen",
   "leadResolver": "chloe.nguyen",

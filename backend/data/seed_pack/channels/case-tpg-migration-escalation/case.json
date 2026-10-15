@@ -2,8 +2,14 @@
   "caseCode": "CASE-2026-049",
   "channelSlug": "case-tpg-migration-escalation",
   "title": "TPG Capital — DealCloud Legacy LP Migration, Multi-Currency Wires & Portal Invite Escalation",
+  "client": "TPG Capital",
+  "severity": "CRITICAL",
+  "dueDate": "2026-10-31",
   "departmentId": "CUSTOMER_SUCCESS",
-  "secondaryDepartmentIds": ["ENGINEERING_DATA", "CLIENT_OPERATIONS"],
+  "secondaryDepartmentIds": [
+    "ENGINEERING_DATA",
+    "CLIENT_OPERATIONS"
+  ],
   "status": "OPEN",
   "createdBy": "chloe.nguyen",
   "leadResolver": null,

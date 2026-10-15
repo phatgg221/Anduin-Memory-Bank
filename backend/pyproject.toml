@@ -9,6 +9,7 @@ dependencies = [
     "email-validator>=2.3.0",
     "fastapi>=0.143.1",
     "httpx2>=2.13.1",
+    "markitdown[docx,pdf,xlsx]>=0.1.8",
     "minio>=7.2.20",
     "pgvector>=0.5.1",
     "pwdlib[argon2]>=0.3.1",

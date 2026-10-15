@@ -2,8 +2,14 @@
   "caseCode": "CASE-2025-029",
   "channelSlug": "case-a16z-growth-vii",
   "title": "Andreessen Growth Parallel VII — 400-LP Legacy Trust Migration & ERISA 25% Cap Guard",
+  "client": "Andreessen Horowitz (AGF VII GP)",
+  "severity": "HIGH",
+  "dueDate": "2025-08-04",
   "departmentId": "ENGINEERING_DATA",
-  "secondaryDepartmentIds": ["CLIENT_OPERATIONS", "LEGAL_COMPLIANCE"],
+  "secondaryDepartmentIds": [
+    "CLIENT_OPERATIONS",
+    "LEGAL_COMPLIANCE"
+  ],
   "status": "RESOLVED",
   "createdBy": "sarah.tran",
   "leadResolver": "sarah.tran",

@@ -2,8 +2,14 @@
   "caseCode": "CASE-2025-038",
   "channelSlug": "case-carlyle-asia-vi-fx",
   "title": "Carlyle Asia Buyout VI — Multi-Currency JPY/EUR Capital Call Wire FX Tolerance",
+  "client": "The Carlyle Group",
+  "severity": "MEDIUM",
+  "dueDate": "2025-10-15",
   "departmentId": "CLIENT_OPERATIONS",
-  "secondaryDepartmentIds": ["CUSTOMER_SUCCESS", "LEGAL_COMPLIANCE"],
+  "secondaryDepartmentIds": [
+    "CUSTOMER_SUCCESS",
+    "LEGAL_COMPLIANCE"
+  ],
   "status": "RESOLVED",
   "createdBy": "chloe.nguyen",
   "leadResolver": "minh.nguyen",

@@ -2,8 +2,14 @@
   "caseCode": "CASE-2026-048",
   "channelSlug": "case-allianz-eu-wealth-rfp",
   "title": "Allianz Global Investors — European Private Wealth Feeder Security & Scoping RFP",
+  "client": "Allianz Global Investors",
+  "severity": "MEDIUM",
+  "dueDate": "2026-11-06",
   "departmentId": "SALES_SOLUTIONS",
-  "secondaryDepartmentIds": ["LEGAL_COMPLIANCE", "ENGINEERING_DATA"],
+  "secondaryDepartmentIds": [
+    "LEGAL_COMPLIANCE",
+    "ENGINEERING_DATA"
+  ],
   "status": "OPEN",
   "createdBy": "ryan.miller",
   "leadResolver": null,

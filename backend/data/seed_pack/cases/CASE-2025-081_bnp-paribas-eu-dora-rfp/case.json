@@ -2,8 +2,14 @@
   "caseCode": "CASE-2025-081",
   "channelSlug": "case-bnp-am-dora-rfp",
   "title": "BNP Paribas Asset Management — EU DORA & Cloud Data Residency Security RFP",
+  "client": "BNP Paribas Asset Management",
+  "severity": "HIGH",
+  "dueDate": "2025-09-29",
   "departmentId": "SALES_SOLUTIONS",
-  "secondaryDepartmentIds": ["LEGAL_COMPLIANCE", "ENGINEERING_DATA"],
+  "secondaryDepartmentIds": [
+    "LEGAL_COMPLIANCE",
+    "ENGINEERING_DATA"
+  ],
   "status": "RESOLVED",
   "createdBy": "ryan.miller",
   "leadResolver": "david.le",

@@ -142,6 +142,9 @@ async def seed_case(
         session.add(record)
     record.channel_slug = data["channelSlug"]
     record.title = data["title"]
+    record.client_name = data["client"]
+    record.severity = data["severity"]
+    record.due_date = date.fromisoformat(data["dueDate"]) if data.get("dueDate") else None
     record.department_id = data["departmentId"]
     record.secondary_department_ids = data["secondaryDepartmentIds"]
     record.status = data["status"]

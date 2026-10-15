@@ -64,6 +64,9 @@ bun run seed                         # load into Postgres + MinIO (idempotent)
   "caseCode": "CASE-2025-014",
   "channelSlug": "case-sequoia-cayman-iv",
   "title": "Sequoia Cayman Feeder IV — Joint Non-US Signer W-8BEN-E Deadlock",
+  "client": "Sequoia Heritage",
+  "severity": "HIGH",
+  "dueDate": "2025-04-23",
   "departmentId": "CLIENT_OPERATIONS",
   "secondaryDepartmentIds": [],
   "status": "RESOLVED",
@@ -86,7 +89,7 @@ bun run seed                         # load into Postgres + MinIO (idempotent)
 }
 ```
 
-- **Keys match the DB columns** (camelCase here → snake_case columns). `contextTags` keys are Title Case labels, as in the blueprint.
+- **Keys match the DB columns** (camelCase here → snake_case columns; `client` → `client_name`). `severity`: `CRITICAL | HIGH | MEDIUM | LOW`; `dueDate` is the client deadline the team worked against. `contextTags` keys are Title Case labels, as in the blueprint.
 - **`pitfalls[].severity`:** `HIGH | MEDIUM | LOW`. `reference` is optional and points at a chat line (`Chat #L<n>`, the line number in `channel.txt`) or an artifact section (`<file> §<section>`).
 - **`durationDays`** = whole days from `createdAt` to `resolvedAt`.
 - **`fileType` vocabulary:**

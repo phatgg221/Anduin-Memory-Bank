@@ -201,9 +201,7 @@ async def create_case(session: AsyncSession, user: User, data) -> CaseRecord:
 async def load_for_memory(session: AsyncSession, case_id: uuid.UUID) -> tuple[CaseRecord, list[ChannelMessage]]:
     """The case with its artifacts, and every thread message with author and attachment, in order."""
     # populate_existing: apply the eager load even if this case is already in the session's identity map.
-    case = await session.get(
-        CaseRecord, case_id, options=[selectinload(CaseRecord.artifacts)], populate_existing=True
-    )
+    case = await session.get(CaseRecord, case_id, options=[selectinload(CaseRecord.artifacts)], populate_existing=True)
     if case is None:
         raise NotFoundError("Unknown case")
     messages = list(await session.scalars(_messages_query(case_id).order_by(ChannelMessage.seq)))

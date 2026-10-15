@@ -65,6 +65,8 @@ def test_case_manifest(folder):
         assert data["status"] == "OPEN" and folder.name == data["channelSlug"]
         assert "resolvedAt" not in data and data["comparisonResults"]
     assert data["departmentId"] in DEPARTMENT_IDS
+    assert data["client"] and data["severity"] in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
+    assert date.fromisoformat(data["dueDate"])
     assert set(data["secondaryDepartmentIds"]) <= DEPARTMENT_IDS
     assert data["createdBy"] in AUTHORS
     assert data.get("leadResolver") in AUTHORS | {None}
