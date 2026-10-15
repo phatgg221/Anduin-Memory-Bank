@@ -2,6 +2,7 @@ import { accessTokenStore } from "@/lib/accessToken";
 import { toApiRequestError, withApiErrors } from "@/lib/apiError";
 import { axiosClient, refreshSession } from "@/lib/axiosClient";
 import type { AuthResponse, LoginInput, RegisterInput, Session } from "@/types/auth";
+import type { Department } from "@/types/org";
 
 // Auth endpoints opt out of the 401 → refresh flow: a 401 here means bad credentials, not an expired token.
 const AUTH = { skipAuthRefresh: true } as const;
@@ -15,6 +16,12 @@ export const authService = {
   async register(input: RegisterInput): Promise<Session> {
     const { data } = await withApiErrors(axiosClient.post<AuthResponse>("/auth/register", input, AUTH));
     return startSession(data);
+  },
+
+  /** Public: the department picker on the sign-up page. */
+  async listSignupDepartments(): Promise<Department[]> {
+    const { data } = await withApiErrors(axiosClient.get<Department[]>("/auth/departments", AUTH));
+    return data;
   },
 
   async login(input: LoginInput): Promise<Session> {

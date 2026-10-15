@@ -12,6 +12,8 @@ class RegisterIn(BaseModel):
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     password: str = Field(min_length=8, max_length=128)
     confirm_password: str
+    job_title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=120)] | None = None
+    department_id: str | None = None  # their home department; also their default department view
 
     @field_validator("email")
     @classmethod

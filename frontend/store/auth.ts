@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApiRequestError } from "@/lib/apiError";
 import { authService } from "@/services/authService";
 import type { LoginInput, RegisterInput, Session } from "@/types/auth";
+import type { Department } from "@/types/org";
 import { queryKeys } from "./queryKeys";
 
 /** The signed-in user, or null when signed out. Restored once per page load from the refresh cookie. */
@@ -20,6 +21,14 @@ export function useLogin() {
   return useMutation<Session, ApiRequestError, LoginInput>({
     mutationFn: authService.login,
     onSuccess: (session) => queryClient.setQueryData(queryKeys.auth.session, session),
+  });
+}
+
+export function useSignupDepartments() {
+  return useQuery<Department[], ApiRequestError>({
+    queryKey: queryKeys.auth.signupDepartments,
+    queryFn: authService.listSignupDepartments,
+    staleTime: Infinity,
   });
 }
 

@@ -142,3 +142,18 @@ def test_me_requires_a_valid_access_token(client):
     # A refresh token must not work as an access token.
     assert client.get("/api/auth/me", headers=bearer(refresh_token)).status_code == 401
     assert client.get("/api/auth/me", headers=bearer(response.json()["access_token"])).status_code == 200
+
+
+def test_register_with_role_and_department(client, sql):
+    sql("INSERT INTO departments (id, code, name) VALUES ('LEGAL_COMPLIANCE', 'LEGAL', 'Legal & Compliance')")
+    assert [d["code"] for d in client.get("/api/auth/departments").json()] == ["LEGAL"]  # public
+
+    created = register(client, job_title="  Legal Counsel ", department_id="LEGAL_COMPLIANCE")
+    assert created.status_code == 201
+    user = created.json()["user"]
+    assert user["job_title"] == "Legal Counsel"
+    assert user["primary_department_id"] == user["active_department_id"] == "LEGAL_COMPLIANCE"
+    assert user["role"] == "MEMBER"  # not self-assignable
+
+    unknown = register(client, email="other@anduin.example", department_id="NOPE")
+    assert unknown.status_code == 422

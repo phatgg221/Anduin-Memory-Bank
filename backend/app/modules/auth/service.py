@@ -50,8 +50,18 @@ def initials(name: str) -> str:
 
 
 async def register(session: AsyncSession, data: RegisterIn) -> IssuedSession:
+    if data.department_id is not None and await session.get(Department, data.department_id) is None:
+        raise UnknownDepartmentError
     password_hash = await asyncio.to_thread(hash_password, data.password)
-    user = User(email=data.email, name=data.name, password_hash=password_hash, avatar_initials=initials(data.name))
+    user = User(
+        email=data.email,
+        name=data.name,
+        password_hash=password_hash,
+        avatar_initials=initials(data.name),
+        job_title=data.job_title,
+        primary_department_id=data.department_id,
+        active_department_id=data.department_id,
+    )
     session.add(user)
     try:
         await session.flush()

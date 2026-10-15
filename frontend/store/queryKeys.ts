@@ -1,6 +1,7 @@
 export const queryKeys = {
   auth: {
     session: ["auth", "session"] as const,
+    signupDepartments: ["auth", "departments"] as const,
   },
   org: {
     departments: ["org", "departments"] as const,

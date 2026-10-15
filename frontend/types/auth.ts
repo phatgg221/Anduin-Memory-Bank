@@ -33,4 +33,6 @@ export interface RegisterInput {
   name: string;
   password: string;
   confirm_password: string;
+  job_title: string;
+  department_id: string;
 }

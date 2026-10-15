@@ -8,6 +8,8 @@ from app.core.db import SessionDep
 from app.modules.auth import service
 from app.modules.auth.deps import CurrentUser
 from app.modules.auth.schemas import ActiveDepartmentIn, AuthOut, LoginIn, RegisterIn, UserOut
+from app.modules.org import service as org_service
+from app.modules.org.schemas import DepartmentOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -53,7 +55,15 @@ async def register(data: RegisterIn, response: Response, session: SessionDep) ->
         issued = await service.register(session, data)
     except service.EmailTakenError:
         raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists") from None
+    except service.UnknownDepartmentError:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown department") from None
     return _issue_response(response, issued)
+
+
+@router.get("/departments")
+async def signup_departments(session: SessionDep) -> list[DepartmentOut]:
+    """Public: the department picker on the sign-up page (names only, nothing private)."""
+    return [DepartmentOut.model_validate(d) for d in await org_service.list_departments(session)]
 
 
 @router.post("/login", response_model=AuthOut)
