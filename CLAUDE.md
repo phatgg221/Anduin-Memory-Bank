@@ -31,7 +31,8 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
   - Every user sees every department (no RBAC walls in the MVP); the department switcher only filters.
   - Still undecided: the job table for ANALYZE/SUMMARIZE runs. Don't invent it without asking.
 - **Seed pack loaded by `bun run seed`:** 5 departments, 7 colleagues (2 ALUMNI) plus your account via `SEED_OPERATOR_EMAIL`, 8 resolved cases, 3 open demo channels with pre-computed `comparison_results`, 26 artifacts in MinIO. Knowledge chunks aren't embedded yet.
-- Not built yet: domain API routes, the job worker/sweeper, the intelligence pipeline, and the workbench panes.
+- **Built UI:** War Room (landing tab: one chat per department, lead + department members by default, pinned case with its precedents, 3 s polling, optimistic send), Workbench (empty 3-pane frame), Knowledge Vault (resolved cases + files by department). The header department switcher is saved per user (`users.active_department_id`).
+- Not built yet: file upload in chat, the job worker/sweeper, the intelligence pipeline, and the workbench panes.
 - `PLAN.md` is still to be written.
 - If a task needs a product decision (CONTEXT.md §7, DESIGN.md §8), ask instead of guessing.
 

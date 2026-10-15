@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
     },
   },
   async redirects() {
-    return [{ source: "/", destination: "/workbench", permanent: false }];
+    return [{ source: "/", destination: "/war-room", permanent: false }];
   },
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${backend}/api/:path*` }];

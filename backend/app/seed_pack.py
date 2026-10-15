@@ -117,6 +117,10 @@ def load_users() -> list[dict[str, Any]]:
     return read_json(SEED_PACK / "users.json")
 
 
+def load_rooms() -> list[dict[str, Any]]:
+    return read_json(SEED_PACK / "rooms.json")
+
+
 def load_cases() -> list[SeedCase]:
     return [load_case(folder) for folder in case_folders("cases") + case_folders("channels")]
 

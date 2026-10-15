@@ -13,6 +13,7 @@ from datetime import date
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -22,9 +23,11 @@ from app.core.storage import ensure_bucket, internal
 from app.modules.auth.models import User
 from app.modules.cases.models import CaseArtifact, CaseRecord, ChannelMessage
 from app.modules.org.models import Department
-from app.seed_pack import SeedCase, load_cases, load_departments, load_users, parse_timestamp
+from app.modules.rooms.models import Room, RoomMember, RoomMessage
+from app.seed_pack import SeedCase, load_cases, load_departments, load_rooms, load_users, parse_timestamp
 
 CHAT_REFERENCE = re.compile(r"Chat #L(\d+)")
+CASE_TAG = re.compile(r"#(CASE-\d{4}-\d{3})\b")
 USER_FIELDS = ("name", "primary_department_id", "role", "job_title", "avatar_initials", "is_active", "tenure_note")
 mimetypes.add_type("text/markdown", ".md")
 mimetypes.add_type("text/csv", ".csv")
@@ -48,7 +51,8 @@ async def seed_users(session: AsyncSession) -> dict[str, uuid.UUID]:
     handles: dict[str, uuid.UUID] = {}
     for row in rows:
         if row["handle"] == "operator":
-            await link_operator(session, row)
+            if operator_id := await link_operator(session, row):
+                handles["operator"] = operator_id
             continue
         user = existing.get(row["email"]) or User(email=row["email"], password_hash=UNUSABLE_PASSWORD)
         for key in USER_FIELDS:
@@ -60,19 +64,20 @@ async def seed_users(session: AsyncSession) -> dict[str, uuid.UUID]:
     return handles
 
 
-async def link_operator(session: AsyncSession, row: dict[str, Any]) -> None:
+async def link_operator(session: AsyncSession, row: dict[str, Any]) -> uuid.UUID | None:
     email = os.environ.get(row["matchEmailEnv"], "").strip().lower()
     if not email:
         print(f"  operator: {row['matchEmailEnv']} not set, skipped")
-        return
+        return None
     user = await session.scalar(select(User).where(User.email == email))
     if user is None:
         print(f"  operator: no registered account for {email}, skipped (register first, then re-seed)")
-        return
+        return None
     user.primary_department_id = row["primary_department_id"]
     user.role = row["role"]
     user.job_title = row["job_title"]
     print(f"  operator: {email} → {row['role']}")
+    return user.id
 
 
 def object_key(case: SeedCase, file_name: str) -> str:
@@ -213,6 +218,66 @@ def resolve_comparisons(
     ]
 
 
+ROOM_MESSAGE_NAMESPACE = uuid.UUID("5d1f7c1e-9a52-4f0e-8a51-3d0b6f1f7a10")
+
+
+async def seed_rooms(
+    session: AsyncSession,
+    handles: dict[str, uuid.UUID],
+    case_ids: dict[str, uuid.UUID],
+    artifact_ids: dict[tuple[str, str], uuid.UUID],
+) -> int:
+    """Leads, default members (lead + active people of that department + seeded authors), pinned case, messages.
+
+    Seeded messages have fixed ids (uuid5), so re-seeding never duplicates them or touches real ones.
+    """
+    leads = {row["id"]: handles.get(row["lead"]) for row in load_departments()}
+    departments = {d.id: d for d in await session.scalars(select(Department))}
+    homes = list(await session.execute(select(User.id, User.primary_department_id).where(User.is_active)))
+    rooms = {row["departmentId"]: row for row in load_rooms()}
+    count = 0
+    for department_id, department in departments.items():
+        department.lead_user_id = leads.get(department_id)
+        room_row = rooms.get(department_id, {"pinnedCase": None, "messages": []})
+        pinned = case_ids.get(room_row["pinnedCase"]) if room_row["pinnedCase"] else None
+        await session.execute(
+            insert(Room)
+            .values(department_id=department_id, pinned_case_id=pinned)
+            .on_conflict_do_update(index_elements=["department_id"], set_={"pinned_case_id": pinned})
+        )
+        members = {user_id: "MEMBER" for user_id, home in homes if home == department_id}
+        members |= {handles[m["author"]]: "MEMBER" for m in room_row["messages"]}
+        if department.lead_user_id:
+            members[department.lead_user_id] = "LEAD"
+        for user_id, role in members.items():
+            await session.execute(
+                insert(RoomMember)
+                .values(department_id=department_id, user_id=user_id, role=role)
+                .on_conflict_do_update(index_elements=["department_id", "user_id"], set_={"role": role})
+            )
+        for index, message in enumerate(room_row["messages"]):
+            attachment = message["attachment"]
+            await session.execute(
+                insert(RoomMessage)
+                .values(
+                    id=uuid.uuid5(ROOM_MESSAGE_NAMESPACE, f"{department_id}:{index}"),
+                    department_id=department_id,
+                    user_id=handles[message["author"]],
+                    content=message["content"],
+                    tagged_case_codes=list(dict.fromkeys(CASE_TAG.findall(message["content"]))),
+                    attached_artifact_id=artifact_ids[(attachment["caseCode"], attachment["file"])]
+                    if attachment
+                    else None,
+                    is_milestone=message["milestone"],
+                    created_at=parse_timestamp(message["at"]),
+                )
+                .on_conflict_do_nothing()
+            )
+            count += 1
+    await session.flush()
+    return count
+
+
 async def main() -> None:
     await asyncio.to_thread(ensure_bucket)
     cases = sorted(load_cases(), key=lambda c: (not c.resolved, c.code))
@@ -224,9 +289,12 @@ async def main() -> None:
         for case in cases:
             await seed_case(session, case, handles, artifact_ids, case_ids)
             print(f"  {case.code}  {case.data['status']:8}  {len(case.messages):2} messages  {case.data['title'][:60]}")
+        room_messages = await seed_rooms(session, handles, case_ids, artifact_ids)
     await engine.dispose()
     resolved = sum(c.resolved for c in cases)
-    print(f"Seeded {len(handles)} colleagues, {resolved} resolved cases, {len(cases) - resolved} open channels.")
+    colleagues = len(handles) - ("operator" in handles)
+    print(f"Seeded {colleagues} colleagues, {resolved} resolved cases, {len(cases) - resolved} open channels.")
+    print(f"Seeded the department war rooms (leads, members, {room_messages} messages).")
     print("Knowledge chunks are not embedded yet: they land with the intelligence pipeline.")
 
 

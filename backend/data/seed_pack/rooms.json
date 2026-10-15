@@ -1,0 +1,137 @@
+[
+  {
+    "departmentId": "CLIENT_OPERATIONS",
+    "pinnedCase": "CASE-2026-047",
+    "messages": [
+      {
+        "author": "chloe.nguyen",
+        "at": "2026-10-13T09:15:00+07:00",
+        "content": "Pinning Apollo #CASE-2026-047 here: kickoff is Monday. The GP's first question is joint signers, so I'm answering from Minh's #CASE-2025-014 post-mortem rather than from memory.",
+        "attachment": { "caseCode": "CASE-2025-014", "file": "postmortem_cayman_fatca_deadlock.md" },
+        "milestone": false
+      },
+      {
+        "author": "sarah.tran",
+        "at": "2026-10-13T09:40:00+07:00",
+        "content": "Schema side: reusing cayman_fatca_v2 is a parameter change only. Annex D (hardware wallet custody) is the unknown. I'll scope signed-message proof per chain by Wednesday.",
+        "attachment": null,
+        "milestone": false
+      },
+      {
+        "author": "chloe.nguyen",
+        "at": "2026-10-14T11:20:00+07:00",
+        "content": "TPG #CASE-2026-049 lands on Ops too: EUR/JPY wires are off by 0.02-0.11% of the call. Carlyle's ±0.25% tolerance policy from #CASE-2025-038 fits, but the GP has to adopt it under their own LPA first.",
+        "attachment": { "caseCode": "CASE-2025-038", "file": "fx_settlement_tolerance_ops_policy.md" },
+        "milestone": true
+      }
+    ]
+  },
+  {
+    "departmentId": "LEGAL_COMPLIANCE",
+    "pinnedCase": "CASE-2026-047",
+    "messages": [
+      {
+        "author": "elena.rostova",
+        "at": "2026-10-13T10:02:00+07:00",
+        "content": "Apollo's sovereign side letters drop the first MFN bracket to US$15M (#CASE-2026-047). Starting from David's approved redlines in #CASE-2025-052, not a blank draft.",
+        "attachment": { "caseCode": "CASE-2025-052", "file": "sovereign_wealth_side_letter_approved_redlines.pdf" },
+        "milestone": false
+      },
+      {
+        "author": "ryan.miller",
+        "at": "2026-10-13T10:14:00+07:00",
+        "content": "Allianz (#CASE-2026-048) wants Swiss client confidentiality language as well. Is there anything in the library?",
+        "attachment": null,
+        "milestone": false
+      },
+      {
+        "author": "elena.rostova",
+        "at": "2026-10-13T10:20:00+07:00",
+        "content": "Nothing for Swiss banking secrecy: that one is net new, and I'll draft it with their Swiss counsel. For Apollo's 10% look-through we reuse David's four-tier schema from #CASE-2025-067 with the scope set to ALL_INVESTORS.",
+        "attachment": { "caseCode": "CASE-2025-067", "file": "ubo_4tier_lookthrough_schema.json" },
+        "milestone": true
+      }
+    ]
+  },
+  {
+    "departmentId": "SALES_SOLUTIONS",
+    "pinnedCase": "CASE-2026-048",
+    "messages": [
+      {
+        "author": "ryan.miller",
+        "at": "2026-10-13T16:50:00+07:00",
+        "content": "Allianz RFP #CASE-2026-048 is due 6 Nov. Starting from the BNP master response bank in #CASE-2025-081.",
+        "attachment": { "caseCode": "CASE-2025-081", "file": "eu_dora_infosec_rfp_master_responses.csv" },
+        "milestone": false
+      },
+      {
+        "author": "marcus.vance",
+        "at": "2026-10-14T09:20:00+07:00",
+        "content": "Before anyone quotes AI-07 or DORA-31: that bank was last verified in October 2025. I'll re-export the EU egress allow-list this week.",
+        "attachment": null,
+        "milestone": false
+      },
+      {
+        "author": "ryan.miller",
+        "at": "2026-10-14T09:35:00+07:00",
+        "content": "Agreed: no answer goes to Allianz without a fresh last_verified date. The wealth-manager questions follow Brookfield (#CASE-2026-003), adjusted for European mandates.",
+        "attachment": null,
+        "milestone": true
+      }
+    ]
+  },
+  {
+    "departmentId": "CUSTOMER_SUCCESS",
+    "pinnedCase": "CASE-2026-049",
+    "messages": [
+      {
+        "author": "chloe.nguyen",
+        "at": "2026-10-14T09:10:00+07:00",
+        "content": "TPG escalation #CASE-2026-049: Citi- and UBS-hosted LPs are missing portal invites, with no bounces. That's the same signature as Blackstone in #CASE-2026-011.",
+        "attachment": { "caseCode": "CASE-2026-011", "file": "institutional_bank_email_whitelisting_guide.md" },
+        "milestone": false
+      },
+      {
+        "author": "marcus.vance",
+        "at": "2026-10-14T10:20:00+07:00",
+        "content": "Confirmed: TPG's sending identity isn't DKIM-aligned. Fixing it now; the whitelisting guide goes to the banks' IT contacts afterwards.",
+        "attachment": null,
+        "milestone": false
+      },
+      {
+        "author": "chloe.nguyen",
+        "at": "2026-10-14T16:45:00+07:00",
+        "content": "118 dormant TPG users ahead of the Q1 tax distributions. Scheduling the K-1 pre-flight runbook's T-21 timeline against their distribution date.",
+        "attachment": { "caseCode": "CASE-2026-011", "file": "k1_tax_season_preflight_runbook.pdf" },
+        "milestone": true
+      }
+    ]
+  },
+  {
+    "departmentId": "ENGINEERING_DATA",
+    "pinnedCase": "CASE-2026-049",
+    "messages": [
+      {
+        "author": "sarah.tran",
+        "at": "2026-10-14T09:45:00+07:00",
+        "content": "DealCloud export for TPG #CASE-2026-049: 38 trusts duplicated per trustee and 21 with trustees concatenated into the name. Running it through the Andreessen normalization template from #CASE-2025-029.",
+        "attachment": { "caseCode": "CASE-2025-029", "file": "legacy_lp_trust_migration_template.csv" },
+        "milestone": false
+      },
+      {
+        "author": "marcus.vance",
+        "at": "2026-10-14T14:30:00+07:00",
+        "content": "The CRM map needs a DealCloud version; Affinity field names don't carry over. Happy to pair on it tomorrow morning.",
+        "attachment": null,
+        "milestone": false
+      },
+      {
+        "author": "sarah.tran",
+        "at": "2026-10-15T09:05:00+07:00",
+        "content": "DealCloud map v0.1 is drafted. Custodial IRAs now map to the beneficiary, FBO the custodian, instead of the custodian as investor.",
+        "attachment": null,
+        "milestone": true
+      }
+    ]
+  }
+]

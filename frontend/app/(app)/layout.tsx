@@ -11,6 +11,7 @@ import { useLogout, useSession } from "@/store/auth";
 import { useDepartments, useSetActiveDepartment } from "@/store/org";
 
 const NAV: NavItem[] = [
+  { href: "/war-room", label: "War Room" },
   { href: "/workbench", label: "Workbench" },
   { href: "/vault", label: "Knowledge Vault" },
   { href: "/ingest", label: "Ingest Archive", disabled: true },

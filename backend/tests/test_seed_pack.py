@@ -13,6 +13,7 @@ from app.seed_pack import (
     case_folders,
     load_case,
     load_departments,
+    load_rooms,
     load_users,
     parse_timestamp,
 )
@@ -147,3 +148,26 @@ def test_demo_citation_line_42():
     lines = (folder / "channel.txt").read_text().splitlines()
     assert lines[40].startswith("[2025-04-14 23:48] @minh.nguyen")
     assert lines[41].startswith("Found the UAT blocker:")
+
+
+def test_department_leads_are_active_people():
+    for department in load_departments():
+        lead = department["lead"]
+        assert lead == "operator" or (lead in AUTHORS and USERS[lead]["is_active"]), department["id"]
+
+
+def test_room_conversations():
+    cases = {load_case(f).data["caseCode"]: load_case(f).data for f in RESOLVED + OPEN}
+    rooms = load_rooms()
+    assert {r["departmentId"] for r in rooms} == DEPARTMENT_IDS
+    for room in rooms:
+        assert cases[room["pinnedCase"]]["status"] == "OPEN", room["departmentId"]
+        times = [parse_timestamp(m["at"]) for m in room["messages"]]
+        assert times == sorted(times) and 2 <= len(times) <= 8
+        for message in room["messages"]:
+            assert message["author"] in AUTHORS and USERS[message["author"]]["is_active"], message["author"]
+            for code in re.findall(r"#(CASE-\d{4}-\d{3})", message["content"]):
+                assert code in cases, code
+            if attachment := message["attachment"]:
+                files = {a["file"] for a in cases[attachment["caseCode"]]["artifacts"]}
+                assert attachment["file"] in files, attachment

@@ -1,4 +1,4 @@
-export const DEFAULT_SIGNED_IN_PATH = "/workbench";
+export const DEFAULT_SIGNED_IN_PATH = "/war-room";
 export const AUTH_PAGES = ["/login", "/register"];
 
 const PROBE_ORIGIN = "http://dejavu.invalid";

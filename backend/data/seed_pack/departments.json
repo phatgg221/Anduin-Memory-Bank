@@ -5,7 +5,8 @@
     "name": "Client Operations & Onboarding",
     "description": "Runs LP subscription workflows, tax-form validation, capital-call notices, and fund onboarding SOPs.",
     "accent_color": "#0F2547",
-    "agent_system_hint": "Focus on LP subscription workflows, W-8/W-9 tax validation, capital call wire notices, and onboarding SOPs."
+    "agent_system_hint": "Focus on LP subscription workflows, W-8/W-9 tax validation, capital call wire notices, and onboarding SOPs.",
+    "lead": "operator"
   },
   {
     "id": "LEGAL_COMPLIANCE",
@@ -13,7 +14,8 @@
     "name": "Legal & Compliance",
     "description": "Owns side letters, AML/KYC policy, counsel redlines, and regulatory interpretations.",
     "accent_color": "#065F46",
-    "agent_system_hint": "Focus on LP Side Letters, Sovereign Immunity carve-outs, MFN tiers, AML/KYC beneficial ownership thresholds, and counsel redlines."
+    "agent_system_hint": "Focus on LP Side Letters, Sovereign Immunity carve-outs, MFN tiers, AML/KYC beneficial ownership thresholds, and counsel redlines.",
+    "lead": "elena.rostova"
   },
   {
     "id": "SALES_SOLUTIONS",
@@ -21,7 +23,8 @@
     "name": "Sales & Solutions Architecture",
     "description": "Answers enterprise RFPs and security questionnaires, and scopes new client deployments.",
     "accent_color": "#2998FF",
-    "agent_system_hint": "Focus on Enterprise InfoSec RFPs (SOC2, EU DORA, GDPR), data residency proofs, and deal scoping calculators."
+    "agent_system_hint": "Focus on Enterprise InfoSec RFPs (SOC2, EU DORA, GDPR), data residency proofs, and deal scoping calculators.",
+    "lead": "ryan.miller"
   },
   {
     "id": "CUSTOMER_SUCCESS",
@@ -29,7 +32,8 @@
     "name": "Customer Success & Escalations",
     "description": "Handles GP/LP escalations, tax-season distributions, deliverability, and access issues.",
     "accent_color": "#92400E",
-    "agent_system_hint": "Focus on K-1 tax distribution runbooks, institutional bank email whitelisting, MFA lockouts, and GP/LP escalations."
+    "agent_system_hint": "Focus on K-1 tax distribution runbooks, institutional bank email whitelisting, MFA lockouts, and GP/LP escalations.",
+    "lead": "chloe.nguyen"
   },
   {
     "id": "ENGINEERING_DATA",
@@ -37,6 +41,7 @@
     "name": "Engineering & Data Integrations",
     "description": "Builds data migrations, CRM integrations, webhooks, and conditional form schemas.",
     "accent_color": "#525866",
-    "agent_system_hint": "Focus on legacy portfolio data migrations, CRM field mappings (Affinity/DealCloud), ERISA cap webhooks, and conditional form schemas."
+    "agent_system_hint": "Focus on legacy portfolio data migrations, CRM field mappings (Affinity/DealCloud), ERISA cap webhooks, and conditional form schemas.",
+    "lead": "sarah.tran"
   }
 ]

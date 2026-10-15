@@ -271,6 +271,13 @@ Expired and revoked token rows are not cleaned up yet. Add a periodic purge (e.g
 | `copilot_messages` | `cases` | `seq` · `case_id` · `user_id` · `role` (`user` \| `assistant`, CHECK) · `content` · `cited_case_ids` · `cited_artifact_ids` | Citations are set by code from retrieved context, never by the LLM |
 | `knowledge_chunks` | `cases` | `case_id` · `department_id` · `artifact_id` / `message_id` (source) · `chunk_type` (CHECK) · `reference_label` · `content` · `embedding vector(EMBEDDING_DIM)` | HNSW cosine index (`m=16`, `ef_construction=64`). Not populated yet: embedding lands with the intelligence pipeline |
 
+| `departments.lead_user_id` · `users.active_department_id` | `org` · `auth` | lead → users (SET NULL); the header switcher's saved view (null = All Departments) | The lead is always a member of the department's war room |
+| `rooms` | `rooms` | `department_id` PK · `pinned_case_id` | One war room per department, created on first use |
+| `room_members` | `rooms` | (`department_id`, `user_id`) PK · `role` (`LEAD` \| `MEMBER`) | Default members: lead + active people of that department. Posting joins; the lead can't be removed; alumni can't join |
+| `room_messages` | `rooms` | `id` (client-generated, idempotent send) · `seq` identity (polling cursor) · `department_id` · `user_id` · `content` · `tagged_case_codes` jsonb · `attached_artifact_id` · `is_milestone` | `#CASE-YYYY-NNN` tags are validated by code on write |
+| `room_reads` | `rooms` | (`department_id`, `user_id`) PK · `last_read_seq` | Unread = messages by others above the marker; the marker only moves forward |
+
+- **War Room API:** `GET /api/rooms` (summaries + unread) · `GET /api/rooms/people` · `GET /api/rooms/{dept}` (whole screen in one request) · `GET /api/rooms/{dept}/messages?after_seq=` (polled every 3 s) · `POST …/messages` · `PUT|DELETE …/members/{user_id}` · `PUT …/pinned-case` · `PUT …/read`.
 - **JSONB shapes** (camelCase keys, as in the seed pack): `pitfalls[] = {warning, severity, reference, authorId, messageId}`; `comparison_results[] = {caseCode, caseId, similarityScore, howPastCaseWent, pitfallWarnings[], deltaItems[{category, pastApproach, currentRequirement, status, actionRecommendation, sourceArtifact, sourceArtifactId}]}`.
 - **Module dependencies:** `org` imports only `core`; `auth.models` references `org.Department`; `cases` imports `auth.models` and `org.models`. Relationships are `lazy="raise"`.
 - **Still to design:** the job table (§6.4) for ANALYZE / SUMMARIZE runs.
