@@ -25,6 +25,7 @@ import { PaneLayout } from "@/components/workspace/PaneLayout";
 import { PrecedentDelta } from "@/components/workspace/PrecedentDelta";
 import { ReusableKit } from "@/components/workspace/ReusableKit";
 import { TabBar } from "@/components/workspace/TabBar";
+import { TriageReportPanel } from "@/components/workspace/TriageReportPanel";
 import { usePanels } from "@/lib/usePanels";
 import { useSession } from "@/store/auth";
 import {
@@ -430,6 +431,27 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
               onOpenFile={handleOpenArtifact}
               onOpenVault={() => router.push("/vault")}
               onOpenChannel={() => setTab("channel")}
+              header={
+                t.triage_report ? (
+                  <TriageReportPanel
+                    report={t.triage_report}
+                    trace={analysisJob?.trace ?? []}
+                    departmentCodes={departmentCodes}
+                    memberIds={memberIds}
+                    canAct={isOpenCase}
+                    onCaseClick={handleCaseClick}
+                    onAddMember={(userId) => {
+                      const person = people.data?.find((p) => p.id === userId);
+                      if (person) changeMember.mutate({ kind: "add", person });
+                    }}
+                    onPostQuestions={(text) => {
+                      if (!me) return;
+                      sendThread.mutate(newMessage(text, false));
+                      setTab("channel");
+                    }}
+                  />
+                ) : undefined
+              }
             />
           </div>
         )}

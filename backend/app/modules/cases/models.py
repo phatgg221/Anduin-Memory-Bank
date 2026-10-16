@@ -72,6 +72,8 @@ class CaseRecord(Base):
     context_tags: Mapped[dict[str, str]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     # Precedent banner: top-3 matches with similarity, how they went, and delta items. Written by the ANALYZE job.
     comparison_results: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    # The triage agent's report (summary, risk & effort, duplicates, missing info, team), guarded by code.
+    triage_report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # Memory record, written on resolve (SUMMARIZE job, or the seed).
     summary: Mapped[str | None] = mapped_column(Text)
     how_it_went: Mapped[str | None] = mapped_column(Text)

@@ -83,7 +83,9 @@ async def rank_precedents(
     return out
 
 
-async def compare(incoming: IncomingRequest, precedents: list[PrecedentContext]) -> tuple[list[dict], list[str]]:
+async def compare(
+    incoming: IncomingRequest, precedents: list[PrecedentContext], *, model: str | None = None
+) -> tuple[list[dict], list[str]]:
     if not precedents:
         raise NoPrecedentsError("The Memory Bank has no indexed cases to compare against yet.")
     incoming_block = "\n".join(
@@ -113,6 +115,7 @@ async def compare(incoming: IncomingRequest, precedents: list[PrecedentContext])
         analyze_user(incoming_block, precedent_blocks),
         CaseComparisonReport,
         fake=lambda: _fake_report(precedents),
+        model=model,
     )
     return guard_report(report, precedents)
 

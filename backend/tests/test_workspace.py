@@ -57,7 +57,7 @@ def test_analysis_ranks_guards_and_stores_the_delta(client, sql):
     ).json()
 
     job = client.post(f"/api/cases/{case['id']}/analyze", json={"job_id": str(uuid.uuid4())}, headers=elena).json()
-    assert job["kind"] == "ANALYZE" and job["steps"][0] == "Reading the incoming request"
+    assert job["kind"] == "ANALYZE" and job["steps"][0] == "Reading & indexing the request"
     run_job(client, job["id"])
     done = client.get(f"/api/cases/{case['id']}/jobs", headers=elena).json()["analyze"]
     assert done["status"] == "COMPLETED", done["error"]
@@ -69,6 +69,39 @@ def test_analysis_ranks_guards_and_stores_the_delta(client, sql):
     [item] = top["delta_items"]
     assert item["status"] == "REUSABLE" and item["source_artifact_id"] == SOVEREIGN_FILE
     assert top["lead_is_alumni"] is True and top["artifacts"][0]["file_name"] == "mfn_tier_eligibility_matrix.csv"
+
+    tools = [step["tool"] for step in done["trace"]]
+    assert tools[:2] == ["index", "rank"] and tools[-1] == "guard"
+    assert {"search_knowledge_vault", "check_active_duplicates", "find_people", "estimate_effort"} <= set(tools)
+    report = view["triage_report"]
+    assert "[CASE-2025-052]" in report["summary"] and report["risk"]["level"] in ("MEDIUM", "HIGH")
+    assert report["effort"]["median_days"] is not None and report["investigation"]["tool_calls"] >= 5
+    known = {p["user_id"] for p in report["team"]}
+    assert known and all(p["name"] for p in report["team"])  # enriched by code from find_people
+
+
+def test_triage_guard_keeps_only_what_tools_returned():
+    from app.modules.intelligence.schemas import DuplicateDraft, TeamPickDraft, TriageReportDraft
+    from app.modules.intelligence.triage_agent import Evidence, guard_triage
+
+    evidence = Evidence()
+    evidence.people["u1"] = {"user_id": "u1", "name": "Sarah Tran", "active": True, "cases": ["CASE-2025-014"]}
+    evidence.duplicates["CASE-2026-047"] = {"case_code": "CASE-2026-047", "same_client": True, "similarity": None}
+    evidence.effort = {"median_days": 30, "days_until_deadline": 10, "fits_deadline": False}
+    draft = TriageReportDraft(
+        summary="Like [CASE-2025-014] but with an invented [CASE-1999-001] reference.",
+        risk_level="LOW",
+        team=[TeamPickDraft(user_id="u1", reason="Fixed it"), TeamPickDraft(user_id="ghost", reason="Invented")],
+        duplicates=[
+            DuplicateDraft(case_code="CASE-2026-047", reason="Same client"),
+            DuplicateDraft(case_code="CASE-2026-999", reason="Invented"),
+        ],
+    )
+    report, warnings = guard_triage(draft, evidence, [])
+    assert [p["name"] for p in report["team"]] == ["Sarah Tran"]
+    assert [d["case_code"] for d in report["duplicates"]] == ["CASE-2026-047"]
+    assert report["risk"]["level"] == "HIGH"  # deadline shorter than similar cases took: code raises the floor
+    assert any("CASE-1999-001" in w for w in warnings) and any("ghost" in w for w in warnings)
 
 
 def test_guard_drops_unknown_cases_and_files_and_keeps_net_new_on_top():

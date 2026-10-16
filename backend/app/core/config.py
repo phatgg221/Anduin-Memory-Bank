@@ -21,6 +21,8 @@ class Settings(BaseSettings):
 
     llm_provider: Literal["gemini", "openrouter", "fake"] = "fake"
     llm_model: str = ""
+    # The triage agent's tool-calling model (OpenRouter id, e.g. google/gemini-2.5-flash); empty = llm_model.
+    agent_model: str = ""
     embedding_provider: Literal["gemini", "openrouter", "fake"] = "fake"
     embedding_model: str = "gemini-embedding-001"
     embedding_dim: int = 768

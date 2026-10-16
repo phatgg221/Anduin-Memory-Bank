@@ -253,6 +253,7 @@ async def thread_view(session: AsyncSession, case_id: uuid.UUID) -> dict:
         "summary": case.summary,
         "resolved_at": case.resolved_at,
         "precedents": await precedents_for(session, case),
+        "triage_report": case.triage_report,
         "participants": list(participants.values()),
         "members": await case_members(session, case_id),
         "messages": messages,
@@ -584,3 +585,104 @@ async def add_copilot_message(
     session.add(message)
     await session.commit()
     return message
+
+
+# --- triage agent (read-only lookups; triage persists the results) ----------------------------------------------
+
+
+async def set_triage_report(session: AsyncSession, case_id: uuid.UUID, report: dict) -> None:
+    case = await session.get_one(CaseRecord, case_id)
+    case.triage_report = report
+    await session.commit()
+
+
+async def resolved_cases_by_code(session: AsyncSession, codes: list[str]) -> dict[str, dict]:
+    """Resolved cases with lead, files and everyone who worked on them (members + message authors). Three queries."""
+    if not codes:
+        return {}
+    cases = list(
+        await session.scalars(
+            select(CaseRecord)
+            .where(CaseRecord.case_code.in_(codes), CaseRecord.status == "RESOLVED")
+            .options(selectinload(CaseRecord.lead_resolver), selectinload(CaseRecord.artifacts))
+        )
+    )
+    ids = [c.id for c in cases]
+    members = await session.scalars(
+        select(CaseMember).where(CaseMember.case_id.in_(ids)).options(selectinload(CaseMember.user))
+    )
+    authors = await session.execute(
+        select(ChannelMessage.case_id, User)
+        .join(User, User.id == ChannelMessage.user_id)
+        .where(ChannelMessage.case_id.in_(ids))
+        .distinct()
+    )
+    people: dict[uuid.UUID, dict[uuid.UUID, User]] = {i: {} for i in ids}
+    for member in members:
+        people[member.case_id][member.user.id] = member.user
+    for case_id, user in authors:
+        people[case_id][user.id] = user
+    for case in cases:
+        if case.lead_resolver:
+            people[case.id][case.lead_resolver.id] = case.lead_resolver
+    return {c.case_code: {"case": c, "people": list(people[c.id].values())} for c in cases}
+
+
+async def nearest_open_cases(
+    session: AsyncSession, vector: list[float], exclude_case_id: uuid.UUID, limit: int = 5
+) -> list[tuple[CaseRecord, float]]:
+    """Other OPEN cases closest to the vector (best chunk per case), from their intake chunks in pgvector."""
+    distance = KnowledgeChunk.embedding.cosine_distance(vector).label("distance")
+    rows = await session.execute(
+        select(CaseRecord, distance)
+        .join(KnowledgeChunk, KnowledgeChunk.case_id == CaseRecord.id)
+        .where(CaseRecord.status == "OPEN", CaseRecord.id != exclude_case_id)
+        .options(selectinload(CaseRecord.lead_resolver))
+        .order_by(distance)
+        .limit(limit * 6)
+    )
+    best: dict[uuid.UUID, tuple[CaseRecord, float]] = {}
+    for case, dist in rows:
+        if case.id not in best:
+            best[case.id] = (case, 1 - float(dist))
+    return list(best.values())[:limit]
+
+
+async def open_cases_for_client(
+    session: AsyncSession, client_name: str | None, exclude_case_id: uuid.UUID
+) -> list[CaseRecord]:
+    if not client_name:
+        return []
+    return list(
+        await session.scalars(
+            select(CaseRecord)
+            .where(
+                CaseRecord.status == "OPEN",
+                CaseRecord.id != exclude_case_id,
+                func.lower(CaseRecord.client_name) == client_name.strip().lower(),
+            )
+            .options(selectinload(CaseRecord.lead_resolver))
+        )
+    )
+
+
+async def open_cases_without_chunks(session: AsyncSession, limit: int = 20) -> list[CaseRecord]:
+    """Open cases whose intake isn't in the vector index yet (e.g. seeded channels), with their files."""
+    return list(
+        await session.scalars(
+            select(CaseRecord)
+            .where(
+                CaseRecord.status == "OPEN",
+                ~select(KnowledgeChunk.id).where(KnowledgeChunk.case_id == CaseRecord.id).exists(),
+            )
+            .options(selectinload(CaseRecord.artifacts))
+            .limit(limit)
+        )
+    )
+
+
+async def artifact_ids_by_name(session: AsyncSession, case_ids: list[uuid.UUID]) -> dict[tuple, uuid.UUID]:
+    rows = await session.execute(
+        select(CaseArtifact.case_id, CaseArtifact.file_name, CaseArtifact.id).where(CaseArtifact.case_id.in_(case_ids))
+    )
+    return {(case_id, name): artifact_id for case_id, name, artifact_id in rows}

@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, computed_field
 
@@ -173,6 +173,7 @@ class ThreadViewOut(BaseModel):
     summary: str | None
     resolved_at: datetime | None
     precedents: list[PrecedentOut]
+    triage_report: dict[str, Any] | None = None
     participants: list[PersonOut]
     members: list[CaseMemberOut]
     messages: list[ThreadMessageOut]

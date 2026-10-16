@@ -34,6 +34,7 @@ export interface CaseJob {
   step: string | null;
   steps: string[];
   in_channel?: boolean;
+  trace?: TraceEvent[];
   attempts: number;
   error: string | null;
   result:
@@ -85,4 +86,56 @@ export interface CopilotAsk {
   job_id: string;
   question: string;
   reply_in_channel?: boolean;
+}
+
+export interface TraceEvent {
+  id: string;
+  tool: string;
+  label: string;
+  detail: string;
+  auto?: boolean;
+  at: string;
+}
+
+export interface TriagePerson {
+  user_id: string;
+  name: string;
+  job_title: string | null;
+  department_id: string | null;
+  active: boolean;
+  departed_at: string | null;
+  cases: string[];
+  led: string[];
+  handoff?: { user_id: string; name: string }[];
+  reason: string;
+}
+
+export interface TriageDuplicate {
+  case_code: string;
+  case_id: string;
+  title: string;
+  client: string | null;
+  similarity: number | null;
+  same_client: boolean;
+  owner: string | null;
+  severity: string;
+  reason: string;
+}
+
+export interface TriageReport {
+  summary: string;
+  risk: { level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"; reasons: string[] };
+  effort: {
+    durations: Record<string, number>;
+    median_days: number | null;
+    range_days: [number, number] | null;
+    days_until_deadline: number | null;
+    fits_deadline: boolean | null;
+  } | null;
+  missing_info: { question: string; why: string; source_case_code: string | null }[];
+  team: TriagePerson[];
+  duplicates: TriageDuplicate[];
+  investigation: { tool_calls: number; queries: string[]; cases_opened: string[]; agent: boolean; model: string };
+  guard_warnings: string[];
+  fallback?: boolean;
 }

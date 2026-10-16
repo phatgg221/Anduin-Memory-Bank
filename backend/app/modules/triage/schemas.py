@@ -22,6 +22,7 @@ class JobOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     input: dict[str, Any] | None = Field(default=None, exclude=True)
+    trace: list[dict[str, Any]] = []
 
     @computed_field
     @property

@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass
 
 from app.modules.intelligence import llm_client
-from app.modules.intelligence.schemas import CaseMemoryRecord, ThreadContext
+from app.modules.intelligence.schemas import CaseMemoryRecord, IncomingRequest, ThreadContext
 from app.modules.intelligence.transcript import build_transcript
 
 INDEX_STEPS = ("Chunking the memory record", "Embedding chunks", "Storing in the vector index")
@@ -71,4 +71,22 @@ async def embed_chunks(chunks: list[ChunkDraft]) -> list[ChunkDraft]:
     vectors = await llm_client.embed([c.content for c in chunks])
     for chunk, vector in zip(chunks, vectors, strict=True):
         chunk.embedding = vector
+    return chunks
+
+
+def build_intake_chunks(incoming: IncomingRequest) -> list[ChunkDraft]:
+    """An OPEN case's request and files as searchable chunks: lets the agent spot duplicates among active cases."""
+    head = f"{incoming.case_code} · {incoming.title} (open · customer {incoming.client_name or 'unknown'})"
+    tags = "; ".join(f"{k}: {v}" for k, v in incoming.context_tags.items())
+    chunks = [ChunkDraft("CASE_SUMMARY", "Intake brief", f"{head}\nTags: {tags}\n{incoming.brief}")]
+    for name, text in incoming.file_texts.items():
+        for part, offset in enumerate(range(0, min(len(text), ARTIFACT_CHARS * 6), ARTIFACT_CHARS), start=1):
+            chunks.append(
+                ChunkDraft(
+                    "ARTIFACT_CONTENT",
+                    f"{name} · part {part}"[:100],
+                    f"{head}\n{name}\n{text[offset : offset + ARTIFACT_CHARS]}",
+                    artifact_name=name,
+                )
+            )
     return chunks

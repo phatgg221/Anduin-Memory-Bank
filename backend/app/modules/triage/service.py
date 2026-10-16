@@ -1,10 +1,12 @@
+import asyncio
+import json
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select, text, update
-from sqlalchemy.dialects.postgresql import distinct_on, insert
+from sqlalchemy import literal, select, text, update
+from sqlalchemy.dialects.postgresql import JSONB, distinct_on, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import realtime
@@ -14,7 +16,7 @@ from app.modules.auth.models import User
 from app.modules.cases import service as cases
 from app.modules.cases.models import CaseRecord, ChannelMessage, CopilotMessage
 from app.modules.cases.schemas import ThreadMessageOut
-from app.modules.intelligence import analyzer, copilot, indexer, llm_client, summarizer
+from app.modules.intelligence import analyzer, copilot, indexer, llm_client, summarizer, triage_agent
 from app.modules.intelligence.guard import guard_memory
 from app.modules.intelligence.schemas import (
     CaseMemoryDraft,
@@ -31,7 +33,7 @@ from app.modules.triage.models import CaseJob
 MENTION = re.compile(r"@dejavu\b", re.IGNORECASE)
 
 STEPS = {
-    "ANALYZE": analyzer.ANALYZE_STEPS,
+    "ANALYZE": triage_agent.TRIAGE_STEPS,
     "SUMMARIZE": summarizer.SUMMARIZE_STEPS,
     "INDEX": indexer.INDEX_STEPS,
     "COPILOT": copilot.COPILOT_STEPS,
@@ -252,32 +254,115 @@ async def process(job_id: uuid.UUID) -> None:
     await complete(job_id, result)
 
 
+async def append_trace(job_id: uuid.UUID, event: dict[str, Any]) -> None:
+    """One more line on the live investigation screen; also counts as a heartbeat."""
+    item = json.loads(json.dumps([triage_agent.new_trace_event(event)], default=str))
+    async with SessionLocal.begin() as session:
+        await session.execute(
+            update(CaseJob)
+            .where(CaseJob.id == job_id)
+            .values(trace=CaseJob.trace.op("||")(literal(item, JSONB)), heartbeat_at=datetime.now(UTC))
+        )
+
+
+def _incoming(case: CaseRecord, file_texts: dict[str, str]) -> IncomingRequest:
+    return IncomingRequest(
+        case_code=case.case_code,
+        title=case.title,
+        client_name=case.client_name,
+        fund_name=case.fund_name,
+        source_type=case.source_type,
+        brief=case.initial_request_brief,
+        context_tags=case.context_tags,
+        file_texts=file_texts,
+    )
+
+
+async def _index_intake(session: AsyncSession, case: CaseRecord, incoming: IncomingRequest) -> tuple[int, int]:
+    """Embeds this request (and any open case not indexed yet) into pgvector, so duplicates are searchable."""
+    batch = [(case, incoming)]
+    for other in await cases.open_cases_without_chunks(session):
+        if other.id != case.id:
+            texts = {a.file_name: a.preview_text for a in other.artifacts if a.preview_text}
+            batch.append((other, _incoming(other, texts)))
+    drafts = [(target, indexer.build_intake_chunks(request)) for target, request in batch]
+    await indexer.embed_chunks([chunk for _, chunks in drafts for chunk in chunks])
+    artifact_ids = await cases.artifact_ids_by_name(session, [target.id for target, _ in batch])
+    for target, chunks in drafts:
+        rows = [
+            {
+                "chunk_type": c.chunk_type,
+                "reference_label": c.reference_label,
+                "content": c.content,
+                "embedding": c.embedding,
+                "artifact_id": artifact_ids.get((target.id, c.artifact_name)) if c.artifact_name else None,
+            }
+            for c in chunks
+        ]
+        await cases.replace_chunks(session, target, rows)
+    return len(drafts[0][1]), len(batch) - 1
+
+
 async def _analyze(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
-    await heartbeat(job_id, analyzer.ANALYZE_STEPS[0])
+    """The triage agent: index the request, rank precedents (code), investigate with tools, write a guarded report."""
+    async with SessionLocal.begin() as session:
+        await session.execute(update(CaseJob).where(CaseJob.id == job_id).values(trace=[]))
+    await heartbeat(job_id, triage_agent.TRIAGE_STEPS[0])
+    trace = lambda event: append_trace(job_id, event)  # noqa: E731
+
     async with SessionLocal() as session:
         case = await session.get_one(CaseRecord, case_id)
-        incoming = IncomingRequest(
-            case_code=case.case_code,
-            title=case.title,
-            client_name=case.client_name,
-            fund_name=case.fund_name,
-            source_type=case.source_type,
-            brief=case.initial_request_brief,
-            context_tags=case.context_tags,
-            file_texts=await cases.case_files_text(session, case_id),
+        incoming = _incoming(case, await cases.case_files_text(session, case_id))
+        files = len(incoming.file_texts)
+        chunks, others = await _index_intake(session, case, incoming)
+        await trace(
+            {
+                "tool": "index",
+                "label": "Read and indexed the request",
+                "detail": f"Brief{f' + {files} file' + ('s' if files != 1 else '') if files else ''} → {chunks} "
+                f"chunk{'s' if chunks != 1 else ''} in pgvector"
+                + (f" · {others} other open case{'s' if others != 1 else ''} indexed" if others else ""),
+            }
         )
         departments = [case.department_id, *case.secondary_department_ids]
-        await heartbeat(job_id, analyzer.ANALYZE_STEPS[1])
         precedents = await analyzer.rank_precedents(session, incoming, departments, case_id)
-    await heartbeat(job_id, analyzer.ANALYZE_STEPS[2])
-    results, warnings = await analyzer.compare(incoming, precedents)
-    await heartbeat(job_id, analyzer.ANALYZE_STEPS[3])
+        if not precedents:
+            raise analyzer.NoPrecedentsError("The Memory Bank has no indexed cases to compare against yet.")
+        await trace(
+            {
+                "tool": "rank",
+                "label": "Ranked precedents (vector + metadata)",
+                "detail": " · ".join(f"{p.case_code} {p.similarity}%" for p in precedents),
+            }
+        )
+
+        await heartbeat(job_id, triage_agent.TRIAGE_STEPS[1])
+        evidence = await triage_agent.investigate(session, case, incoming, precedents, trace)
+        severity = case.severity
+
+    await heartbeat(job_id, triage_agent.TRIAGE_STEPS[2])
+    model = settings.agent_model or None
+    (results, delta_warnings), (report, report_warnings) = await asyncio.gather(
+        analyzer.compare(incoming, precedents, model=model),
+        triage_agent.write_report(incoming, precedents, evidence, severity),
+    )
+    await heartbeat(job_id, triage_agent.TRIAGE_STEPS[3])
+    warnings = delta_warnings + report_warnings
+    await trace(
+        {
+            "tool": "guard",
+            "label": "Checked sources and scores",
+            "detail": f"{len(warnings)} unverifiable reference(s) removed" if warnings else "All references verified",
+        }
+    )
     async with SessionLocal() as session:
         await cases.set_comparison_results(session, case_id, results)
+        await cases.set_triage_report(session, case_id, report)
     return {
         "matches": [{"caseCode": r["caseCode"], "similarityScore": r["similarityScore"]} for r in results],
         "guard_warnings": warnings,
-        "provider": llm_client.provider_label(),
+        "tool_calls": evidence.tool_calls,
+        "provider": llm_client.agent_label(),
         "embedding_model": llm_client.embedding_label(),
     }
 

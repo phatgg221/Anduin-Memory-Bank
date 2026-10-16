@@ -160,3 +160,37 @@ class CopilotAnswerDraft(BaseModel):
         description="Plain text. Cite past cases inline as [CASE-YYYY-NNN] and files by exact file name."
     )
     cited_case_codes: list[str] = Field(default_factory=list, max_length=8)
+
+
+# --- TRIAGE AGENT ------------------------------------------------------------------------------------------------
+
+Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=600)]
+
+
+class MissingInfoDraft(BaseModel):
+    question: Text = Field(description="A question to send the client or counsel before work starts.")
+    why: Text = Field(description="Why it matters, from what happened in a past case.")
+    source_case_code: str | None = Field(default=None, description="The past case that taught us this, or null.")
+
+
+class TeamPickDraft(BaseModel):
+    user_id: str = Field(description="Exact user_id from a find_people result. Never invent one.")
+    reason: Text = Field(description="What they did on which case, and why they help here.")
+
+
+class DuplicateDraft(BaseModel):
+    case_code: str = Field(description="Exact case_code from a check_active_duplicates result.")
+    reason: Text
+
+
+class TriageReportDraft(BaseModel):
+    """The agent's synthesis after investigating. Numbers, scores and IDs are checked or replaced by code."""
+
+    summary: Annotated[str, StringConstraints(strip_whitespace=True, min_length=20, max_length=1500)] = Field(
+        description="Why the top precedent matches, what is different this time, and the recommended first move."
+    )
+    risk_level: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    risk_reasons: list[Text] = Field(default_factory=list, max_length=5)
+    missing_info: list[MissingInfoDraft] = Field(default_factory=list, max_length=6)
+    team: list[TeamPickDraft] = Field(default_factory=list, max_length=5)
+    duplicates: list[DuplicateDraft] = Field(default_factory=list, max_length=3)

@@ -1,3 +1,5 @@
+import type { TriageReport } from "./memory";
+
 // Mirrors backend app/modules/rooms/schemas.py.
 export interface RoomPerson {
   id: string;
@@ -137,6 +139,7 @@ export interface ThreadView {
   summary: string | null;
   resolved_at: string | null;
   precedents: PrecedentDetail[];
+  triage_report?: TriageReport | null;
   participants: RoomPerson[];
   members: RoomMember[];
   messages: ThreadMessage[];

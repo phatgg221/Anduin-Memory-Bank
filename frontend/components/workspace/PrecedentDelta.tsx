@@ -1,15 +1,15 @@
 "use client";
 
 import { ArrowUpRight, MessagesSquare, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { SectionLabel } from "@/components/brand/SectionLabel";
 import { SimilarityMeter } from "@/components/brand/SimilarityMeter";
 import { AlumniBadge, StatusBadge } from "@/components/brand/StatusBadge";
-import { JobProgress } from "@/components/memory/JobProgress";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CaseJob } from "@/types/memory";
 import type { PrecedentDetail } from "@/types/rooms";
+import { InvestigationScreen } from "./InvestigationScreen";
 
 interface PrecedentDeltaProps {
   precedents: PrecedentDetail[];
@@ -20,6 +20,7 @@ interface PrecedentDeltaProps {
   onOpenFile: (fileId: string) => void;
   onOpenVault: () => void;
   onOpenChannel: () => void;
+  header?: ReactNode;
 }
 
 const MONTH = new Intl.DateTimeFormat("en", { month: "short", year: "numeric" });
@@ -34,21 +35,13 @@ export function PrecedentDelta({
   onOpenFile,
   onOpenVault,
   onOpenChannel,
+  header,
 }: PrecedentDeltaProps) {
   const [selected, setSelected] = useState(0);
   const running = analysis?.status === "QUEUED" || analysis?.status === "PROCESSING";
 
   if (running || (analysis?.status === "FAILED" && precedents.length === 0)) {
-    return (
-      <div className="flex flex-col items-start gap-3 p-6">
-        <JobProgress job={analysis!} title="Matching against the Memory Bank" />
-        {analysis?.status === "FAILED" && onRunAnalysis && (
-          <Button onClick={onRunAnalysis} disabled={isStarting}>
-            Try again
-          </Button>
-        )}
-      </div>
-    );
+    return <InvestigationScreen job={analysis!} onRetry={onRunAnalysis} isRetrying={isStarting} />;
   }
   if (precedents.length === 0) {
     return (
@@ -72,6 +65,7 @@ export function PrecedentDelta({
 
   return (
     <div className="flex flex-col gap-6 p-6">
+      {header}
       <section className="flex flex-col gap-3">
         <SectionLabel>Top {precedents.length} historical matches</SectionLabel>
         <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-3" role="tablist" aria-label="Matched past cases">

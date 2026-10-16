@@ -34,6 +34,12 @@ def provider_label() -> str:
     return f"{settings.llm_provider}:{settings.llm_model or '(LLM_MODEL not set)'}"
 
 
+def agent_label() -> str:
+    if settings.llm_provider == "fake":
+        return "fake (scripted tool calls)"
+    return f"{settings.llm_provider}:{settings.agent_model or settings.llm_model}"
+
+
 def embedding_label() -> str:
     if settings.embedding_provider == "fake":
         return "fake (hash embeddings)"
@@ -41,12 +47,18 @@ def embedding_label() -> str:
 
 
 async def complete_json[T: BaseModel](
-    system: str, user: str, schema: type[T], *, fake: Callable[[], T], temperature: float = 0.1
+    system: str,
+    user: str,
+    schema: type[T],
+    *,
+    fake: Callable[[], T],
+    temperature: float = 0.1,
+    model: str | None = None,
 ) -> T:
     """System + user prompt → validated `schema` instance. `fake` builds the fake provider's deterministic answer."""
     if settings.llm_provider == "fake":
         return fake()
-    raw = await _complete(system, user, schema, temperature)
+    raw = await _complete(system, user, schema, temperature, model)
     try:
         return schema.model_validate_json(_strip_fences(raw))
     except ValidationError as error:
@@ -57,7 +69,7 @@ async def complete_json[T: BaseModel](
             f"<previous_answer>\n{raw}\n</previous_answer>\n"
             f"<validation_errors>\n{error}\n</validation_errors>\nReturn only corrected JSON."
         )
-        raw = await _complete(system, repair, schema, temperature)
+        raw = await _complete(system, repair, schema, temperature, model)
         try:
             return schema.model_validate_json(_strip_fences(raw))
         except ValidationError as again:
@@ -85,9 +97,32 @@ async def embed(texts: list[str]) -> list[list[float]]:
 # --- providers ---------------------------------------------------------------------------------------------------
 
 
-async def _complete(system: str, user: str, schema: type[BaseModel], temperature: float) -> str:
+async def complete_with_tools(messages: list[dict], tools: list[dict], *, temperature: float = 0.1) -> dict:
+    """One turn of an OpenAI-style tool-calling conversation → the assistant message (`content`, `tool_calls`).
+
+    The caller runs the tools and appends `{"role": "tool", ...}` results. OpenRouter only (Gemini, Claude, GPT).
+    """
+    if settings.llm_provider != "openrouter":
+        raise LLMError("Tool calling needs LLM_PROVIDER=openrouter")
+    body = {
+        "model": settings.agent_model or settings.llm_model,
+        "temperature": temperature,
+        "messages": messages,
+        "tools": tools,
+        "tool_choice": "auto",
+    }
+    data = await _post(f"{settings.openrouter_base_url}/chat/completions", headers=_openrouter_headers(), body=body)
+    try:
+        return data["choices"][0]["message"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise LLMError(f"Unexpected OpenRouter response: {json.dumps(data)[:300]}") from exc
+
+
+async def _complete(
+    system: str, user: str, schema: type[BaseModel], temperature: float, model: str | None = None
+) -> str:
     if settings.llm_provider == "openrouter":
-        return await _openrouter_chat(system, user, schema, temperature)
+        return await _openrouter_chat(system, user, schema, temperature, model)
     if settings.llm_provider == "gemini":
         return await _gemini_generate(system, user, schema, temperature)
     raise LLMError(f"Unknown LLM provider {settings.llm_provider!r}")
@@ -125,12 +160,14 @@ def _openrouter_headers() -> dict[str, str]:
     }
 
 
-async def _openrouter_chat(system: str, user: str, schema: type[BaseModel], temperature: float) -> str:
+async def _openrouter_chat(
+    system: str, user: str, schema: type[BaseModel], temperature: float, model: str | None = None
+) -> str:
     """OpenAI-compatible chat completions. Asks for the JSON schema; falls back to JSON mode if the model can't."""
-    if not settings.llm_model:
+    if not (model or settings.llm_model):
         raise LLMError("Set LLM_MODEL to an OpenRouter model id (as listed on openrouter.ai/models)")
     body = {
-        "model": settings.llm_model,
+        "model": model or settings.llm_model,
         "temperature": temperature,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         "response_format": {
