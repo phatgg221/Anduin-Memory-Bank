@@ -232,7 +232,9 @@ export function OutcomeForm({ clientName, files, initial, onSubmit, isSubmitting
                     </span>
                     <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                     <span className="truncate font-mono text-xs text-ink">{file.file_name}</span>
-                    <span className="micro-label ml-auto shrink-0 text-muted-foreground">{file.file_type}</span>
+                    <span className="micro-label ml-auto shrink-0 text-muted-foreground">
+                      {file.text_status === "PENDING" ? "Reading…" : file.file_type}
+                    </span>
                   </button>
                 </li>
               );

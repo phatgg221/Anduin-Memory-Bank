@@ -84,6 +84,7 @@ class ArtifactRefOut(BaseModel):
     file_type: str
     is_reusable: bool
     description: str
+    text_status: str = "READY"
 
 
 class ThreadSummaryOut(BaseModel):

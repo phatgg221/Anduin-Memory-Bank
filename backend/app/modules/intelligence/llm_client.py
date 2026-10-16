@@ -20,6 +20,7 @@ from app.core.config import settings
 logger = logging.getLogger("uvicorn.error")
 
 BACKOFF_SECONDS = (1, 2, 4)
+EMBED_BATCH = 64  # texts per embeddings request: big files make hundreds of chunks
 FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 
 
@@ -85,7 +86,9 @@ async def embed(texts: list[str]) -> list[list[float]]:
     if settings.embedding_provider == "fake":
         return [_fake_embedding(t) for t in texts]
     if settings.embedding_provider == "openrouter":
-        vectors = await _openrouter_embeddings(texts)
+        vectors = []
+        for start in range(0, len(texts), EMBED_BATCH):
+            vectors.extend(await _openrouter_embeddings(texts[start : start + EMBED_BATCH]))
     else:
         vectors = [await _gemini_embedding(t) for t in texts]
     for vector in vectors:

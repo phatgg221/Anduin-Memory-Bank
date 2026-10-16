@@ -1,14 +1,12 @@
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, HTTPException, Response, status
 
 from app.core import realtime
 from app.core.db import SessionDep
 from app.modules.auth.deps import CurrentUser
 from app.modules.cases import service
 from app.modules.cases.schemas import (
-    ArtifactRefOut,
     CaseCreateIn,
     CaseUpdateIn,
     ThreadMessageIn,
@@ -126,24 +124,6 @@ async def post_thread_message(
     for department_id in [case.department_id, *case.secondary_department_ids]:
         await realtime.room_changed(department_id, "threads")
     return out
-
-
-@router.post("/{case_id}/files", status_code=status.HTTP_201_CREATED)
-async def upload_file(
-    case_id: uuid.UUID,
-    file: Annotated[UploadFile, File()],
-    user: CurrentUser,
-    session: SessionDep,
-    file_type: Annotated[str, Form(pattern=r"^[A-Z_]{3,30}$")] = "CLIENT_BRIEF",
-) -> ArtifactRefOut:
-    """Attach a file (e.g. the client's PDF) to an open case. Its text is extracted for analysis and search."""
-    data = await file.read(service.MAX_UPLOAD_BYTES + 1)
-    try:
-        artifact = await service.upload_file(session, user, case_id, file.filename or "upload", data, file_type)
-    except (service.NotFoundError, service.ConflictError, service.InvalidError) as error:
-        raise _http(error) from None
-    await realtime.room_changed(realtime.thread_room(case_id), "threads")
-    return ArtifactRefOut.model_validate(artifact)
 
 
 @router.put("/{case_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

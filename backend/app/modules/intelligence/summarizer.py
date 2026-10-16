@@ -1,15 +1,26 @@
 """Case thread → guarded Case Memory Record (for human review). Steps are reported through `on_step`."""
 
+import asyncio
 import re
 from collections.abc import Awaitable, Callable
 
 from app.modules.intelligence import llm_client
 from app.modules.intelligence.guard import guard_memory
-from app.modules.intelligence.prompts import SUMMARIZE_SYSTEM, summarize_user
-from app.modules.intelligence.schemas import CaseMemoryDraft, CaseMemoryRecord, PitfallDraft, ThreadContext
+from app.modules.intelligence.prompts import SEGMENT_SYSTEM, SUMMARIZE_SYSTEM, summarize_user
+from app.modules.intelligence.schemas import (
+    CaseMemoryDraft,
+    CaseMemoryRecord,
+    PitfallDraft,
+    SegmentNotes,
+    ThreadContext,
+)
 from app.modules.intelligence.transcript import Transcript, build_transcript
 
 SUMMARIZE_STEPS = ("Reading the case thread", "Drafting the memory record", "Checking citations")
+LONG_THREAD_CHARS = 60_000  # above this the thread is condensed segment by segment before drafting
+SEGMENT_CHARS = 40_000
+PARALLEL_SEGMENTS = 4
+HEADER = re.compile(r"^L\d+\s*\| \[\d{4}-\d{2}-\d{2} ")
 OnStep = Callable[[str], Awaitable[None]]
 
 
@@ -34,12 +45,16 @@ async def summarize_thread(context: ThreadContext, on_step: OnStep) -> tuple[Cas
     )
     mentions = "\n".join(f"- {m.author_name}: {m.content}" for m in context.room_mentions)
 
+    body = transcript.text
+    if len(body) > LONG_THREAD_CHARS:
+        body = await condense(body)
+
     await on_step(SUMMARIZE_STEPS[1])
     draft = await llm_client.complete_json(
         SUMMARIZE_SYSTEM,
         summarize_user(
             case_block,
-            transcript.text,
+            body,
             mentions,
             "\n".join(f"- {a}" for a in context.artifacts),
             outcome_block(context),
@@ -50,6 +65,43 @@ async def summarize_thread(context: ThreadContext, on_step: OnStep) -> tuple[Cas
 
     await on_step(SUMMARIZE_STEPS[2])
     return guard_memory(draft, context, transcript)
+
+
+def segments(numbered: str, limit: int = SEGMENT_CHARS) -> list[str]:
+    """Splits a numbered transcript into parts of at most ~limit characters, only between messages."""
+    parts, current, size = [], [], 0
+    for line in numbered.splitlines():
+        if HEADER.match(line) and current and size + len(line) > limit:
+            parts.append("\n".join(current))
+            current, size = [], 0
+        current.append(line)
+        size += len(line) + 1
+    if current:
+        parts.append("\n".join(current))
+    return parts
+
+
+async def condense(numbered: str) -> str:
+    """Long thread → line-referenced notes per segment (in parallel), so the final draft fits in one prompt."""
+    gate = asyncio.Semaphore(PARALLEL_SEGMENTS)
+
+    async def one(part: str) -> SegmentNotes:
+        async with gate:
+            return await llm_client.complete_json(SEGMENT_SYSTEM, part, SegmentNotes, fake=lambda: SegmentNotes())
+
+    parts = segments(numbered)
+    results = await asyncio.gather(*(one(part) for part in parts))
+    lines = [
+        f"# Condensed from a long thread in {len(parts)} parts. Line numbers refer to the original transcript;",
+        "# cite them as Chat #L<n>.",
+    ]
+    for index, notes in enumerate(results, 1):
+        lines.append(f"## Part {index}")
+        lines += [
+            f"- [{n.kind}] {n.point}" + (f" ({n.who})" if n.who else "") + (f" [L{n.line}]" if n.line else "")
+            for n in notes.notes
+        ]
+    return "\n".join(lines)
 
 
 def outcome_block(context: ThreadContext) -> str:

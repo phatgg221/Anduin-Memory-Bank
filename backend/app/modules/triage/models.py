@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 
-JOB_KINDS = ("ANALYZE", "SUMMARIZE", "INDEX", "COPILOT")
+JOB_KINDS = ("ANALYZE", "SUMMARIZE", "INDEX", "COPILOT", "EXTRACT")
 JOB_STATUSES = ("QUEUED", "PROCESSING", "COMPLETED", "FAILED")
 
 

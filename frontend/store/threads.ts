@@ -24,6 +24,8 @@ export function useThread(caseId: string | null) {
     queryKey: queryKeys.cases.thread(caseId ?? ""),
     queryFn: () => casesService.getThread(caseId!),
     enabled: caseId !== null,
+    refetchInterval: (query) =>
+      query.state.data?.artifacts.some((a) => a.text_status === "PENDING") ? 4_000 : false,
   });
 }
 
@@ -161,10 +163,7 @@ export function useUploadFiles() {
   const queryClient = useQueryClient();
   return useMutation<CaseFile[], ApiRequestError, { caseId: string; files: File[]; fileTypes?: string[] }>({
     mutationFn: async ({ caseId, files, fileTypes }) => {
-      const uploaded: CaseFile[] = [];
-      for (const [index, file] of files.entries())
-        uploaded.push(await casesService.uploadFile(caseId, file, fileTypes?.[index]));
-      return uploaded;
+      return Promise.all(files.map((file, index) => casesService.uploadFile(caseId, file, fileTypes?.[index])));
     },
     onSuccess: (_result, { caseId }) => queryClient.invalidateQueries({ queryKey: queryKeys.cases.thread(caseId) }),
   });

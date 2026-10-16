@@ -9,7 +9,7 @@ from sqlalchemy import literal, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB, distinct_on, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import realtime
+from app.core import documents, realtime, storage
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.modules.auth.models import User
@@ -35,6 +35,7 @@ MENTION = re.compile(r"@dejavu\b", re.IGNORECASE)
 STEPS = {
     "ANALYZE": triage_agent.TRIAGE_STEPS,
     "SUMMARIZE": (*summarizer.SUMMARIZE_STEPS, curator.CURATE_STEP),
+    "EXTRACT": ("Converting files to Markdown",),
     "INDEX": indexer.INDEX_STEPS,
     "COPILOT": copilot.COPILOT_STEPS,
 }
@@ -92,6 +93,11 @@ async def enqueue(
         )
     )
     return live or await session.get_one(CaseJob, job_id)
+
+
+async def request_extract(session: AsyncSession, user: User, case_id: uuid.UUID) -> CaseJob:
+    """One live EXTRACT per case; it keeps going until no file is PENDING, so later uploads are picked up too."""
+    return await enqueue(session, uuid.uuid4(), case_id, "EXTRACT", user)
 
 
 async def request_summary(
@@ -262,7 +268,13 @@ async def process(job_id: uuid.UUID) -> None:
             return
         kind, case_id = job.kind, job.case_id
     try:
-        handler = {"ANALYZE": _analyze, "SUMMARIZE": _summarize, "INDEX": _index, "COPILOT": _copilot}[kind]
+        handler = {
+            "ANALYZE": _analyze,
+            "SUMMARIZE": _summarize,
+            "INDEX": _index,
+            "COPILOT": _copilot,
+            "EXTRACT": _extract,
+        }[kind]
         result = await handler(job_id, case_id)
     except llm_client.LLMError as error:
         message = str(error)
@@ -324,12 +336,48 @@ async def _index_intake(session: AsyncSession, case: CaseRecord, incoming: Incom
     return len(drafts[0][1]), len(batch) - 1
 
 
+async def extract_pending(case_id: uuid.UUID, job_id: uuid.UUID | None = None) -> list[dict[str, Any]]:
+    """Converts every PENDING file of the case to Markdown (MarkItDown, off the event loop). Safe to run twice."""
+    converted: list[dict[str, Any]] = []
+    for _ in range(10):  # re-check: files uploaded while we were converting are picked up too
+        async with SessionLocal() as session:
+            pending = [(a.id, a.file_name, a.minio_object_key) for a in await cases.pending_artifacts(session, case_id)]
+        if not pending:
+            break
+        for artifact_id, name, key in pending:
+            if job_id:
+                await heartbeat(job_id, STEPS["EXTRACT"][0])
+            try:
+                data = await asyncio.to_thread(storage.read_object, key)
+                text = await asyncio.to_thread(documents.extract_text, name, data)
+            except Exception:  # noqa: BLE001 — an unreadable file mustn't block the case
+                text = None
+            async with SessionLocal() as session:
+                await cases.set_artifact_text(session, artifact_id, text)
+            converted.append({"file_name": name, "chars": len(text or ""), "readable": bool(text)})
+    if converted:
+        await realtime.room_changed(realtime.thread_room(case_id), "threads")
+    return converted
+
+
+async def _extract(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
+    return {"files": await extract_pending(case_id, job_id)}
+
+
 async def _analyze(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
     """The triage agent: index the request, rank precedents (code), investigate with tools, write a guarded report."""
     async with SessionLocal.begin() as session:
         await session.execute(update(CaseJob).where(CaseJob.id == job_id).values(trace=[]))
     await heartbeat(job_id, triage_agent.TRIAGE_STEPS[0])
     trace = lambda event: append_trace(job_id, event)  # noqa: E731
+    if converted := await extract_pending(case_id):
+        await trace(
+            {
+                "tool": "index",
+                "label": "Converted files to Markdown",
+                "detail": " · ".join(f"{c['file_name']} ({c['chars']:,} chars)" for c in converted),
+            }
+        )
 
     async with SessionLocal() as session:
         case = await session.get_one(CaseRecord, case_id)
@@ -435,6 +483,7 @@ async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
 async def _summarize(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
     """The memory curator: draft the record from the thread + the team's outcome, then suggest reusable files and
     check the new lessons against older memory."""
+    await extract_pending(case_id)  # approval / output files dropped at commit time are read first
     async with SessionLocal() as session:
         job = await session.get_one(CaseJob, job_id)
         given = job.input or {}

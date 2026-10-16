@@ -521,7 +521,7 @@ async def nearest_chunks(
 
 # --- files ----------------------------------------------------------------------------------------------------------
 
-MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 FILE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 
@@ -536,7 +536,7 @@ async def upload_file(
     if not name or documents.suffix(name) not in documents.CONTENT_TYPES:
         raise InvalidError("Upload a PDF, CSV, Markdown, text, JSON, email, DOCX or XLSX file")
     if not data or len(data) > MAX_UPLOAD_BYTES:
-        raise InvalidError("Files must be between 1 byte and 15 MB")
+        raise InvalidError("Files must be between 1 byte and 50 MB")
     content_type = documents.CONTENT_TYPES[documents.suffix(name)]
     key = f"cases/{case.channel_slug}/artifacts/{name}"
     await asyncio.to_thread(
@@ -554,7 +554,8 @@ async def upload_file(
     artifact.is_reusable = False
     artifact.description = f"Uploaded by {user.name}"
     artifact.minio_object_key = key
-    artifact.preview_text = await asyncio.to_thread(documents.extract_text, name, data)
+    artifact.preview_text = None
+    artifact.text_status = "PENDING"  # the EXTRACT job converts it to Markdown in the background
     artifact.uploaded_by_user_id = user.id
     await session.commit()
     return artifact
@@ -706,3 +707,18 @@ async def artifact_ids_by_name(session: AsyncSession, case_ids: list[uuid.UUID])
         select(CaseArtifact.case_id, CaseArtifact.file_name, CaseArtifact.id).where(CaseArtifact.case_id.in_(case_ids))
     )
     return {(case_id, name): artifact_id for case_id, name, artifact_id in rows}
+
+
+async def pending_artifacts(session: AsyncSession, case_id: uuid.UUID) -> list[CaseArtifact]:
+    return list(
+        await session.scalars(
+            select(CaseArtifact).where(CaseArtifact.case_id == case_id, CaseArtifact.text_status == "PENDING")
+        )
+    )
+
+
+async def set_artifact_text(session: AsyncSession, artifact_id: uuid.UUID, text: str | None) -> None:
+    artifact = await session.get_one(CaseArtifact, artifact_id)
+    artifact.preview_text = text
+    artifact.text_status = "READY" if text else "UNREADABLE"
+    await session.commit()

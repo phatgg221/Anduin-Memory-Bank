@@ -76,6 +76,7 @@ export interface CaseFile {
   file_type: string;
   is_reusable: boolean;
   description: string;
+  text_status?: "PENDING" | "READY" | "UNREADABLE";
 }
 
 export interface DeltaItem {

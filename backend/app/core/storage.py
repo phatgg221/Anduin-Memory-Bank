@@ -37,6 +37,16 @@ def ensure_bucket() -> None:
         internal.make_bucket(settings.minio_bucket)
 
 
+def read_object(key: str) -> bytes:
+    """Synchronous (MinIO SDK): call through asyncio.to_thread."""
+    response = internal.get_object(settings.minio_bucket, key)
+    try:
+        return response.read()
+    finally:
+        response.close()
+        response.release_conn()
+
+
 def bucket_ready() -> bool:
     try:
         return _probe.bucket_exists(settings.minio_bucket)

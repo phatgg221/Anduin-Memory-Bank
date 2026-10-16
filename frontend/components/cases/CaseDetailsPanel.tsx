@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, FileText, Pencil, UserRound } from "lucide-react";
+import { CalendarClock, FileText, LoaderCircle, Pencil, UserRound } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { SectionLabel } from "@/components/brand/SectionLabel";
 import { Button } from "@/components/ui/button";
@@ -203,7 +203,17 @@ export function CaseDetailsPanel({ thread, departments, people, onSave, isSaving
                 >
                   <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                   <span className="truncate font-mono text-xs text-ink">{file.file_name}</span>
-                  <span className="micro-label ml-auto shrink-0 text-muted-foreground">{file.file_type}</span>
+                  {file.text_status === "PENDING" ? (
+                    <span className="micro-label ml-auto flex shrink-0 items-center gap-1 text-muted-foreground">
+                      <LoaderCircle className="size-3 animate-spin" aria-hidden /> Reading…
+                    </span>
+                  ) : file.text_status === "UNREADABLE" ? (
+                    <span className="micro-label ml-auto shrink-0 text-modified" title="Stored, but no text could be read">
+                      No text
+                    </span>
+                  ) : (
+                    <span className="micro-label ml-auto shrink-0 text-muted-foreground">{file.file_type}</span>
+                  )}
                 </button>
               </li>
             ))}

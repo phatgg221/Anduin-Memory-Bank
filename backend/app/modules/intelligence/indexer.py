@@ -10,6 +10,7 @@ from app.modules.intelligence.transcript import build_transcript
 INDEX_STEPS = ("Chunking the memory record", "Embedding chunks", "Storing in the vector index")
 WINDOW = 6  # messages per discussion chunk
 ARTIFACT_CHARS = 1500
+MAX_PARTS_PER_FILE = 120  # ~180k characters of a file are indexed; the full text stays on the artifact
 
 
 @dataclass
@@ -56,7 +57,8 @@ def build_chunks(
         chunks.append(ChunkDraft("CHANNEL_DISCUSSION", label, f"{head}\n{body}", message_id=window[0].id))
 
     for name, text in (artifact_texts or {}).items():
-        for part, offset in enumerate(range(0, len(text), ARTIFACT_CHARS), start=1):
+        offsets = range(0, min(len(text), ARTIFACT_CHARS * MAX_PARTS_PER_FILE), ARTIFACT_CHARS)
+        for part, offset in enumerate(offsets, start=1):
             chunks.append(
                 ChunkDraft(
                     "ARTIFACT_CONTENT",

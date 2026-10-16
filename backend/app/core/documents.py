@@ -10,7 +10,7 @@ from app.utils.markitdown import get_markitdown_tool
 logger = logging.getLogger("uvicorn.error")
 
 TEXT_TYPES = {".txt", ".md", ".csv", ".json", ".ts", ".eml"}
-MAX_CHARS = 60_000
+MAX_CHARS = 500_000
 
 CONTENT_TYPES = {
     ".pdf": "application/pdf",

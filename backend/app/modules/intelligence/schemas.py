@@ -220,3 +220,17 @@ class ContradictionDraft(BaseModel):
 class CuratorDraft(BaseModel):
     reusable_files: list[ReusableFileDraft] = Field(default_factory=list, max_length=8)
     contradictions: list[ContradictionDraft] = Field(default_factory=list, max_length=5)
+
+
+# --- LONG THREADS: condensed segment notes -----------------------------------------------------------------------
+
+
+class SegmentNote(BaseModel):
+    kind: Literal["DECISION", "STEP", "WARNING", "FACT", "OUTCOME"]
+    point: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=500)]
+    line: int | None = Field(default=None, description="The transcript line number (the n of L<n>) it comes from.")
+    who: str | None = Field(default=None, description="Who said it, as written in the transcript header.")
+
+
+class SegmentNotes(BaseModel):
+    notes: list[SegmentNote] = Field(default_factory=list, max_length=30)

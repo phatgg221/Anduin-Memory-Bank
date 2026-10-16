@@ -1,11 +1,13 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 
 from app.core import realtime
 from app.core.db import SessionDep
 from app.modules.auth.deps import CurrentUser
+from app.modules.cases import service as cases
+from app.modules.cases.schemas import ArtifactRefOut
 from app.modules.intelligence import llm_client, retrieval
 from app.modules.triage import service
 from app.modules.triage.schemas import (
@@ -22,6 +24,11 @@ from app.modules.triage.schemas import (
 
 router = APIRouter(prefix="/cases", tags=["memory"])
 memory_router = APIRouter(prefix="/memory", tags=["memory"])
+UPLOAD_ERRORS = {
+    cases.NotFoundError: status.HTTP_404_NOT_FOUND,
+    cases.ConflictError: status.HTTP_409_CONFLICT,
+    cases.InvalidError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+}
 
 
 def _http(error: Exception) -> HTTPException:
@@ -110,3 +117,23 @@ async def search_memory(
         return await retrieval.search(session, q, department_id, limit)
     except llm_client.LLMError as error:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Embedding provider unavailable: {error}") from None
+
+
+@router.post("/{case_id}/files", status_code=status.HTTP_201_CREATED)
+async def upload_file(
+    case_id: uuid.UUID,
+    file: Annotated[UploadFile, File()],
+    user: CurrentUser,
+    session: SessionDep,
+    file_type: Annotated[str, Form(pattern=r"^[A-Z_]{3,30}$")] = "CLIENT_BRIEF",
+) -> ArtifactRefOut:
+    """Stores the file and returns at once (text_status PENDING); an EXTRACT job converts it to Markdown."""
+    data = await file.read(cases.MAX_UPLOAD_BYTES + 1)
+    try:
+        artifact = await cases.upload_file(session, user, case_id, file.filename or "upload", data, file_type)
+    except (cases.NotFoundError, cases.ConflictError, cases.InvalidError) as error:
+        raise HTTPException(UPLOAD_ERRORS[type(error)], str(error)) from None
+    out = ArtifactRefOut.model_validate(artifact)
+    await service.request_extract(session, user, case_id)
+    await realtime.room_changed(realtime.thread_room(case_id), "threads")
+    return out

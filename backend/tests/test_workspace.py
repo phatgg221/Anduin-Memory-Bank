@@ -191,6 +191,56 @@ def test_upload_a_client_file(client, sql):
     assert post(client, elena, APOLLO, "uploaded").status_code == 200
 
 
+def test_uploads_return_at_once_and_are_converted_in_the_background(client, sql):
+    from tests.test_memory import fetchval
+
+    elena, _ = signed_in(client, sql)
+    files = {"file": ("lp_register.csv", b"lp,commitment\nApollo SPV 1,25000000\n", "text/csv")}
+    uploaded = client.post(f"/api/cases/{APOLLO}/files", files=files, headers=elena).json()
+    assert uploaded["text_status"] == "PENDING"
+
+    job_id = fetchval(f"SELECT id::text FROM case_jobs WHERE case_id = '{APOLLO}' AND kind = 'EXTRACT'")
+    assert job_id is not None
+    run_job(client, job_id)
+    [artifact] = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["artifacts"]
+    assert artifact["text_status"] == "READY"
+    text = fetchval(f"SELECT preview_text FROM case_artifacts WHERE id = '{uploaded['id']}'")
+    assert "| lp | commitment |" in text  # MarkItDown: the CSV became a Markdown table
+
+    # A second upload while nothing is live queues a new EXTRACT; analysis would also convert it before starting.
+    other = {"file": ("notes.txt", b"plain notes about the joint signers", "text/plain")}
+    client.post(f"/api/cases/{APOLLO}/files", files=other, headers=elena)
+    assert fetchval(f"SELECT count(*) FROM case_jobs WHERE case_id = '{APOLLO}' AND kind = 'EXTRACT'") == 2
+
+
+def test_long_threads_are_condensed_by_segment(monkeypatch):
+    import asyncio
+
+    from app.modules.intelligence import summarizer
+    from app.modules.intelligence.schemas import SegmentNote, SegmentNotes
+
+    lines = []
+    for i in range(200):
+        lines.append(f"L{len(lines) + 1:<4}| [2026-10-15 09:{i % 60:02d}] Person {i}")
+        lines.append(f"L{len(lines) + 1:<4}| " + "detail " * 60)
+    numbered = "\n".join(lines)
+    parts = summarizer.segments(numbered)
+    assert len(parts) > 1 and "\n".join(parts) == numbered
+    assert all(summarizer.HEADER.match(part.splitlines()[0]) for part in parts)  # never split inside a message
+
+    seen = []
+
+    async def fake_complete(system, user, schema, *, fake, **_):
+        seen.append(schema)
+        first = int(user.split("|", 1)[0][1:])
+        return SegmentNotes(notes=[SegmentNote(kind="WARNING", point="Signers deadlocked", line=first + 1)])
+
+    monkeypatch.setattr(summarizer.llm_client, "complete_json", fake_complete)
+    condensed = asyncio.run(summarizer.condense(numbered))
+    assert seen == [SegmentNotes] * len(parts)
+    assert condensed.startswith("# Condensed from a long thread") and "[L2]" in condensed
+
+
 def test_ask_dejavu_in_the_case_channel(client, sql):
     elena, ryan = signed_in(client, sql)
     ryan_id = client.get("/api/auth/me", headers=ryan).json()["id"]
