@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { retryTransient, type ApiRequestError } from "@/lib/apiError";
 import { casesService } from "@/services/casesService";
 import type {
+  CaseFile,
   ChatMessage,
   CreateCaseInput,
   RoomPerson,
@@ -158,9 +159,12 @@ export function useOpenCases(departmentId: string | null, enabled = true) {
 /** Uploads files to a case (not optimistic: the server stores and extracts them). */
 export function useUploadFiles() {
   const queryClient = useQueryClient();
-  return useMutation<void, ApiRequestError, { caseId: string; files: File[] }>({
-    mutationFn: async ({ caseId, files }) => {
-      for (const file of files) await casesService.uploadFile(caseId, file);
+  return useMutation<CaseFile[], ApiRequestError, { caseId: string; files: File[]; fileTypes?: string[] }>({
+    mutationFn: async ({ caseId, files, fileTypes }) => {
+      const uploaded: CaseFile[] = [];
+      for (const [index, file] of files.entries())
+        uploaded.push(await casesService.uploadFile(caseId, file, fileTypes?.[index]));
+      return uploaded;
     },
     onSuccess: (_result, { caseId }) => queryClient.invalidateQueries({ queryKey: queryKeys.cases.thread(caseId) }),
   });

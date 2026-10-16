@@ -58,11 +58,11 @@ export function CaseHeader({ thread, status, onComplete, onBack, leftOpen, onTog
             <CheckCheck className="size-4" aria-hidden /> Complete &amp; save to memory
           </span>
         </ActionButton>
-      ) : (
+      ) : thread.status === "RESOLVED" ? (
         <span className="micro-label hidden shrink-0 border border-reusable-border bg-reusable-bg px-2 py-1 text-reusable md:inline">
-          In memory
+          In Knowledge Base
         </span>
-      )}
+      ) : null}
       <PanelToggle label={rightOpen ? "Hide reusable kit" : "Show reusable kit"} pressed={rightOpen} onClick={onToggleRight}>
         <PanelRight className="size-4" />
       </PanelToggle>

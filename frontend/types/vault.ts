@@ -26,6 +26,8 @@ export interface VaultCase {
   secondary_department_ids: string[];
   context_tags: Record<string, string>;
   summary: string | null;
+  outcome?: string | null;
+  final_output?: string | null;
   duration_days: number | null;
   created_at: string;
   resolved_at: string | null;

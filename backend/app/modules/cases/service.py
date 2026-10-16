@@ -251,6 +251,8 @@ async def thread_view(session: AsyncSession, case_id: uuid.UUID) -> dict:
         "created_by": case.created_by,
         "created_at": case.created_at,
         "summary": case.summary,
+        "outcome": case.outcome,
+        "final_output": case.final_output,
         "resolved_at": case.resolved_at,
         "precedents": await precedents_for(session, case),
         "triage_report": case.triage_report,
@@ -451,8 +453,20 @@ async def load_for_memory(session: AsyncSession, case_id: uuid.UUID) -> tuple[Ca
     return case, messages
 
 
-async def commit_memory(session: AsyncSession, case_id: uuid.UUID, record: dict, resolver_id: uuid.UUID) -> CaseRecord:
-    """OPEN → RESOLVED with the reviewed memory record. The thread becomes read-only."""
+async def commit_memory(
+    session: AsyncSession,
+    case_id: uuid.UUID,
+    record: dict,
+    resolver_id: uuid.UUID,
+    *,
+    outcome: str | None = None,
+    final_output: str | None = None,
+    reusable_file_ids: list[uuid.UUID] | None = None,
+) -> CaseRecord:
+    """OPEN → RESOLVED (into the Knowledge Base) with the reviewed record. The thread becomes read-only.
+
+    `reusable_file_ids` is explicit state for this case's files: listed ones become reusable, the rest don't.
+    """
     case = await session.get(CaseRecord, case_id, with_for_update=True)
     if case is None:
         raise NotFoundError("Unknown case")
@@ -465,6 +479,12 @@ async def commit_memory(session: AsyncSession, case_id: uuid.UUID, record: dict,
     case.pitfalls = record["pitfalls"]
     case.context_tags = record["context_tags"] or case.context_tags
     case.lead_resolver_user_id = case.lead_resolver_user_id or resolver_id
+    case.outcome = outcome or "RESOLVED"
+    case.final_output = final_output
+    if reusable_file_ids is not None:
+        keep = set(reusable_file_ids)
+        for artifact in await session.scalars(select(CaseArtifact).where(CaseArtifact.case_id == case_id)):
+            artifact.is_reusable = artifact.id in keep
     case.status = "RESOLVED"
     case.resolved_at = now
     case.duration_days = (now - case.created_at).days

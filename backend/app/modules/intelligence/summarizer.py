@@ -37,13 +37,31 @@ async def summarize_thread(context: ThreadContext, on_step: OnStep) -> tuple[Cas
     await on_step(SUMMARIZE_STEPS[1])
     draft = await llm_client.complete_json(
         SUMMARIZE_SYSTEM,
-        summarize_user(case_block, transcript.text, mentions, "\n".join(f"- {a}" for a in context.artifacts)),
+        summarize_user(
+            case_block,
+            transcript.text,
+            mentions,
+            "\n".join(f"- {a}" for a in context.artifacts),
+            outcome_block(context),
+        ),
         CaseMemoryDraft,
         fake=lambda: _fake_draft(context, transcript),
     )
 
     await on_step(SUMMARIZE_STEPS[2])
     return guard_memory(draft, context, transcript)
+
+
+def outcome_block(context: ThreadContext) -> str:
+    if not context.outcome and not context.final_output:
+        return ""
+    lines = [f"Outcome: {context.outcome or 'not given'}", f"Final output: {context.final_output or 'not given'}"]
+    if context.deliverables:
+        lines.append("Final deliverables: " + ", ".join(context.deliverables))
+    for name, (file_type, text) in context.deliverable_texts.items():
+        kind = "Client approval" if file_type == "CLIENT_APPROVAL" else "Delivered file"
+        lines.append(f'<file name="{name}" kind="{kind}">\n{text[:2500]}\n</file>')
+    return "\n".join(lines)
 
 
 # --- fake provider: deterministic, built only from the thread ---------------------------------------------------
@@ -84,7 +102,10 @@ def _fake_draft(context: ThreadContext, transcript: Transcript) -> CaseMemoryDra
             f"{context.title}. {_first_sentence(context.initial_request_brief, 300)} "
             f"Worked through in the case thread by {', '.join(people)}."
         ),
-        how_it_went=f"{narrative} The thread closed after {len(messages)} messages.",
+        how_it_went=(
+            f"{narrative} The thread closed after {len(messages)} messages."
+            + (f" Outcome: {context.outcome.lower()}. Delivered: {context.final_output}" if context.outcome else "")
+        )[:2000],
         resolution_steps=steps,
         pitfalls=pitfalls,
         context_tags=context.context_tags or {"Department": context.department},

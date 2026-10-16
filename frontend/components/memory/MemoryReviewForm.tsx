@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { BookMarked, Check, FileText, GitCompareArrows, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ActionButton } from "@/components/brand/ActionButton";
 import { SectionLabel } from "@/components/brand/SectionLabel";
@@ -9,21 +9,55 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { MemoryPitfall, MemoryRecord, Severity } from "@/types/memory";
+import { cn } from "@/lib/utils";
+import {
+  CASE_OUTCOMES,
+  type CaseOutcome,
+  type CommitInput,
+  type CuratorSuggestions,
+  type MemoryPitfall,
+  type MemoryRecord,
+  type Severity,
+} from "@/types/memory";
+import type { CaseFile } from "@/types/rooms";
 
 interface MemoryReviewFormProps {
   draft: MemoryRecord;
   provider: string;
   guardWarnings: string[];
-  onCommit: (record: MemoryRecord) => void;
+  outcome: CaseOutcome;
+  finalOutput: string;
+  files: CaseFile[];
+  curator?: CuratorSuggestions;
+  onCaseClick: (code: string) => void;
+  onCommit: (input: CommitInput) => void;
   onRegenerate: () => void;
+  onChangeOutcome: () => void;
   isCommitting: boolean;
   error?: string;
 }
 
-/** Human review before anything is stored: every field of the drafted Case Memory Record is editable. */
-export function MemoryReviewForm({ draft, provider, guardWarnings, onCommit, onRegenerate, isCommitting, error }: MemoryReviewFormProps) {
+export function MemoryReviewForm({
+  draft,
+  provider,
+  guardWarnings,
+  outcome,
+  finalOutput,
+  files,
+  curator,
+  onCaseClick,
+  onCommit,
+  onRegenerate,
+  onChangeOutcome,
+  isCommitting,
+  error,
+}: MemoryReviewFormProps) {
   const [record, setRecord] = useState<MemoryRecord>(draft);
+  const [ending, setEnding] = useState<{ outcome: CaseOutcome; finalOutput: string }>({ outcome, finalOutput });
+  const suggested = new Map((curator?.reusable_files ?? []).map((f) => [f.artifact_id, f.reason]));
+  const [reusable, setReusable] = useState<string[]>(() =>
+    files.filter((f) => f.is_reusable || suggested.has(f.id)).map((f) => f.id),
+  );
   const [confirming, setConfirming] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -39,9 +73,16 @@ export function MemoryReviewForm({ draft, provider, guardWarnings, onCommit, onR
     if (record.how_it_went.trim().length < 20) return setLocalError("“How it went” needs at least 20 characters.");
     if (steps.length === 0) return setLocalError("Add at least one resolution step.");
     if (record.pitfalls.some((p) => p.warning.trim().length < 10)) return setLocalError("Each pitfall needs at least 10 characters.");
+    if (ending.finalOutput.trim().length < 10) return setLocalError("Describe the final output in at least a sentence.");
     setLocalError(null);
     if (!confirming) return setConfirming(true);
-    onCommit({ ...record, resolution_steps: steps });
+    onCommit({
+      ...record,
+      resolution_steps: steps,
+      outcome: ending.outcome,
+      final_output: ending.finalOutput.trim(),
+      reusable_file_ids: reusable,
+    });
   };
 
   return (
@@ -60,6 +101,41 @@ export function MemoryReviewForm({ draft, provider, guardWarnings, onCommit, onR
           ))}
         </div>
       )}
+
+      <section className="flex flex-col gap-3 border border-navy p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <SectionLabel as="h3">Outcome</SectionLabel>
+          <Button type="button" variant="ghost" size="sm" onClick={onChangeOutcome}>
+            Change & redraft
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {CASE_OUTCOMES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed={ending.outcome === option.id}
+              title={option.hint}
+              onClick={() => setEnding((e) => ({ ...e, outcome: option.id }))}
+              className={cn(
+                "micro-label border px-2 py-1",
+                ending.outcome === option.id ? "border-navy bg-navy text-white" : "text-muted-foreground hover:bg-surface-2",
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <Label htmlFor="memory-final-output" className="micro-label text-muted-foreground">
+          Final output
+        </Label>
+        <Textarea
+          id="memory-final-output"
+          rows={2}
+          value={ending.finalOutput}
+          onChange={(e) => setEnding((x) => ({ ...x, finalOutput: e.target.value }))}
+        />
+      </section>
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="memory-summary">Summary</Label>
@@ -165,6 +241,88 @@ export function MemoryReviewForm({ draft, provider, guardWarnings, onCommit, onR
         </section>
       )}
 
+      <section className="flex flex-col gap-2">
+        <SectionLabel as="h3">Add to the Knowledge Base</SectionLabel>
+        <p className="text-xs text-muted-foreground">
+          Checked files become reusable: they show up in the Reusable kit of every future case that matches this one.
+        </p>
+        {files.length === 0 ? (
+          <p className="text-sm text-muted-foreground">This case has no files.</p>
+        ) : (
+          <ul className="flex flex-col divide-y border">
+            {files.map((file) => {
+              const checked = reusable.includes(file.id);
+              const reason = suggested.get(file.id);
+              return (
+                <li key={file.id}>
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={checked}
+                    onClick={() =>
+                      setReusable((ids) => (ids.includes(file.id) ? ids.filter((x) => x !== file.id) : [...ids, file.id]))
+                    }
+                    className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-surface-2"
+                  >
+                    <span
+                      className={cn(
+                        "mt-0.5 flex size-4 shrink-0 items-center justify-center border",
+                        checked ? "border-navy bg-navy text-white" : "bg-background",
+                      )}
+                    >
+                      {checked && <Check className="size-3" aria-hidden />}
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="flex items-center gap-2">
+                        <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                        <span className="truncate font-mono text-xs text-ink">{file.file_name}</span>
+                        {reason && <span className="micro-label shrink-0 text-reusable">Dejavu suggests</span>}
+                        {file.file_type === "CLIENT_APPROVAL" && (
+                          <span className="micro-label shrink-0 text-muted-foreground">Client approval</span>
+                        )}
+                      </span>
+                      {reason && <span className="text-xs text-muted-foreground">{reason}</span>}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <SectionLabel as="h3">Consistency with older cases</SectionLabel>
+        {!curator ? (
+          <p className="text-sm text-muted-foreground">Not checked for this draft.</p>
+        ) : curator.contradictions.length === 0 ? (
+          <p className="flex items-center gap-2 text-sm text-ink">
+            <Check className="size-4 text-reusable" aria-hidden />
+            No conflicts with {curator.checked_cases.length ? curator.checked_cases.join(", ") : "related memory"}.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {curator.contradictions.map((c) => (
+              <li key={c.case_code + c.existing} className="flex flex-col gap-1 border-l-2 border-modified bg-modified-bg px-3 py-2">
+                <span className="flex items-center gap-2">
+                  <GitCompareArrows className="size-3.5 text-modified" aria-hidden />
+                  <button type="button" onClick={() => onCaseClick(c.case_code)} className="micro-label text-navy hover:underline">
+                    {c.case_code}
+                  </button>
+                </span>
+                <span className="text-xs text-ink">
+                  <span className="text-muted-foreground">Older memory:</span> {c.existing}
+                </span>
+                <span className="text-xs text-ink">
+                  <span className="text-muted-foreground">This case:</span> {c.new}
+                </span>
+                <span className="text-xs text-muted-foreground">{c.explanation}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       {(localError ?? error) && (
         <p role="alert" className="border border-destructive px-3 py-2 text-sm text-destructive">
           {localError ?? error}
@@ -173,14 +331,17 @@ export function MemoryReviewForm({ draft, provider, guardWarnings, onCommit, onR
 
       {confirming && !localError && (
         <p className="border border-navy px-3 py-2 text-sm text-ink">
-          Committing resolves the case and makes its thread read-only. The record is then indexed for future matches.
-          Press commit again to confirm.
+          Committing resolves the case, makes its thread read-only and adds it to the Knowledge Base with{" "}
+          {reusable.length} reusable file{reusable.length === 1 ? "" : "s"}. Press again to confirm.
         </p>
       )}
 
       <div className="flex flex-wrap items-center gap-3 border-t pt-4">
-        <ActionButton type="button" className="w-64" onClick={commit} disabled={isCommitting}>
-          {isCommitting ? "Committing…" : confirming ? "Confirm: commit to memory" : "Commit to memory"}
+        <ActionButton type="button" className="w-80" onClick={commit} disabled={isCommitting}>
+          <span className="flex items-center gap-1.5">
+            <BookMarked className="size-4" aria-hidden />
+            {isCommitting ? "Committing…" : confirming ? "Confirm: add to Knowledge Base" : "Commit to Knowledge Base"}
+          </span>
         </ActionButton>
         <Button type="button" variant="ghost" onClick={onRegenerate} disabled={isCommitting}>
           Regenerate draft

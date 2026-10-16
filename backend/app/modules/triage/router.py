@@ -33,7 +33,9 @@ def _http(error: Exception) -> HTTPException:
 async def resolve(case_id: uuid.UUID, data: ResolveIn, user: CurrentUser, session: SessionDep) -> JobOut:
     """Starts the SUMMARIZE job. Poll GET /cases/{id}/jobs for progress; the draft lands on the job for review."""
     try:
-        job = await service.request_summary(session, user, case_id, data.job_id)
+        job = await service.request_summary(
+            session, user, case_id, data.job_id, data.outcome, data.final_output, data.deliverable_file_ids
+        )
     except (service.NotFoundError, service.ConflictError) as error:
         raise _http(error) from None
     return JobOut.model_validate(job)

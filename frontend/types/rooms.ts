@@ -137,6 +137,8 @@ export interface ThreadView {
   artifacts: CaseFile[];
   /** Set once the case is committed to memory. */
   summary: string | null;
+  outcome?: string | null;
+  final_output?: string | null;
   resolved_at: string | null;
   precedents: PrecedentDetail[];
   triage_report?: TriageReport | null;

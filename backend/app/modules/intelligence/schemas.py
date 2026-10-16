@@ -84,6 +84,12 @@ class ThreadContext:
     due_date: str | None = None
     artifacts: list[str] = field(default_factory=list)
     room_mentions: list[TranscriptMessage] = field(default_factory=list)
+    outcome: str | None = None  # from the team at commit time: how it ended
+    final_output: str | None = None  # what was delivered to the client
+    deliverables: list[str] = field(default_factory=list)  # file names the team marked as the final output
+    # Deliverable name → (file type, extracted text): e.g. the client's approval email or sign-off PDF.
+    deliverable_texts: dict[str, tuple[str, str]] = field(default_factory=dict)
+    approvals: list[str] = field(default_factory=list)  # client sign-offs: evidence, not reusable knowledge
 
 
 # --- ANALYZE: incoming request vs. top-3 precedents ------------------------------------------------------------
@@ -194,3 +200,23 @@ class TriageReportDraft(BaseModel):
     missing_info: list[MissingInfoDraft] = Field(default_factory=list, max_length=6)
     team: list[TeamPickDraft] = Field(default_factory=list, max_length=5)
     duplicates: list[DuplicateDraft] = Field(default_factory=list, max_length=3)
+
+
+# --- MEMORY CURATOR ----------------------------------------------------------------------------------------------
+
+
+class ReusableFileDraft(BaseModel):
+    file_name: str = Field(description="Exact file name from <files>.")
+    reason: Text = Field(description="What a future team would reuse it for.")
+
+
+class ContradictionDraft(BaseModel):
+    case_code: str = Field(description="Exact case_code from <older_memory>.")
+    existing: Text = Field(description="What the older case's memory says.")
+    new: Text = Field(description="What this case's record says instead.")
+    explanation: Text = Field(description="Why they conflict, and which one a future team should trust (and why).")
+
+
+class CuratorDraft(BaseModel):
+    reusable_files: list[ReusableFileDraft] = Field(default_factory=list, max_length=8)
+    contradictions: list[ContradictionDraft] = Field(default_factory=list, max_length=5)

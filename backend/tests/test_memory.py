@@ -52,7 +52,12 @@ def test_resolve_needs_messages_and_is_idempotent(client, sql):
     job_id = str(uuid.uuid4())
     first = resolve(client, elena, job_id)
     assert first.status_code == 202 and first.json()["status"] == "QUEUED"
-    assert first.json()["steps"] == ["Reading the case thread", "Drafting the memory record", "Checking citations"]
+    assert first.json()["steps"] == [
+        "Reading the case thread",
+        "Drafting the memory record",
+        "Checking citations",
+        "Curating files & checking older cases",
+    ]
     assert resolve(client, elena, job_id).json()["id"] == job_id  # retry
     assert resolve(client, ryan).json()["id"] == job_id  # second click while live: same job
 
@@ -156,3 +161,49 @@ def test_thread_context_loads_even_when_case_already_in_session(client, sql):
 
     context = client.portal.call(go)
     assert len(context.messages) == 3 and context.artifacts == []
+
+
+def test_outcome_curator_and_knowledge_base_commit(client, sql):
+    elena, ryan = signed_in(client, sql)
+    discussion(client, elena, ryan)
+
+    def upload(name, content):
+        files = {"file": (name, content, "application/octet-stream")}
+        return client.post(f"/api/cases/{APOLLO}/files", files=files, headers=elena).json()["id"]
+
+    schema_id = upload("joint_signer_schema.json", b'{"signers": ["designated", "co-signer"]}')
+    export_id = upload("apollo_lp_export.csv", b"lp,commitment\nA,10\n")
+    approval = {"file": ("apollo_signoff.eml", b"Subject: Approved\n\nWe approve the new W-8 flow.", "message/rfc822")}
+    approval_id = client.post(
+        f"/api/cases/{APOLLO}/files", files=approval, data={"file_type": "CLIENT_APPROVAL"}, headers=elena
+    ).json()["id"]
+
+    body = {
+        "job_id": str(uuid.uuid4()),
+        "outcome": "WORKAROUND",
+        "final_output": "Delivered the Designated Tax Signatory schema; MFN bracket deferred to the next close.",
+        "deliverable_file_ids": [schema_id, approval_id],
+    }
+    job = client.post(f"/api/cases/{APOLLO}/resolve", json=body, headers=elena).json()
+    run_job(client, job["id"])
+    result = jobs(client, elena)["summarize"]["result"]
+    assert result["outcome"] == "WORKAROUND" and "Delivered" in result["record"]["how_it_went"]
+    suggested = {f["file_name"] for f in result["curator"]["reusable_files"]}
+    assert "joint_signer_schema.json" in suggested and "apollo_lp_export.csv" not in suggested
+    assert "apollo_signoff.eml" not in suggested  # a client sign-off is evidence, not reusable knowledge
+    assert sorted(result["deliverable_file_ids"]) == sorted([schema_id, approval_id])
+
+    commit = {
+        **result["record"],
+        "outcome": "WORKAROUND",
+        "final_output": body["final_output"],
+        "reusable_file_ids": [schema_id],
+    }
+    assert client.post(f"/api/cases/{APOLLO}/commit", json=commit, headers=elena).status_code == 200
+    thread = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()
+    assert thread["outcome"] == "WORKAROUND" and thread["final_output"].startswith("Delivered")
+    reusable = {a["id"]: a["is_reusable"] for a in thread["artifacts"]}
+    assert reusable[schema_id] is True and reusable[export_id] is False
+
+    bad = {"job_id": str(uuid.uuid4()), "outcome": "DONE"}
+    assert client.post(f"/api/cases/{APOLLO}/resolve", json=bad, headers=elena).status_code == 422

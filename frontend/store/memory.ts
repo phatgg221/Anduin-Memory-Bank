@@ -1,7 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApiRequestError } from "@/lib/apiError";
 import { memoryService } from "@/services/memoryService";
-import type { CaseJob, CaseJobs, CommitResult, CopilotAsk, CopilotMessage, CopilotView, MemoryRecord } from "@/types/memory";
+import type {
+  CaseJob,
+  CaseJobs,
+  CommitInput,
+  CommitResult,
+  CopilotAsk,
+  CopilotMessage,
+  CopilotView,
+  ResolveInput,
+} from "@/types/memory";
 import { queryKeys } from "./queryKeys";
 
 const POLL_MS = 2_000;
@@ -24,8 +33,8 @@ export function useCaseJobs(caseId: string | null) {
 /** Not optimistic: only the server produces the draft. The job shows up at once and is polled from there. */
 export function useResolve(caseId: string) {
   const queryClient = useQueryClient();
-  return useMutation<CaseJob, ApiRequestError, string>({
-    mutationFn: (jobId) => memoryService.resolve(caseId, jobId),
+  return useMutation<CaseJob, ApiRequestError, ResolveInput>({
+    mutationFn: (input) => memoryService.resolve(caseId, input),
     onSuccess: (job) =>
       queryClient.setQueryData<CaseJobs>(queryKeys.cases.jobs(caseId), (old) => ({
         analyze: old?.analyze ?? null,
@@ -38,7 +47,7 @@ export function useResolve(caseId: string) {
 /** Irreversible, so not optimistic: a pending state until the server confirms. */
 export function useCommitMemory(caseId: string) {
   const queryClient = useQueryClient();
-  return useMutation<CommitResult, ApiRequestError, MemoryRecord>({
+  return useMutation<CommitResult, ApiRequestError, CommitInput>({
     mutationFn: (record) => memoryService.commit(caseId, record),
     onSuccess: (result) => {
       queryClient.setQueryData<CaseJobs>(queryKeys.cases.jobs(caseId), (old) => ({

@@ -75,6 +75,12 @@ export function VaultCaseCard({ item, departmentCodes, onOpenArtifact, openingAr
           </div>
         )}
         {item.summary && <p className="text-sm text-muted-foreground">{item.summary}</p>}
+        {item.outcome && (
+          <p className="flex flex-wrap items-baseline gap-2 border-l-2 border-navy pl-3 text-sm">
+            <span className="micro-label text-navy">{item.outcome}</span>
+            {item.final_output && <span className="text-ink">{item.final_output}</span>}
+          </p>
+        )}
         {Object.keys(item.context_tags).length > 0 && (
           <dl className="flex flex-wrap gap-1.5">
             {Object.entries(item.context_tags).map(([label, value]) => (

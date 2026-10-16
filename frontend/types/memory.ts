@@ -20,10 +20,46 @@ export interface MemoryRecord {
   context_tags: Record<string, string>;
 }
 
+export type CaseOutcome = "RESOLVED" | "WORKAROUND" | "PARTIAL" | "ESCALATED" | "WITHDRAWN";
+
+export const CASE_OUTCOMES: { id: CaseOutcome; label: string; hint: string }[] = [
+  { id: "RESOLVED", label: "Resolved", hint: "Fully solved and delivered" },
+  { id: "WORKAROUND", label: "Workaround", hint: "Unblocked, but not the final fix" },
+  { id: "PARTIAL", label: "Partial", hint: "Some of it delivered, the rest deferred" },
+  { id: "ESCALATED", label: "Escalated", hint: "Handed to another team or vendor" },
+  { id: "WITHDRAWN", label: "Withdrawn", hint: "The client dropped the request" },
+];
+
+export interface OutcomeInput {
+  outcome: CaseOutcome;
+  final_output: string;
+  deliverable_file_ids: string[];
+}
+
+export interface ResolveInput extends OutcomeInput {
+  job_id: string;
+}
+
+export interface CuratorSuggestions {
+  reusable_files: { artifact_id: string; file_name: string; reason: string }[];
+  contradictions: { case_code: string; case_id: string; existing: string; new: string; explanation: string }[];
+  checked_cases: string[];
+}
+
 export interface SummarizeResult {
   record: MemoryRecord;
   guard_warnings: string[];
   provider: string;
+  outcome?: CaseOutcome | null;
+  final_output?: string | null;
+  deliverable_file_ids?: string[];
+  curator?: CuratorSuggestions;
+}
+
+export interface CommitInput extends MemoryRecord {
+  outcome: CaseOutcome;
+  final_output: string;
+  reusable_file_ids: string[];
 }
 
 export interface CaseJob {

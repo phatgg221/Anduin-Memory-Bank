@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import { SectionLabel } from "@/components/brand/SectionLabel";
@@ -14,6 +15,10 @@ import { CaseDetailsPanel } from "@/components/cases/CaseDetailsPanel";
 import { JobProgress } from "@/components/memory/JobProgress";
 import { MemoryBanner } from "@/components/memory/MemoryBanner";
 import { MemoryReviewForm } from "@/components/memory/MemoryReviewForm";
+import {
+  OutcomeForm,
+  type OutcomeUpload,
+} from "@/components/memory/OutcomeForm";
 import { Composer, type Mentionable } from "@/components/rooms/Composer";
 import { MemberList } from "@/components/rooms/MemberList";
 import { MessageThread } from "@/components/rooms/MessageThread";
@@ -46,8 +51,10 @@ import {
   useThreadCacheHandlers,
   useThreadPolling,
   useUpdateCase,
+  useUploadFiles,
 } from "@/store/threads";
 import { useOpenArtifact } from "@/store/vault";
+import type { OutcomeInput } from "@/types/memory";
 import type { RoomPerson } from "@/types/rooms";
 
 type Tab = "channel" | "delta" | "copilot" | "people";
@@ -86,11 +93,13 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
 
   const analyze = useAnalyze();
   const updateCase = useUpdateCase(caseId);
+  const uploadFiles = useUploadFiles();
   const sendThread = useSendThreadMessage(caseId);
   const askCopilot = useAskCopilot(caseId);
   const resolve = useResolve(caseId);
   const commitMemory = useCommitMemory(caseId);
   const changeMember = useChangeCaseMember(caseId);
+  const [askOutcome, setAskOutcome] = useState(false);
   const openArtifact = useOpenArtifact();
   const panels = usePanels();
 
@@ -188,11 +197,43 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
       .filter((id): id is string => Boolean(id)),
   );
   const summarizeJob = jobs.data?.summarize ?? null;
-  const startDraft = () => resolve.mutate(crypto.randomUUID());
-  const openReview = () => {
-    router.push(`${base}?tab=${tab}&review=1`);
-    if (!summarizeJob || summarizeJob.status === "FAILED") startDraft();
+  const lastOutcome: OutcomeInput | null = summarizeJob?.result?.outcome
+    ? {
+        outcome: summarizeJob.result.outcome,
+        final_output: summarizeJob.result.final_output ?? "",
+        deliverable_file_ids: summarizeJob.result.deliverable_file_ids ?? [],
+      }
+    : null;
+  const startDraft = async (
+    input: OutcomeInput,
+    uploads: OutcomeUpload[] = [],
+  ) => {
+    let uploaded: { id: string }[] = [];
+    try {
+      if (uploads.length)
+        uploaded = await uploadFiles.mutateAsync({
+          caseId,
+          files: uploads.map((u) => u.file),
+          fileTypes: uploads.map((u) => u.kind),
+        });
+    } catch {
+      return;
+    }
+    resolve.mutate(
+      {
+        job_id: crypto.randomUUID(),
+        ...input,
+        deliverable_file_ids: [
+          ...new Set([
+            ...input.deliverable_file_ids,
+            ...uploaded.map((f) => f.id),
+          ]),
+        ],
+      },
+      { onSuccess: () => setAskOutcome(false) },
+    );
   };
+  const openReview = () => router.push(`${base}?tab=${tab}&review=1`);
   const newMessage = (
     content: string,
     isMilestone: boolean,
@@ -286,51 +327,66 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
         </div>
         {!isOpenCase ? (
           <p className="text-sm text-muted-foreground">
-            This case is already committed to memory.
+            This case is already committed to the Knowledge Base.
           </p>
-        ) : draft?.record && summarizeJob ? (
+        ) : !summarizeJob || askOutcome ? (
+          <div className="@container">
+            <OutcomeForm
+              clientName={t.client_name}
+              files={t.artifacts}
+              initial={lastOutcome ?? undefined}
+              onSubmit={(input, uploads) => void startDraft(input, uploads)}
+              isSubmitting={resolve.isPending || uploadFiles.isPending}
+              submitLabel={
+                uploadFiles.isPending ? "Uploading files…" : undefined
+              }
+            />
+          </div>
+        ) : draft?.record ? (
           <MemoryReviewForm
             key={summarizeJob.id}
             draft={draft.record}
             provider={draft.provider ?? ""}
             guardWarnings={draft.guard_warnings ?? []}
+            outcome={draft.outcome ?? "RESOLVED"}
+            finalOutput={draft.final_output ?? ""}
+            files={t.artifacts}
+            curator={draft.curator}
+            onCaseClick={handleCaseClick}
             isCommitting={commitMemory.isPending}
             error={commitMemory.error?.message}
-            onRegenerate={startDraft}
-            onCommit={(record) =>
-              commitMemory.mutate(record, {
+            onRegenerate={() =>
+              lastOutcome ? startDraft(lastOutcome) : setAskOutcome(true)
+            }
+            onChangeOutcome={() => setAskOutcome(true)}
+            onCommit={(input) =>
+              commitMemory.mutate(input, {
                 onSuccess: () => router.replace(`${base}?tab=channel`),
               })
             }
           />
-        ) : summarizeJob ? (
+        ) : (
           <div className="flex flex-col items-start gap-3">
             <p className="text-sm text-muted-foreground">
-              The AI summarizer is reading the case channel, the war-room
-              mentions and the files, and drafting the memory record (how it
-              went, resolution steps, pitfalls) for your review.
+              Dejavu is reading the case chat, the department mentions and the
+              files with your outcome, drafting the memory record, then picking
+              reusable files and checking the lessons against older cases.
             </p>
-            <JobProgress
-              job={summarizeJob}
-              title="Drafting the memory record"
-            />
+            <JobProgress job={summarizeJob} title="Memory curator" />
             {summarizeJob.status === "FAILED" && (
-              <Button onClick={startDraft} disabled={resolve.isPending}>
+              <Button
+                onClick={() => setAskOutcome(true)}
+                disabled={resolve.isPending}
+              >
                 Try again
               </Button>
             )}
           </div>
-        ) : (
-          <Button
-            className="w-fit"
-            onClick={startDraft}
-            disabled={resolve.isPending}
-          >
-            Draft memory record
-          </Button>
         )}
-        {resolve.error && (
-          <p className="text-sm text-destructive">{resolve.error.message}</p>
+        {(resolve.error ?? uploadFiles.error) && (
+          <p className="text-sm text-destructive">
+            {(resolve.error ?? uploadFiles.error)?.message}
+          </p>
         )}
       </div>
     );

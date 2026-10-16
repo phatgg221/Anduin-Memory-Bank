@@ -1,6 +1,6 @@
 import { withApiErrors } from "@/lib/apiError";
 import { axiosClient } from "@/lib/axiosClient";
-import type { CaseJob, CaseJobs, CommitResult, CopilotAsk, CopilotView, MemoryRecord } from "@/types/memory";
+import type { CaseJob, CaseJobs, CommitInput, CommitResult, CopilotAsk, CopilotView, ResolveInput } from "@/types/memory";
 
 export const memoryService = {
   /** Starts precedent matching (top-3 + delta). Idempotent on the client-generated job id. */
@@ -18,8 +18,8 @@ export const memoryService = {
   },
 
   /** Starts the summarizer job. Idempotent on the client-generated job id. */
-  async resolve(caseId: string, jobId: string): Promise<CaseJob> {
-    return (await withApiErrors(axiosClient.post<CaseJob>(`/cases/${caseId}/resolve`, { job_id: jobId }))).data;
+  async resolve(caseId: string, input: ResolveInput): Promise<CaseJob> {
+    return (await withApiErrors(axiosClient.post<CaseJob>(`/cases/${caseId}/resolve`, input))).data;
   },
 
   async getJobs(caseId: string): Promise<CaseJobs> {
@@ -27,7 +27,7 @@ export const memoryService = {
   },
 
   /** Irreversible: the case becomes RESOLVED and its thread read-only. */
-  async commit(caseId: string, record: MemoryRecord): Promise<CommitResult> {
+  async commit(caseId: string, record: CommitInput): Promise<CommitResult> {
     const pitfalls = record.pitfalls.map(({ warning, severity, reference }) => ({ warning, severity, reference }));
     return (await withApiErrors(axiosClient.post<CommitResult>(`/cases/${caseId}/commit`, { ...record, pitfalls }))).data;
   },

@@ -213,8 +213,15 @@ export function CaseDetailsPanel({ thread, departments, people, onSave, isSaving
 
       {!open && thread.summary && (
         <div className="flex flex-col gap-1.5 border-t pt-4">
-          <span className="micro-label text-reusable">Committed memory</span>
+          <span className="micro-label text-reusable">
+            In the Knowledge Base{thread.outcome ? ` · ${thread.outcome}` : ""}
+          </span>
           <p className="text-sm text-ink">{thread.summary}</p>
+          {thread.final_output && (
+            <p className="text-sm text-muted-foreground">
+              <span className="text-ink">Final output:</span> {thread.final_output}
+            </p>
+          )}
         </div>
       )}
     </section>

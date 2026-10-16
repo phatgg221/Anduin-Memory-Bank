@@ -33,7 +33,8 @@ def build_chunks(
             "CASE_SUMMARY",
             "Summary",
             f"{head}\nTags: {tags}\nRequest: {context.initial_request_brief}\n\n"
-            f"{record.summary}\n\n{record.how_it_went}",
+            f"{record.summary}\n\n{record.how_it_went}"
+            + (f"\n\nOutcome: {context.outcome}. Final output: {context.final_output}" if context.outcome else ""),
         ),
         ChunkDraft(
             "RESOLUTION_PLAYBOOK",

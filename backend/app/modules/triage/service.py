@@ -16,7 +16,7 @@ from app.modules.auth.models import User
 from app.modules.cases import service as cases
 from app.modules.cases.models import CaseRecord, ChannelMessage, CopilotMessage
 from app.modules.cases.schemas import ThreadMessageOut
-from app.modules.intelligence import analyzer, copilot, indexer, llm_client, summarizer, triage_agent
+from app.modules.intelligence import analyzer, copilot, curator, indexer, llm_client, summarizer, triage_agent
 from app.modules.intelligence.guard import guard_memory
 from app.modules.intelligence.schemas import (
     CaseMemoryDraft,
@@ -34,7 +34,7 @@ MENTION = re.compile(r"@dejavu\b", re.IGNORECASE)
 
 STEPS = {
     "ANALYZE": triage_agent.TRIAGE_STEPS,
-    "SUMMARIZE": summarizer.SUMMARIZE_STEPS,
+    "SUMMARIZE": (*summarizer.SUMMARIZE_STEPS, curator.CURATE_STEP),
     "INDEX": indexer.INDEX_STEPS,
     "COPILOT": copilot.COPILOT_STEPS,
 }
@@ -94,7 +94,15 @@ async def enqueue(
     return live or await session.get_one(CaseJob, job_id)
 
 
-async def request_summary(session: AsyncSession, user: User, case_id: uuid.UUID, job_id: uuid.UUID) -> CaseJob:
+async def request_summary(
+    session: AsyncSession,
+    user: User,
+    case_id: uuid.UUID,
+    job_id: uuid.UUID,
+    outcome: str | None = None,
+    final_output: str | None = None,
+    deliverable_file_ids: list[uuid.UUID] | None = None,
+) -> CaseJob:
     case = await session.get(CaseRecord, case_id)
     if case is None:
         raise NotFoundError("Unknown case")
@@ -103,7 +111,12 @@ async def request_summary(session: AsyncSession, user: User, case_id: uuid.UUID,
     has_messages = await session.scalar(select(ChannelMessage.id).where(ChannelMessage.case_id == case_id).limit(1))
     if has_messages is None:
         raise ConflictError("The thread has no messages yet, so there's nothing to summarize")
-    return await enqueue(session, job_id, case_id, "SUMMARIZE", user)
+    job_input = {
+        "outcome": outcome,
+        "final_output": final_output,
+        "deliverable_file_ids": [str(i) for i in deliverable_file_ids or []],
+    }
+    return await enqueue(session, job_id, case_id, "SUMMARIZE", user, job_input)
 
 
 async def request_analysis(session: AsyncSession, user: User, case_id: uuid.UUID, job_id: uuid.UUID) -> CaseJob:
@@ -174,7 +187,15 @@ async def commit(
     context, _ = await _thread_context(session, case_id)
     record, warnings = guard_memory(draft, context, build_transcript(context))
     try:
-        case = await cases.commit_memory(session, case_id, record.model_dump(), user.id)
+        case = await cases.commit_memory(
+            session,
+            case_id,
+            record.model_dump(),
+            user.id,
+            outcome=getattr(draft, "outcome", None),
+            final_output=getattr(draft, "final_output", None),
+            reusable_file_ids=getattr(draft, "reusable_file_ids", None),
+        )
     except cases.ConflictError as error:
         raise ConflictError(str(error)) from None
     job = await enqueue(session, uuid.uuid4(), case_id, "INDEX", user)
@@ -412,16 +433,43 @@ async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
 
 
 async def _summarize(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
+    """The memory curator: draft the record from the thread + the team's outcome, then suggest reusable files and
+    check the new lessons against older memory."""
     async with SessionLocal() as session:
-        context, _ = await _thread_context(session, case_id)
+        job = await session.get_one(CaseJob, job_id)
+        given = job.input or {}
+        context, case = await _thread_context(session, case_id)
+        deliverable_ids = set(given.get("deliverable_file_ids") or [])
+        context.outcome = given.get("outcome")
+        context.final_output = given.get("final_output")
+        context.deliverables = [a.file_name for a in case.artifacts if str(a.id) in deliverable_ids]
+        context.approvals = [a.file_name for a in case.artifacts if a.file_type == "CLIENT_APPROVAL"]
+        context.deliverable_texts = {
+            a.file_name: (a.file_type, a.preview_text)
+            for a in case.artifacts
+            if str(a.id) in deliverable_ids and a.preview_text
+        }
+        files = {a.file_name: (str(a.id), a.preview_text or a.description or "") for a in case.artifacts}
     record, warnings = await summarizer.summarize_thread(context, lambda step: heartbeat(job_id, step))
-    return {"record": record.model_dump(), "guard_warnings": warnings, "provider": llm_client.provider_label()}
+    await heartbeat(job_id, curator.CURATE_STEP)
+    async with SessionLocal() as session:
+        suggestions, curator_warnings = await curator.curate(session, case_id, context, record, files)
+    return {
+        "record": record.model_dump(),
+        "guard_warnings": warnings + curator_warnings,
+        "provider": llm_client.provider_label(),
+        "outcome": context.outcome,
+        "final_output": context.final_output,
+        "deliverable_file_ids": sorted(deliverable_ids),
+        "curator": suggestions,
+    }
 
 
 async def _index(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
     await heartbeat(job_id, indexer.INDEX_STEPS[0])
     async with SessionLocal() as session:
         context, case = await _thread_context(session, case_id)
+        context.outcome, context.final_output = case.outcome, case.final_output
         record = CaseMemoryRecord(
             summary=case.summary or "",
             how_it_went=case.how_it_went or "",

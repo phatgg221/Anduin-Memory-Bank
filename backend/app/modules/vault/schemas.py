@@ -37,6 +37,8 @@ class VaultCaseOut(BaseModel):
     secondary_department_ids: list[str]
     context_tags: dict[str, str]
     summary: str | None
+    outcome: str | None = None
+    final_output: str | None = None
     duration_days: int | None
     created_at: datetime
     resolved_at: datetime | None

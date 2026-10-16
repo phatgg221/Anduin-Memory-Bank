@@ -29,6 +29,7 @@ from app.modules.auth.models import User
 from app.modules.org.models import Department
 
 CASE_STATUSES = ("OPEN", "RESOLVED")
+CASE_OUTCOMES = ("RESOLVED", "WORKAROUND", "PARTIAL", "ESCALATED", "WITHDRAWN")
 CASE_SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
 SOURCE_TYPES = ("CLIENT_EMAIL", "CS_ESCALATION", "LEGAL_REDLINE", "SECURITY_RFP")
 COPILOT_ROLES = ("user", "assistant")
@@ -45,6 +46,7 @@ class CaseRecord(Base):
     __tablename__ = "case_records"
     __table_args__ = (
         CheckConstraint(f"status IN {CASE_STATUSES}", name="status"),
+        CheckConstraint(f"outcome IN {CASE_OUTCOMES}", name="outcome"),
         CheckConstraint("(status = 'RESOLVED') = (resolved_at IS NOT NULL)", name="resolved_at_matches_status"),
         CheckConstraint(f"severity IN {CASE_SEVERITIES}", name="severity"),
         CheckConstraint(f"source_type IS NULL OR source_type IN {SOURCE_TYPES}", name="source_type"),
@@ -74,6 +76,9 @@ class CaseRecord(Base):
     comparison_results: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     # The triage agent's report (summary, risk & effort, duplicates, missing info, team), guarded by code.
     triage_report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Asked when the case is committed: how it ended and what was delivered to the client.
+    outcome: Mapped[str | None] = mapped_column(String(20))
+    final_output: Mapped[str | None] = mapped_column(Text)
     # Memory record, written on resolve (SUMMARIZE job, or the seed).
     summary: Mapped[str | None] = mapped_column(Text)
     how_it_went: Mapped[str | None] = mapped_column(Text)

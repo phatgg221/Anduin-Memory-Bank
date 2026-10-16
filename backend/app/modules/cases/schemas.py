@@ -171,6 +171,8 @@ class ThreadViewOut(BaseModel):
     created_at: datetime
     artifacts: list[ArtifactRefOut]
     summary: str | None
+    outcome: str | None = None
+    final_output: str | None = None
     resolved_at: datetime | None
     precedents: list[PrecedentOut]
     triage_report: dict[str, Any] | None = None
