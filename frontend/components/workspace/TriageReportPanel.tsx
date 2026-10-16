@@ -117,6 +117,8 @@ export function TriageReportPanel({
         >
           <ShieldCheck className="size-3.5" aria-hidden />
           How I found this · {report.investigation.tool_calls} tool calls
+          {!!report.investigation.repeats_skipped &&
+            ` · ${report.investigation.repeats_skipped} repeat${report.investigation.repeats_skipped === 1 ? "" : "s"} skipped`}
           {report.investigation.cases_opened.length > 0 && ` · opened ${report.investigation.cases_opened.join(", ")}`}
           <ChevronDown className={cn("size-3.5 transition-transform", showTrace && "rotate-180")} aria-hidden />
         </button>

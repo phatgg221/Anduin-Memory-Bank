@@ -389,3 +389,62 @@ def test_channel_answers_run_one_at_a_time_per_case(client, sql, monkeypatch):
     assert claim() is None
     client.portal.call(service.complete, uuid.UUID(a), {})
     assert str(claim()) == b
+
+
+def test_tool_cache_keys_ignore_case_spacing_and_order():
+    from app.modules.intelligence.triage_agent import cache_key
+
+    assert cache_key("search_knowledge_vault", {"query": "W-8BEN-E joint signers"}) == cache_key(
+        "search_knowledge_vault", {"query": "  w-8ben-e   Joint signers! "}
+    )
+    assert cache_key("find_people", {"case_codes": ["CASE-2025-052", "CASE-2025-014"]}) == cache_key(
+        "find_people", {"case_codes": ["case-2025-014", "CASE-2025-052", "CASE-2025-014"]}
+    )
+    assert cache_key("search_knowledge_vault", {"query": "MFN"}) != cache_key(
+        "search_knowledge_vault", {"query": "UBO"}
+    )
+
+
+def test_repeated_agent_calls_are_answered_from_the_cache(client, sql, monkeypatch):
+    import json
+
+    from app.core.config import settings
+    from app.modules.intelligence import llm_client
+
+    elena, _ = signed_in(client, sql)
+    with_indexed_precedent(client, sql, elena)
+    case = new_case(client, elena, title="Sovereign side letter with an MFN tier at $15M").json()
+
+    def call(i, query):
+        args = json.dumps({"query": query})
+        return {"id": f"c{i}", "type": "function", "function": {"name": "search_knowledge_vault", "arguments": args}}
+
+    turns = iter(
+        [
+            {"content": "", "tool_calls": [call(1, "sovereign MFN side letter")]},
+            {"content": "", "tool_calls": [call(2, "Sovereign  MFN side-letter!")]},  # the same search again
+            {"content": "Found the GIC precedent.", "tool_calls": []},
+        ]
+    )
+    replies = []
+
+    async def scripted(messages, tools, **_):
+        replies.append(messages[-1])
+        return next(turns)
+
+    async def offline_json(system, user, schema, *, fake, **_):
+        return fake()
+
+    monkeypatch.setattr(settings, "llm_provider", "openrouter")
+    monkeypatch.setattr(llm_client, "complete_with_tools", scripted)
+    monkeypatch.setattr(llm_client, "complete_json", offline_json)
+
+    job = client.post(f"/api/cases/{case['id']}/analyze", json={"job_id": str(uuid.uuid4())}, headers=elena).json()
+    run_job(client, job["id"])
+    done = client.get(f"/api/cases/{case['id']}/jobs", headers=elena).json()["analyze"]
+    assert done["status"] == "COMPLETED", done["error"]
+    searches = [step for step in done["trace"] if step["tool"] == "search_knowledge_vault"]
+    assert len(searches) == 1  # the repeat added no trace line
+    assert "already made this exact call" in replies[2]["content"]  # the model was told it repeated itself
+    report = client.get(f"/api/cases/{case['id']}/thread", headers=elena).json()["triage_report"]
+    assert report["investigation"]["repeats_skipped"] == 1

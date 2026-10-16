@@ -173,7 +173,14 @@ export interface TriageReport {
   missing_info: { question: string; why: string; source_case_code: string | null }[];
   team: TriagePerson[];
   duplicates: TriageDuplicate[];
-  investigation: { tool_calls: number; queries: string[]; cases_opened: string[]; agent: boolean; model: string };
+  investigation: {
+    tool_calls: number;
+    repeats_skipped?: number;
+    queries: string[];
+    cases_opened: string[];
+    agent: boolean;
+    model: string;
+  };
   guard_warnings: string[];
   fallback?: boolean;
 }

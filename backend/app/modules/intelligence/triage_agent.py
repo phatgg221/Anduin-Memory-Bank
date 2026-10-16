@@ -111,11 +111,28 @@ class Evidence:
     queries: list[str] = field(default_factory=list)
     notes: str = ""
     tool_calls: int = 0
+    repeats: int = 0
     called: set[str] = field(default_factory=set)
     agent_ran: bool = False
 
     def known_codes(self) -> set[str]:
         return set(self.vault) | set(self.details)
+
+
+WORDS = re.compile(r"[a-z0-9%$.]+")
+
+
+def _normalise(value):
+    if isinstance(value, str):
+        return " ".join(WORDS.findall(value.lower()))
+    if isinstance(value, list | tuple):
+        return tuple(sorted({_normalise(v) for v in value}, key=str))
+    return json.dumps(value, sort_keys=True, default=str)
+
+
+def cache_key(name: str, args: dict) -> tuple:
+    """Same tool + same arguments up to case, spacing, punctuation and list order = the same call."""
+    return name, tuple(sorted((key, _normalise(value)) for key, value in args.items()))
 
 
 def _person(user) -> dict:
@@ -137,6 +154,7 @@ class Toolbox:
         self.evidence = evidence
         self.on_trace = on_trace
         self._request_vector: list[float] | None = None
+        self._cache: dict[tuple, dict] = {}
 
     async def run(self, name: str, args: dict, *, auto: bool = False) -> dict:
         handler = {
@@ -148,10 +166,19 @@ class Toolbox:
         }.get(name)
         if handler is None:
             return {"error": f"Unknown tool {name}"}
+        key = cache_key(name, args)
+        if key in self._cache:
+            self.evidence.repeats += 1
+            return {
+                **self._cache[key],
+                "note": "You already made this exact call; this is the same result. Try a different query or tool, "
+                "or stop and summarise.",
+            }
         try:
             result, detail = await handler(**args)
         except TypeError:
             return {"error": f"Bad arguments for {name}"}
+        self._cache[key] = result
         self.evidence.tool_calls += 1
         self.evidence.called.add(name)
         await self.on_trace({"tool": name, "label": LABELS[name], "detail": detail, "auto": auto})
@@ -498,6 +525,7 @@ def guard_triage(
         "duplicates": duplicates,
         "investigation": {
             "tool_calls": evidence.tool_calls,
+            "repeats_skipped": evidence.repeats,
             "queries": evidence.queries,
             "cases_opened": list(evidence.details),
             "agent": evidence.agent_ran,
