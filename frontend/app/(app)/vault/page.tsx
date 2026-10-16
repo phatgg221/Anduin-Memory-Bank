@@ -43,7 +43,7 @@ export default function VaultPage() {
         <SectionLabel>Knowledge Vault</SectionLabel>
         <p className="text-sm text-muted-foreground">
           Resolved cases and their reusable artifacts · <span className="text-ink">{activeName}</span>
-          {vault.data && ` · ${vault.data.cases.length} case${vault.data.cases.length === 1 ? "" : "s"}`}
+          {vault.data && ` · ${vault.data.cases.length} case${vault.data.cases.length === 1 ? "" : "s"} · newest first`}
         </p>
       </div>
 
@@ -83,6 +83,7 @@ export default function VaultPage() {
           <div className={vault.isPlaceholderData ? "grid grid-cols-1 gap-4 opacity-60 xl:grid-cols-2" : "grid grid-cols-1 gap-4 xl:grid-cols-2"}>
             {vault.data.cases.map((item) => (
               <VaultCaseCard
+                now={vault.dataUpdatedAt}
                 key={item.id}
                 item={item}
                 departmentCodes={departmentCodes}

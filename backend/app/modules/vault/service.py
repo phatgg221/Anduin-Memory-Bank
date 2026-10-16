@@ -31,7 +31,7 @@ async def vault_view(session: AsyncSession, department_id: str | None) -> tuple[
         select(CaseRecord)
         .where(resolved)
         .options(selectinload(CaseRecord.lead_resolver), selectinload(CaseRecord.artifacts))
-        .order_by(CaseRecord.resolved_at.desc())
+        .order_by(CaseRecord.resolved_at.desc().nulls_last(), CaseRecord.created_at.desc())
     )
     if department_id is not None:
         query = query.where(_in_department(department_id))

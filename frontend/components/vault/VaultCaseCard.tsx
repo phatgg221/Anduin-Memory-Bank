@@ -9,9 +9,18 @@ interface VaultCaseCardProps {
   departmentCodes: Record<string, string>;
   onOpenArtifact: (artifactId: string) => void;
   openingArtifactId?: string;
+  /** When the data was fetched (ms); "New" = saved to memory within a day of it. */
+  now: number;
 }
 
 const MONTH = new Intl.DateTimeFormat("en", { month: "short", year: "numeric" });
+const DAY_MS = 86_400_000;
+
+function savedAgo(ms: number): string {
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours < 1) return "Saved just now";
+  return `Saved ${hours}h ago`;
+}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -19,15 +28,18 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function VaultCaseCard({ item, departmentCodes, onOpenArtifact, openingArtifactId }: VaultCaseCardProps) {
+export function VaultCaseCard({ item, departmentCodes, onOpenArtifact, openingArtifactId, now }: VaultCaseCardProps) {
   const lead = item.lead_resolver;
   const departments = [item.department_id, ...item.secondary_department_ids];
+  const age = item.resolved_at ? now - new Date(item.resolved_at).getTime() : Infinity;
+  const isNew = age >= 0 && age < DAY_MS;
 
   return (
     <article className="flex min-w-0 flex-col border bg-background">
       <header className="flex flex-col gap-3 border-b p-5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="micro-label text-navy">{item.case_code}</span>
+          {isNew && <span className="micro-label bg-brand-cyan px-1.5 py-0.5 text-navy">New</span>}
           {departments.map((id, index) => (
             <span
               key={id}
@@ -42,7 +54,7 @@ export function VaultCaseCard({ item, departmentCodes, onOpenArtifact, openingAr
           ))}
           {item.resolved_at && (
             <span className="micro-label ml-auto text-muted-foreground">
-              Resolved {MONTH.format(new Date(item.resolved_at))}
+              {isNew ? savedAgo(age) : `Resolved ${MONTH.format(new Date(item.resolved_at))}`}
               {item.duration_days !== null && ` · ${item.duration_days}d`}
             </span>
           )}
