@@ -268,3 +268,80 @@ def test_ask_dejavu_in_the_case_channel(client, sql):
     assert [m["id"] for m in thread].count(job_id) == 1
     assert reply["id"] == job_id and reply["is_agent"] is True and reply["author"] is None
     assert "[CASE-2025-052]" in reply["content"]
+
+
+def _scanned_pdf(words: str) -> bytes:
+    """A PDF whose page is only a picture of text (no text layer), like a scanned sign-off."""
+    import io
+
+    from PIL import Image, ImageDraw
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+
+    picture = Image.new("RGB", (1200, 300), "white")
+    ImageDraw.Draw(picture).text((40, 120), words, fill="black")
+    out = io.BytesIO()
+    page = canvas.Canvas(out, pagesize=A4)
+    page.drawImage(ImageReader(picture), 40, 500, width=500, height=125)
+    page.showPage()
+    page.save()
+    return out.getvalue()
+
+
+def _text_pdf(words: str) -> bytes:
+    import io
+
+    from reportlab.pdfgen import canvas
+
+    out = io.BytesIO()
+    page = canvas.Canvas(out)
+    for i in range(20):
+        page.drawString(72, 800 - i * 20, f"{words} line {i}")
+    page.showPage()
+    page.save()
+    return out.getvalue()
+
+
+def test_scan_detection():
+    from app.core import documents
+
+    text_pdf = _text_pdf("Designated Tax Signatory edits Part I")
+    assert not documents.needs_ocr("pack.pdf", text_pdf, documents.extract_text("pack.pdf", text_pdf))
+    scan = _scanned_pdf("APPROVED - Apollo Global, 14 Oct 2026")
+    assert documents.needs_ocr("signoff.pdf", scan, documents.extract_text("signoff.pdf", scan))
+    assert documents.needs_ocr("signoff_photo.jpg", b"...", None)
+    assert not documents.needs_ocr("register.csv", b"a,b", "a,b")
+
+
+def test_scanned_uploads_are_read_by_ocr(client, sql, monkeypatch):
+    from app.modules.intelligence import llm_client
+    from tests.test_memory import fetchval
+
+    seen = {}
+
+    async def fake_transcribe(system, prompt, data, mime, file_name):
+        seen[file_name] = mime
+        return "<!-- page 1 -->\n# Approval\n\nAPPROVED - Apollo Global, 14 Oct 2026\n\n[Signature: J. Tan]"
+
+    monkeypatch.setattr(llm_client, "transcribe", fake_transcribe)
+    elena, _ = signed_in(client, sql)
+    files = {"file": ("apollo_signoff.pdf", _scanned_pdf("APPROVED"), "application/pdf")}
+    uploaded = client.post(f"/api/cases/{APOLLO}/files", files=files, headers=elena).json()
+    run_job(client, fetchval(f"SELECT id::text FROM case_jobs WHERE case_id = '{APOLLO}' AND kind = 'EXTRACT'"))
+
+    [artifact] = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["artifacts"]
+    assert artifact["text_status"] == "READY" and artifact["text_method"] == "OCR"
+    assert seen == {"apollo_signoff.pdf": "application/pdf"}
+    assert "[Signature: J. Tan]" in fetchval(f"SELECT preview_text FROM case_artifacts WHERE id = '{uploaded['id']}'")
+
+
+def test_scans_without_an_ocr_model_are_marked_unreadable(client, sql):
+    from tests.test_memory import fetchval
+
+    elena, _ = signed_in(client, sql)  # fake provider: OCR unavailable, the job still finishes
+    files = {"file": ("apollo_signoff.pdf", _scanned_pdf("APPROVED"), "application/pdf")}
+    client.post(f"/api/cases/{APOLLO}/files", files=files, headers=elena)
+    run_job(client, fetchval(f"SELECT id::text FROM case_jobs WHERE case_id = '{APOLLO}' AND kind = 'EXTRACT'"))
+    [artifact] = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["artifacts"]
+    assert artifact["text_status"] == "UNREADABLE" and artifact["text_method"] is None

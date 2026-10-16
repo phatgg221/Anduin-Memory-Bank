@@ -25,7 +25,7 @@ interface OutcomeFormProps {
   submitLabel?: string;
 }
 
-const ACCEPT = ".pdf,.eml,.docx,.xlsx,.csv,.md,.txt,.json";
+const ACCEPT = ".pdf,.png,.jpg,.jpeg,.eml,.docx,.xlsx,.csv,.md,.txt,.json";
 const KINDS: { id: OutcomeUploadKind; label: string }[] = [
   { id: "CLIENT_APPROVAL", label: "Client approval" },
   { id: "FINAL_OUTPUT", label: "Final output" },
@@ -190,7 +190,8 @@ export function OutcomeForm({ clientName, files, initial, onSubmit, isSubmitting
             className="flex items-center gap-1.5 text-left text-xs text-muted-foreground hover:text-ink"
           >
             <Paperclip className="size-3.5" aria-hidden />
-            Drop the client&apos;s approval email or sign-off PDF, or the delivered file — or browse. Dejavu reads it
+            Drop the client&apos;s approval email, signed PDF or a photo of it, or the delivered file — or browse. Scans
+            are read by OCR. Dejavu reads it
             for the memory record.
           </button>
           <input

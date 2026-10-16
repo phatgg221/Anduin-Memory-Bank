@@ -77,6 +77,7 @@ export interface CaseFile {
   is_reusable: boolean;
   description: string;
   text_status?: "PENDING" | "READY" | "UNREADABLE";
+  text_method?: "TEXT" | "OCR" | null;
 }
 
 export interface DeltaItem {

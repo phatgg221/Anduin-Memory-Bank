@@ -212,7 +212,17 @@ export function CaseDetailsPanel({ thread, departments, people, onSave, isSaving
                       No text
                     </span>
                   ) : (
-                    <span className="micro-label ml-auto shrink-0 text-muted-foreground">{file.file_type}</span>
+                    <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                      {file.text_method === "OCR" && (
+                        <span
+                          className="micro-label border border-reusable-border bg-reusable-bg px-1 text-[10px] text-reusable"
+                          title="A scan or photo: its text was read by OCR (Gemini)"
+                        >
+                          OCR
+                        </span>
+                      )}
+                      <span className="micro-label text-muted-foreground">{file.file_type}</span>
+                    </span>
                   )}
                 </button>
               </li>

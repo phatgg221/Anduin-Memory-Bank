@@ -534,7 +534,7 @@ async def upload_file(
         raise ConflictError("This case is committed to memory; its files are read-only")
     name = FILE_NAME.sub("_", file_name).strip("._")[:200]
     if not name or documents.suffix(name) not in documents.CONTENT_TYPES:
-        raise InvalidError("Upload a PDF, CSV, Markdown, text, JSON, email, DOCX or XLSX file")
+        raise InvalidError("Upload a PDF, photo (PNG/JPG), CSV, Markdown, text, JSON, email, DOCX or XLSX file")
     if not data or len(data) > MAX_UPLOAD_BYTES:
         raise InvalidError("Files must be between 1 byte and 50 MB")
     content_type = documents.CONTENT_TYPES[documents.suffix(name)]
@@ -717,8 +717,11 @@ async def pending_artifacts(session: AsyncSession, case_id: uuid.UUID) -> list[C
     )
 
 
-async def set_artifact_text(session: AsyncSession, artifact_id: uuid.UUID, text: str | None) -> None:
+async def set_artifact_text(
+    session: AsyncSession, artifact_id: uuid.UUID, text: str | None, method: str = "TEXT"
+) -> None:
     artifact = await session.get_one(CaseArtifact, artifact_id)
     artifact.preview_text = text
     artifact.text_status = "READY" if text else "UNREADABLE"
+    artifact.text_method = method if text else None
     await session.commit()

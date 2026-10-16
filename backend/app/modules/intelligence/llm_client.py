@@ -5,6 +5,7 @@ on a schema error), or raises LLMError. Transient provider failures (429, 5xx, t
 """
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
@@ -121,6 +122,40 @@ async def complete_with_tools(messages: list[dict], tools: list[dict], *, temper
         raise LLMError(f"Unexpected OpenRouter response: {json.dumps(data)[:300]}") from exc
 
 
+def ocr_label() -> str:
+    return f"{settings.llm_provider}:{settings.ocr_model or settings.agent_model or settings.llm_model}"
+
+
+async def transcribe(system: str, prompt: str, data: bytes, mime: str, file_name: str) -> str:
+    """A scanned PDF or a photo → plain text from a vision model (native PDF/image input via OpenRouter)."""
+    if settings.llm_provider != "openrouter":
+        raise LLMError("OCR needs LLM_PROVIDER=openrouter")
+    encoded = base64.b64encode(data).decode()
+    if mime == "application/pdf":
+        part = {"type": "file", "file": {"filename": file_name, "file_data": f"data:{mime};base64,{encoded}"}}
+    else:
+        part = {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}"}}
+    body = {
+        "model": settings.ocr_model or settings.agent_model or settings.llm_model,
+        "temperature": 0,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": [{"type": "text", "text": prompt}, part]},
+        ],
+        "plugins": [{"id": "file-parser", "pdf": {"engine": "native"}}],
+    }
+    data_out = await _post(
+        f"{settings.openrouter_base_url}/chat/completions",
+        headers=_openrouter_headers(),
+        body=body,
+        request_seconds=max(settings.llm_timeout_seconds, 180),
+    )
+    try:
+        return data_out["choices"][0]["message"]["content"] or ""
+    except (KeyError, IndexError, TypeError) as exc:
+        raise LLMError(f"Unexpected OpenRouter response: {json.dumps(data_out)[:300]}") from exc
+
+
 async def _complete(
     system: str, user: str, schema: type[BaseModel], temperature: float, model: str | None = None
 ) -> str:
@@ -131,12 +166,12 @@ async def _complete(
     raise LLMError(f"Unknown LLM provider {settings.llm_provider!r}")
 
 
-async def _post(url: str, *, headers: dict[str, str], body: dict) -> dict:
+async def _post(url: str, *, headers: dict[str, str], body: dict, request_seconds: float | None = None) -> dict:
     """POST with backoff on 429 / 5xx / network errors; any other 4xx fails immediately (retrying won't help)."""
     last: Exception | None = None
     for attempt, delay in enumerate((*BACKOFF_SECONDS, None)):
         try:
-            async with httpx2.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
+            async with httpx2.AsyncClient(timeout=request_seconds or settings.llm_timeout_seconds) as client:
                 response = await client.post(url, headers=headers, json=body)
             if response.status_code == 429 or response.status_code >= 500:
                 last = LLMError(f"Provider returned {response.status_code}")

@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     llm_model: str = ""
     # The triage agent's tool-calling model (OpenRouter id, e.g. google/gemini-2.5-flash); empty = llm_model.
     agent_model: str = ""
+    # Reads scanned PDFs and photos (OpenRouter id of a model with native PDF/image input); empty = agent_model.
+    ocr_model: str = ""
     embedding_provider: Literal["gemini", "openrouter", "fake"] = "fake"
     embedding_model: str = "gemini-embedding-001"
     embedding_dim: int = 768

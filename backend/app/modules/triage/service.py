@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -16,7 +17,7 @@ from app.modules.auth.models import User
 from app.modules.cases import service as cases
 from app.modules.cases.models import CaseRecord, ChannelMessage, CopilotMessage
 from app.modules.cases.schemas import ThreadMessageOut
-from app.modules.intelligence import analyzer, copilot, curator, indexer, llm_client, summarizer, triage_agent
+from app.modules.intelligence import analyzer, copilot, curator, indexer, llm_client, ocr, summarizer, triage_agent
 from app.modules.intelligence.guard import guard_memory
 from app.modules.intelligence.schemas import (
     CaseMemoryDraft,
@@ -30,12 +31,13 @@ from app.modules.org.models import Department
 from app.modules.rooms import service as rooms
 from app.modules.triage.models import CaseJob
 
+logger = logging.getLogger("uvicorn.error")
 MENTION = re.compile(r"@dejavu\b", re.IGNORECASE)
 
 STEPS = {
     "ANALYZE": triage_agent.TRIAGE_STEPS,
     "SUMMARIZE": (*summarizer.SUMMARIZE_STEPS, curator.CURATE_STEP),
-    "EXTRACT": ("Converting files to Markdown",),
+    "EXTRACT": ("Converting files to Markdown", "Reading scanned pages (OCR)"),
     "INDEX": indexer.INDEX_STEPS,
     "COPILOT": copilot.COPILOT_STEPS,
 }
@@ -347,14 +349,23 @@ async def extract_pending(case_id: uuid.UUID, job_id: uuid.UUID | None = None) -
         for artifact_id, name, key in pending:
             if job_id:
                 await heartbeat(job_id, STEPS["EXTRACT"][0])
+            text, method = None, "TEXT"
             try:
                 data = await asyncio.to_thread(storage.read_object, key)
                 text = await asyncio.to_thread(documents.extract_text, name, data)
+                if await asyncio.to_thread(documents.needs_ocr, name, data, text):
+                    if job_id:
+                        await heartbeat(job_id, STEPS["EXTRACT"][1])
+                    try:
+                        if scanned := await ocr.transcribe(name, data):
+                            text, method = scanned, "OCR"
+                    except llm_client.LLMError as error:
+                        logger.warning("OCR unavailable for %s, keeping the text layer: %s", name, error)
             except Exception:  # noqa: BLE001 — an unreadable file mustn't block the case
-                text = None
+                logger.exception("Couldn't convert %s", name)
             async with SessionLocal() as session:
-                await cases.set_artifact_text(session, artifact_id, text)
-            converted.append({"file_name": name, "chars": len(text or ""), "readable": bool(text)})
+                await cases.set_artifact_text(session, artifact_id, text, method)
+            converted.append({"file_name": name, "chars": len(text or ""), "readable": bool(text), "method": method})
     if converted:
         await realtime.room_changed(realtime.thread_room(case_id), "threads")
     return converted
@@ -375,7 +386,10 @@ async def _analyze(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
             {
                 "tool": "index",
                 "label": "Converted files to Markdown",
-                "detail": " · ".join(f"{c['file_name']} ({c['chars']:,} chars)" for c in converted),
+                "detail": " · ".join(
+                    f"{c['file_name']} ({c['chars']:,} chars{', OCR' if c['method'] == 'OCR' else ''})"
+                    for c in converted
+                ),
             }
         )
 

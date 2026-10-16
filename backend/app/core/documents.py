@@ -3,13 +3,16 @@
 import io
 import logging
 
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
 
 from app.utils.markitdown import get_markitdown_tool
 
 logger = logging.getLogger("uvicorn.error")
 
 TEXT_TYPES = {".txt", ".md", ".csv", ".json", ".ts", ".eml"}
+IMAGE_TYPES = {".png", ".jpg", ".jpeg"}
+SCANNED_CHARS_PER_PAGE = 200  # less text than this per page = a scan (or a photo pasted into a PDF)
+OCR_MAX_PAGES = 30
 MAX_CHARS = 500_000
 
 CONTENT_TYPES = {
@@ -21,6 +24,9 @@ CONTENT_TYPES = {
     ".eml": "message/rfc822",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
 }
 
 
@@ -53,3 +59,31 @@ def extract_text(file_name: str, data: bytes) -> str | None:
     except Exception as exc:  # noqa: BLE001 — a malformed file shouldn't fail the upload
         logger.warning("Text extraction failed for %s: %s", file_name, exc)
     return None
+
+
+def needs_ocr(file_name: str, data: bytes, text: str | None) -> bool:
+    """Photos always; PDFs whose text layer is (nearly) empty: under SCANNED_CHARS_PER_PAGE characters a page."""
+    kind = suffix(file_name)
+    if kind in IMAGE_TYPES:
+        return True
+    if kind != ".pdf":
+        return False
+    try:
+        pages = len(PdfReader(io.BytesIO(data)).pages)
+    except Exception:  # noqa: BLE001 — unreadable structure: let OCR try
+        return True
+    return len((text or "").strip()) < SCANNED_CHARS_PER_PAGE * max(pages, 1)
+
+
+def first_pages(data: bytes, limit: int = OCR_MAX_PAGES) -> tuple[bytes, int]:
+    """The first `limit` pages as a new PDF (bounds OCR time and cost), and the document's page count."""
+    reader = PdfReader(io.BytesIO(data))
+    total = len(reader.pages)
+    if total <= limit:
+        return data, total
+    writer = PdfWriter()
+    for page in reader.pages[:limit]:
+        writer.add_page(page)
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue(), total

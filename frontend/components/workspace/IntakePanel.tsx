@@ -58,7 +58,7 @@ const EMPTY: Omit<CaseIntake, "lead_user_id"> = {
   context_tags: {},
   secondary_department_ids: [],
 };
-const ACCEPT = ".pdf,.csv,.md,.txt,.json,.eml,.docx,.xlsx";
+const ACCEPT = ".pdf,.png,.jpg,.jpeg,.csv,.md,.txt,.json,.eml,.docx,.xlsx";
 
 export function IntakePanel({
   scenarios,
@@ -213,7 +213,7 @@ export function IntakePanel({
         ))}
         <button type="button" onClick={() => fileInput.current?.click()} className="text-left text-xs text-muted-foreground hover:text-ink">
           <Paperclip className="mr-1 inline size-3" aria-hidden />
-          Drop the client&apos;s PDF / CSV here, or browse
+          Drop the client&apos;s PDF, scan, photo or CSV here, or browse
         </button>
         <input ref={fileInput} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => addFiles(e.target.files)} />
       </div>

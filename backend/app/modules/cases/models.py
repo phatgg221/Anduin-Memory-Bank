@@ -31,6 +31,7 @@ from app.modules.org.models import Department
 CASE_STATUSES = ("OPEN", "RESOLVED")
 CASE_OUTCOMES = ("RESOLVED", "WORKAROUND", "PARTIAL", "ESCALATED", "WITHDRAWN")
 TEXT_STATUSES = ("PENDING", "READY", "UNREADABLE")
+TEXT_METHODS = ("TEXT", "OCR")
 CASE_SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
 SOURCE_TYPES = ("CLIENT_EMAIL", "CS_ESCALATION", "LEGAL_REDLINE", "SECURITY_RFP")
 COPILOT_ROLES = ("user", "assistant")
@@ -111,6 +112,7 @@ class CaseArtifact(Base):
     __table_args__ = (
         UniqueConstraint("case_id", "file_name"),
         CheckConstraint(f"text_status IN {TEXT_STATUSES}", name="text_status"),
+        CheckConstraint(f"text_method IN {TEXT_METHODS}", name="text_method"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -126,6 +128,8 @@ class CaseArtifact(Base):
     preview_text: Mapped[str | None] = mapped_column(Text)  # extracted text: search, chunking, previews
     # Uploads are converted to Markdown by a background EXTRACT job: PENDING until it has run.
     text_status: Mapped[str] = mapped_column(String(12), server_default=text("'READY'"))
+    # TEXT = read from the file's text layer; OCR = a scan or photo read by a vision model.
+    text_method: Mapped[str | None] = mapped_column(String(8))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     case: Mapped[CaseRecord] = relationship(back_populates="artifacts", lazy="raise")
