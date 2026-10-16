@@ -1,5 +1,5 @@
 import PartySocket from "partysocket";
-import { accessTokenStore } from "@/lib/accessToken";
+import { roomsService } from "@/services/roomsService";
 import type { Presence, ServerEvent, SocketStatus } from "@/types/realtime";
 
 // Browser → PartyKit directly (websockets don't go through the Next /api rewrite), like presigned MinIO links.
@@ -16,16 +16,24 @@ interface Handlers {
 }
 
 /**
- * One socket per department war room: PartyKit room id = department id. The access token is sent as the first
- * message on every (re)connect, never in the URL; PartyKit closes sockets that don't authenticate.
+ * One socket per chat room (a department id, or case-<id>). On every (re)connect a one-minute room ticket, issued by
+ * the API to members only, is sent as the first message, never in the URL; PartyKit closes sockets that don't
+ * authenticate.
  */
 export function connectRoom(departmentId: string, me: Presence, { onEvent, onStatus }: Handlers): RoomConnection {
   const socket = new PartySocket({ host: HOST, room: departmentId });
   onStatus("connecting");
 
   socket.addEventListener("open", () => {
-    const token = accessTokenStore.get();
-    if (token) socket.send(JSON.stringify({ type: "auth", token, user: me }));
+    roomsService
+      .ticket(departmentId)
+      .then((token) => {
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "auth", token, user: me }));
+      })
+      .catch(() => {
+        socket.close();
+        onStatus("offline");
+      });
   });
   socket.addEventListener("message", (event: MessageEvent<string>) => {
     let parsed: ServerEvent;

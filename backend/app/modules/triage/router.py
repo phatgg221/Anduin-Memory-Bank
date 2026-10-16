@@ -28,10 +28,13 @@ UPLOAD_ERRORS = {
     cases.NotFoundError: status.HTTP_404_NOT_FOUND,
     cases.ConflictError: status.HTTP_409_CONFLICT,
     cases.InvalidError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    cases.ForbiddenError: status.HTTP_403_FORBIDDEN,
 }
 
 
 def _http(error: Exception) -> HTTPException:
+    if isinstance(error, service.ForbiddenError):
+        return HTTPException(status.HTTP_403_FORBIDDEN, str(error))
     code = status.HTTP_404_NOT_FOUND if isinstance(error, service.NotFoundError) else status.HTTP_409_CONFLICT
     return HTTPException(code, str(error))
 
@@ -43,14 +46,14 @@ async def resolve(case_id: uuid.UUID, data: ResolveIn, user: CurrentUser, sessio
         job = await service.request_summary(
             session, user, case_id, data.job_id, data.outcome, data.final_output, data.deliverable_file_ids
         )
-    except (service.NotFoundError, service.ConflictError) as error:
+    except (service.NotFoundError, service.ConflictError, service.ForbiddenError) as error:
         raise _http(error) from None
     return JobOut.model_validate(job)
 
 
 @router.get("/{case_id}/jobs")
 async def case_jobs(case_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> CaseJobsOut:
-    jobs = await service.latest_jobs(session, case_id)
+    jobs = await service.latest_jobs(session, case_id, user)
     return CaseJobsOut(**{kind: JobOut.model_validate(job) if job else None for kind, job in jobs.items()})
 
 
@@ -59,14 +62,17 @@ async def analyze(case_id: uuid.UUID, data: AnalyzeIn, user: CurrentUser, sessio
     """Starts precedent matching: top-3 past cases + delta, written to the case. Poll GET /cases/{id}/jobs."""
     try:
         job = await service.request_analysis(session, user, case_id, data.job_id)
-    except (service.NotFoundError, service.ConflictError) as error:
+    except (service.NotFoundError, service.ConflictError, service.ForbiddenError) as error:
         raise _http(error) from None
     return JobOut.model_validate(job)
 
 
 @router.get("/{case_id}/copilot")
 async def copilot_view(case_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> CopilotViewOut:
-    messages, jobs = await service.copilot_view(session, case_id)
+    try:
+        messages, jobs = await service.copilot_view(session, case_id, user)
+    except service.ForbiddenError as error:
+        raise _http(error) from None
     return CopilotViewOut(
         messages=[CopilotMessageOut.model_validate(m) for m in messages],
         jobs=[JobOut.model_validate(j) for j in jobs],
@@ -80,7 +86,7 @@ async def ask_copilot(case_id: uuid.UUID, data: CopilotAskIn, user: CurrentUser,
         job = await service.ask_copilot(
             session, user, case_id, data.message_id, data.job_id, data.question, data.reply_in_channel
         )
-    except service.NotFoundError as error:
+    except (service.NotFoundError, service.ForbiddenError) as error:
         raise _http(error) from None
     except service.RateLimitedError as error:
         headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
@@ -93,7 +99,7 @@ async def commit(case_id: uuid.UUID, data: CommitIn, user: CurrentUser, session:
     """Commits the reviewed record: the case becomes RESOLVED (thread read-only) and an INDEX job starts."""
     try:
         case, job, warnings = await service.commit(session, user, case_id, data)
-    except (service.NotFoundError, service.ConflictError) as error:
+    except (service.NotFoundError, service.ConflictError, service.ForbiddenError) as error:
         raise _http(error) from None
     await realtime.room_changed(realtime.thread_room(case_id), "threads")
     for department_id in [case.department_id, *case.secondary_department_ids]:
@@ -134,7 +140,7 @@ async def upload_file(
     data = await file.read(cases.MAX_UPLOAD_BYTES + 1)
     try:
         artifact = await cases.upload_file(session, user, case_id, file.filename or "upload", data, file_type)
-    except (cases.NotFoundError, cases.ConflictError, cases.InvalidError) as error:
+    except (cases.NotFoundError, cases.ConflictError, cases.InvalidError, cases.ForbiddenError) as error:
         raise HTTPException(UPLOAD_ERRORS[type(error)], str(error)) from None
     out = ArtifactRefOut.model_validate(artifact)
     await service.request_extract(session, user, case_id)

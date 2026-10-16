@@ -1,6 +1,6 @@
 import { withApiErrors } from "@/lib/apiError";
 import { axiosClient } from "@/lib/axiosClient";
-import type { RoomMessage, RoomPerson, RoomSummary, RoomView, SendMessageInput } from "@/types/rooms";
+import type { AccessRequest, RoomMessage, RoomPerson, RoomSummary, RoomView, SendMessageInput } from "@/types/rooms";
 
 const room = (departmentId: string) => `/rooms/${encodeURIComponent(departmentId)}`;
 
@@ -25,6 +25,20 @@ export const roomsService = {
   /** Idempotent on the client-generated id: safe to retry. */
   async sendMessage(departmentId: string, input: SendMessageInput): Promise<RoomMessage> {
     return (await withApiErrors(axiosClient.post<RoomMessage>(`${room(departmentId)}/messages`, input))).data;
+  },
+
+  async requestAccess(departmentId: string): Promise<AccessRequest> {
+    return (await withApiErrors(axiosClient.post<AccessRequest>(`${room(departmentId)}/access-requests`))).data;
+  },
+
+  /** PUT with explicit state: safe to retry. */
+  async decideAccess(departmentId: string, requestId: string, approve: boolean): Promise<void> {
+    await withApiErrors(axiosClient.put(`${room(departmentId)}/access-requests/${requestId}`, { approve }));
+  },
+
+  /** A one-minute pass into one realtime room; the API issues it to members of that chat only. */
+  async ticket(roomId: string): Promise<string> {
+    return (await withApiErrors(axiosClient.post<{ ticket: string }>("/rooms/tickets", { room: roomId }))).data.ticket;
   },
 
   async addMember(departmentId: string, userId: string): Promise<void> {

@@ -20,6 +20,12 @@ INSERT INTO case_records (id, case_code, channel_slug, title, department_id, sec
       "pitfallWarnings": [], "deltaItems": []}]', NULL)
 """
 ROOM = "/api/rooms/LEGAL_COMPLIANCE"
+# Department channels are members-only: Ryan is a member of the Legal channel in these tests.
+MEMBERS = """
+INSERT INTO rooms (department_id) VALUES ('LEGAL_COMPLIANCE') ON CONFLICT DO NOTHING;
+INSERT INTO room_members (department_id, user_id, role)
+  SELECT 'LEGAL_COMPLIANCE', id, 'MEMBER' FROM users WHERE email = 'ryan@anduin.example';
+"""
 
 
 def two_users(client, sql):
@@ -27,6 +33,7 @@ def two_users(client, sql):
     ryan = bearer(register(client, email="ryan@anduin.example", name="Ryan Miller").json()["access_token"])
     sql("INSERT INTO departments (id, code, name) VALUES ('CLIENT_OPERATIONS', 'OPS', 'Client Operations')")
     sql(SETUP)
+    sql(MEMBERS)
     return elena, ryan
 
 
@@ -39,8 +46,11 @@ def post(client, headers, content, message_id=None):
 def test_lead_is_a_member_by_default(client, sql):
     elena, ryan = two_users(client, sql)
     view = client.get(ROOM, headers=ryan).json()
-    assert [(m["user"]["name"], m["role"]) for m in view["members"]] == [("Elena Rostova", "LEAD")]
-    assert view["is_member"] is False
+    assert [(m["user"]["name"], m["role"]) for m in view["members"]] == [
+        ("Elena Rostova", "LEAD"),
+        ("Ryan Miller", "MEMBER"),
+    ]
+    assert view["is_member"] is True
 
     rooms = {r["department_id"]: r for r in client.get("/api/rooms", headers=elena).json()}
     assert rooms["LEGAL_COMPLIANCE"]["lead"]["name"] == "Elena Rostova"
@@ -143,3 +153,48 @@ def test_writes_are_published_to_the_department_room(client, sql, monkeypatch):
         ("LEGAL_COMPLIANCE", "room.changed", "pinned_case"),
     ]
     assert message["tagged_case_codes"] == ["CASE-2026-047"]
+
+
+def test_department_channels_are_members_only(client, sql):
+    elena, ryan = two_users(client, sql)
+    sarah = bearer(register(client, email="sarah@anduin.example", name="Sarah Tran").json()["access_token"])
+    post(client, ryan, "Members-only discussion")
+
+    view = client.get(ROOM, headers=sarah).json()
+    assert view["is_member"] is False and view["messages"] == [] and view["members"]  # who to ask is visible
+    assert post(client, sarah, "let me in").status_code == 403
+    assert client.get(f"{ROOM}/messages", headers=sarah).status_code == 403
+    assert client.put(f"{ROOM}/read", json={"seq": 1}, headers=sarah).status_code == 403
+    sarah_id = client.get("/api/auth/me", headers=sarah).json()["id"]
+    assert client.put(f"{ROOM}/members/{sarah_id}", headers=sarah).status_code == 403  # no self-join
+    rooms = {r["department_id"]: r for r in client.get("/api/rooms", headers=sarah).json()}
+    assert rooms["LEGAL_COMPLIANCE"]["is_member"] is False and rooms["LEGAL_COMPLIANCE"]["unread_count"] == 0
+    assert client.post("/api/rooms/tickets", json={"room": "LEGAL_COMPLIANCE"}, headers=sarah).status_code == 403
+
+    asked = client.post(f"{ROOM}/access-requests", headers=sarah)
+    assert asked.status_code == 201
+    assert client.post(f"{ROOM}/access-requests", headers=sarah).json()["id"] == asked.json()["id"]  # idempotent
+    assert client.get(ROOM, headers=sarah).json()["my_access_request"]["status"] == "PENDING"
+    [pending] = client.get(ROOM, headers=ryan).json()["access_requests"]
+    assert pending["user"]["name"] == "Sarah Tran"
+    decide = f"{ROOM}/access-requests/{pending['id']}"
+    assert client.put(decide, json={"approve": True}, headers=sarah).status_code == 403  # can't approve yourself
+    assert client.put(decide, json={"approve": True}, headers=ryan).status_code == 204
+
+    after = client.get(ROOM, headers=sarah).json()
+    assert after["is_member"] is True and [m["content"] for m in after["messages"]] == ["Members-only discussion"]
+    assert post(client, sarah, "thanks").status_code == 200
+    ticket = client.post("/api/rooms/tickets", json={"room": "LEGAL_COMPLIANCE"}, headers=sarah).json()["ticket"]
+    import jwt
+
+    from app.core.config import settings
+
+    claims = jwt.decode(ticket, settings.jwt_secret, algorithms=["HS256"])
+    assert claims["type"] == "room" and claims["room"] == "LEGAL_COMPLIANCE" and claims["sub"] == sarah_id
+
+
+def test_department_colleagues_always_have_their_channel(client, sql):
+    elena, ryan = two_users(client, sql)
+    sql("UPDATE users SET primary_department_id = 'LEGAL_COMPLIANCE' WHERE email = 'ryan@anduin.example'")
+    ryan_id = client.get("/api/auth/me", headers=ryan).json()["id"]
+    assert client.delete(f"{ROOM}/members/{ryan_id}", headers=elena).status_code == 409

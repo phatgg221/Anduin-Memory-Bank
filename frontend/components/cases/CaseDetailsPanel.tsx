@@ -19,6 +19,7 @@ interface CaseDetailsPanelProps {
   error?: string;
   fieldErrors?: Record<string, string>;
   onOpenFile: (fileId: string) => void;
+  canEdit?: boolean;
 }
 
 const DATE = new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" });
@@ -48,7 +49,17 @@ function toIntake(thread: ThreadView): CaseIntake {
 }
 
 /** `■ CASE DETAILS` — everything about the case behind a thread. Editable while the case is open. */
-export function CaseDetailsPanel({ thread, departments, people, onSave, isSaving, error, fieldErrors, onOpenFile }: CaseDetailsPanelProps) {
+export function CaseDetailsPanel({
+  thread,
+  departments,
+  people,
+  onSave,
+  isSaving,
+  error,
+  fieldErrors,
+  onOpenFile,
+  canEdit = true,
+}: CaseDetailsPanelProps) {
   const [editing, setEditing] = useState<CaseIntake | null>(null);
   const open = thread.status === "OPEN";
   const names = Object.fromEntries(departments.map((d) => [d.id, d]));
@@ -91,7 +102,7 @@ export function CaseDetailsPanel({ thread, departments, people, onSave, isSaving
     <section className="flex flex-col gap-5 p-6">
       <div className="flex items-center justify-between gap-2">
         <SectionLabel>Case details</SectionLabel>
-        {open && (
+        {open && canEdit && (
           <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setEditing(toIntake(thread))}>
             <Pencil className="size-3.5" aria-hidden /> Edit
           </Button>

@@ -81,6 +81,27 @@ class PinnedCaseOut(CaseRefOut):
     precedents: list[PrecedentOut]
 
 
+class AccessRequestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user: PersonOut
+    status: str
+    created_at: datetime
+
+
+class AccessDecisionIn(BaseModel):
+    approve: bool
+
+
+class TicketIn(BaseModel):
+    room: str  # a department id, or "case-<uuid>" for a case channel
+
+
+class TicketOut(BaseModel):
+    ticket: str
+
+
 class RoomViewOut(BaseModel):
     """Everything the War Room screen renders for one room, in one request."""
 
@@ -95,6 +116,8 @@ class RoomViewOut(BaseModel):
     threads: list[ThreadSummaryOut]
     messages: list[MessageOut]
     last_read_seq: int
+    access_requests: list[AccessRequestOut] = []
+    my_access_request: AccessRequestOut | None = None
 
 
 class MessageIn(BaseModel):

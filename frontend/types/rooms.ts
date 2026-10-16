@@ -68,6 +68,7 @@ export interface ThreadSummary {
   top_match_score: number | null;
   message_count: number;
   last_message_at: string | null;
+  is_member?: boolean | null;
 }
 
 export interface CaseFile {
@@ -147,6 +148,9 @@ export interface ThreadView {
   triage_report?: TriageReport | null;
   participants: RoomPerson[];
   members: RoomMember[];
+  is_member?: boolean;
+  access_requests?: AccessRequest[];
+  my_access_request?: AccessRequest | null;
   messages: ThreadMessage[];
 }
 
@@ -211,6 +215,8 @@ export interface RoomView {
   lead_user_id: string | null;
   is_member: boolean;
   members: RoomMember[];
+  access_requests?: AccessRequest[];
+  my_access_request?: AccessRequest | null;
   pinned_case: PinnedCase | null;
   case_options: CaseRef[];
   threads: ThreadSummary[];
@@ -225,4 +231,11 @@ export interface SendMessageInput {
   /** A file from any case, e.g. a precedent's deliverable reused here. */
   attached_artifact_id?: string;
   mentioned_user_ids?: string[];
+}
+
+export interface AccessRequest {
+  id: string;
+  user: RoomPerson;
+  status: "PENDING" | "APPROVED" | "DISMISSED";
+  created_at: string;
 }

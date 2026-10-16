@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { retryTransient, type ApiRequestError } from "@/lib/apiError";
 import { casesService } from "@/services/casesService";
 import type {
+  AccessRequest,
   CaseFile,
   ChatMessage,
   CreateCaseInput,
@@ -24,8 +25,11 @@ export function useThread(caseId: string | null) {
     queryKey: queryKeys.cases.thread(caseId ?? ""),
     queryFn: () => casesService.getThread(caseId!),
     enabled: caseId !== null,
-    refetchInterval: (query) =>
-      query.state.data?.artifacts.some((a) => a.text_status === "PENDING") ? 4_000 : false,
+    refetchInterval: (query) => {
+      const view = query.state.data;
+      if (view?.artifacts.some((a) => a.text_status === "PENDING")) return 4_000;
+      return view?.my_access_request ? 8_000 : false;
+    },
   });
 }
 
@@ -204,5 +208,46 @@ export function useChangeCaseMember(caseId: string) {
     onSettled: () => {
       if (queryClient.isMutating({ mutationKey }) === 1) queryClient.invalidateQueries({ queryKey: key });
     },
+  });
+}
+
+
+/** Non-member → "Ask to join". Optimistic: the pending request shows at once. */
+export function useRequestCaseAccess(caseId: string) {
+  const queryClient = useQueryClient();
+  const key = queryKeys.cases.thread(caseId);
+  return useMutation<AccessRequest, ApiRequestError, RoomPerson>({
+    mutationFn: () => casesService.requestAccess(caseId),
+    retry: retryTransient,
+    onMutate: (me) =>
+      updateThread(queryClient, caseId, (view) => ({
+        ...view,
+        my_access_request: { id: "pending", user: me, status: "PENDING", created_at: new Date().toISOString() },
+      })),
+    onError: () => updateThread(queryClient, caseId, (view) => ({ ...view, my_access_request: null })),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
+  });
+}
+
+/** A member approves or dismisses a request. Optimistic: the request leaves the list at once. */
+export function useDecideCaseAccess(caseId: string) {
+  const queryClient = useQueryClient();
+  const key = queryKeys.cases.thread(caseId);
+  return useMutation<void, ApiRequestError, { requestId: string; approve: boolean }, { previous?: ThreadView }>({
+    mutationFn: ({ requestId, approve }) => casesService.decideAccess(caseId, requestId, approve),
+    retry: retryTransient,
+    onMutate: async ({ requestId }) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<ThreadView>(key);
+      updateThread(queryClient, caseId, (view) => ({
+        ...view,
+        access_requests: (view.access_requests ?? []).filter((r) => r.id !== requestId),
+      }));
+      return { previous };
+    },
+    onError: (_error, _input, snapshot) => {
+      if (snapshot?.previous) queryClient.setQueryData(key, snapshot.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 }

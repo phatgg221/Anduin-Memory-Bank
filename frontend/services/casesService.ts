@@ -1,6 +1,7 @@
 import { withApiErrors } from "@/lib/apiError";
 import { axiosClient } from "@/lib/axiosClient";
 import type {
+  AccessRequest,
   CaseFile,
   CreateCaseInput,
   SendMessageInput,
@@ -44,6 +45,15 @@ export const casesService = {
   /** PATCH with explicit values: idempotent. Returns the full thread view for reconciliation. */
   async updateCase(caseId: string, input: UpdateCaseInput): Promise<ThreadView> {
     return (await withApiErrors(axiosClient.patch<ThreadView>(`/cases/${caseId}`, input))).data;
+  },
+
+  async requestAccess(caseId: string): Promise<AccessRequest> {
+    return (await withApiErrors(axiosClient.post<AccessRequest>(`/cases/${caseId}/access-requests`))).data;
+  },
+
+  /** PUT with explicit state: safe to retry. */
+  async decideAccess(caseId: string, requestId: string, approve: boolean): Promise<void> {
+    await withApiErrors(axiosClient.put(`/cases/${caseId}/access-requests/${requestId}`, { approve }));
   },
 
   async addMember(caseId: string, userId: string): Promise<void> {

@@ -161,6 +161,35 @@ class ChannelMessage(Base):
     attached_artifact: Mapped[CaseArtifact | None] = relationship(lazy="raise")
 
 
+ACCESS_STATUSES = ("PENDING", "APPROVED", "DISMISSED")
+
+
+class CaseAccessRequest(Base):
+    """A non-member asking to join a case channel; any member approves (adds them) or dismisses it."""
+
+    __tablename__ = "case_access_requests"
+    __table_args__ = (
+        CheckConstraint(f"status IN {ACCESS_STATUSES}", name="status"),
+        Index(
+            "uq_case_access_requests_pending",
+            "case_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'PENDING'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("case_records.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(String(12), server_default=text("'PENDING'"))
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User] = relationship(foreign_keys=[user_id], lazy="raise")
+
+
 class CaseMember(Base):
     """Who is in a case channel: the owner (LEAD), the creator, everyone who posted, and anyone added."""
 

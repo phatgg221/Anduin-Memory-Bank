@@ -19,6 +19,19 @@ class PersonOut(BaseModel):
     departed_at: date | None
 
 
+class AccessRequestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user: PersonOut
+    status: str
+    created_at: datetime
+
+
+class AccessDecisionIn(BaseModel):
+    approve: bool
+
+
 class CaseMemberOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -105,6 +118,7 @@ class ThreadSummaryOut(BaseModel):
     top_match_score: int | None
     message_count: int
     last_message_at: datetime | None
+    is_member: bool | None = None
 
 
 class PrecedentFileOut(BaseModel):
@@ -181,6 +195,9 @@ class ThreadViewOut(BaseModel):
     triage_report: dict[str, Any] | None = None
     participants: list[PersonOut]
     members: list[CaseMemberOut]
+    is_member: bool = True
+    access_requests: list[AccessRequestOut] = []
+    my_access_request: AccessRequestOut | None = None
     messages: list[ThreadMessageOut]
 
 

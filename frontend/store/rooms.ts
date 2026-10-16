@@ -4,7 +4,15 @@ import { retryTransient, type ApiRequestError } from "@/lib/apiError";
 import { connectRoom, type RoomConnection } from "@/services/realtimeService";
 import { roomsService } from "@/services/roomsService";
 import type { Presence, SocketStatus } from "@/types/realtime";
-import type { ChatMessage, RoomMessage, RoomPerson, RoomSummary, RoomView, SendMessageInput } from "@/types/rooms";
+import type {
+  AccessRequest,
+  ChatMessage,
+  RoomMessage,
+  RoomPerson,
+  RoomSummary,
+  RoomView,
+  SendMessageInput,
+} from "@/types/rooms";
 import { queryKeys } from "./queryKeys";
 
 const POLL_MS = 3_000;
@@ -37,6 +45,7 @@ export function useRoom(departmentId: string | null) {
     queryKey: queryKeys.rooms.room(departmentId ?? ""),
     queryFn: () => roomsService.getRoom(departmentId!),
     enabled: departmentId !== null,
+    refetchInterval: (query) => (query.state.data?.my_access_request ? 8_000 : false),
   });
 }
 
@@ -271,4 +280,46 @@ export function useRoomCacheHandlers(departmentId: string | null): SocketHandler
       queryClient.invalidateQueries({ queryKey: queryKeys.rooms.list });
     },
   };
+}
+
+
+export function useRequestRoomAccess(departmentId: string) {
+  const queryClient = useQueryClient();
+  const key = queryKeys.rooms.room(departmentId);
+  return useMutation<AccessRequest, ApiRequestError, RoomPerson>({
+    mutationFn: () => roomsService.requestAccess(departmentId),
+    retry: retryTransient,
+    onMutate: (me) =>
+      updateRoom(queryClient, departmentId, (view) => ({
+        ...view,
+        my_access_request: { id: "pending", user: me, status: "PENDING", created_at: new Date().toISOString() },
+      })),
+    onError: () => updateRoom(queryClient, departmentId, (view) => ({ ...view, my_access_request: null })),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
+  });
+}
+
+export function useDecideRoomAccess(departmentId: string) {
+  const queryClient = useQueryClient();
+  const key = queryKeys.rooms.room(departmentId);
+  return useMutation<void, ApiRequestError, { requestId: string; approve: boolean }, { previous?: RoomView }>({
+    mutationFn: ({ requestId, approve }) => roomsService.decideAccess(departmentId, requestId, approve),
+    retry: retryTransient,
+    onMutate: async ({ requestId }) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<RoomView>(key);
+      updateRoom(queryClient, departmentId, (view) => ({
+        ...view,
+        access_requests: (view.access_requests ?? []).filter((r) => r.id !== requestId),
+      }));
+      return { previous };
+    },
+    onError: (_error, _input, snapshot) => {
+      if (snapshot?.previous) queryClient.setQueryData(key, snapshot.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: key });
+      queryClient.invalidateQueries({ queryKey: queryKeys.rooms.list });
+    },
+  });
 }

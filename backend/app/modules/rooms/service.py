@@ -1,7 +1,9 @@
 import uuid
+from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -10,7 +12,7 @@ from app.modules.auth.models import User
 from app.modules.cases.models import CaseRecord
 from app.modules.cases.service import precedents_for, thread_summaries
 from app.modules.org.models import Department
-from app.modules.rooms.models import Room, RoomMember, RoomMessage, RoomRead
+from app.modules.rooms.models import Room, RoomAccessRequest, RoomMember, RoomMessage, RoomRead
 
 PAGE = 100
 
@@ -27,6 +29,10 @@ class InvalidError(Exception):
     pass
 
 
+class ForbiddenError(Exception):
+    pass
+
+
 async def _department(session: AsyncSession, department_id: str) -> Department:
     department = await session.get(Department, department_id)
     if department is None:
@@ -35,8 +41,18 @@ async def _department(session: AsyncSession, department_id: str) -> Department:
 
 
 async def _ensure_room(session: AsyncSession, department: Department) -> Room:
-    """Rooms are created on first use; the department lead is always a member."""
+    """Rooms are created on first use; the lead and everyone in the department are always members."""
     await session.execute(insert(Room).values(department_id=department.id).on_conflict_do_nothing())
+    await session.execute(
+        insert(RoomMember)
+        .from_select(
+            ["department_id", "user_id", "role"],
+            select(literal(department.id), User.id, literal("MEMBER")).where(
+                User.primary_department_id == department.id, User.is_active
+            ),
+        )
+        .on_conflict_do_nothing()
+    )
     if department.lead_user_id is not None:
         await session.execute(
             insert(RoomMember)
@@ -68,6 +84,8 @@ async def list_rooms(session: AsyncSession, user: User) -> list[dict]:
         (await session.execute(select(RoomMember.department_id, func.count()).group_by(RoomMember.department_id))).all()
     )
     mine = set(await session.scalars(select(RoomMember.department_id).where(RoomMember.user_id == user.id)))
+    if user.primary_department_id:
+        mine.add(user.primary_department_id)
     last_at = dict(
         (
             await session.execute(
@@ -96,7 +114,7 @@ async def list_rooms(session: AsyncSession, user: User) -> list[dict]:
             "code": d.code,
             "lead": leads.get(d.lead_user_id),
             "member_count": member_counts.get(d.id, 0),
-            "unread_count": unread.get(d.id, 0),
+            "unread_count": unread.get(d.id, 0) if d.id in mine else 0,
             "last_message_at": last_at.get(d.id),
             "is_member": d.id in mine,
         }
@@ -130,7 +148,12 @@ async def room_view(session: AsyncSession, user: User, department_id: str) -> di
             .order_by(RoomMember.role, RoomMember.joined_at)
         )
     )
-    latest = list(await session.scalars(_messages_query(department_id).order_by(RoomMessage.seq.desc()).limit(PAGE)))
+    member = any(m.user_id == user.id for m in members)
+    latest = (
+        list(await session.scalars(_messages_query(department_id).order_by(RoomMessage.seq.desc()).limit(PAGE)))
+        if member
+        else []
+    )
     pinned = await session.get(CaseRecord, room.pinned_case_id) if room.pinned_case_id else None
     threads = await thread_summaries(session, department_id)
     last_read = await session.scalar(
@@ -141,7 +164,9 @@ async def room_view(session: AsyncSession, user: User, department_id: str) -> di
         "name": department.name,
         "code": department.code,
         "lead_user_id": department.lead_user_id,
-        "is_member": any(m.user_id == user.id for m in members),
+        "is_member": member,
+        "access_requests": await access_requests(session, department_id) if member else [],
+        "my_access_request": None if member else await _pending(session, department_id, user.id),
         "members": members,
         "pinned_case": await _pinned_case(session, pinned),
         "case_options": sorted(threads, key=lambda t: t["case_code"]),
@@ -151,8 +176,26 @@ async def room_view(session: AsyncSession, user: User, department_id: str) -> di
     }
 
 
-async def messages_after(session: AsyncSession, department_id: str, after_seq: int) -> list[RoomMessage]:
+async def is_member(session: AsyncSession, user: User, department_id: str) -> bool:
+    """The lead and the department's own people always are; anyone else needs a membership row."""
+    if user.primary_department_id == department_id:
+        return True
+    department = await session.get(Department, department_id)
+    if department is not None and department.lead_user_id == user.id:
+        return True
+    found = await session.get(RoomMember, (department_id, user.id))
+    return found is not None
+
+
+async def require_member(session: AsyncSession, user: User, department_id: str) -> None:
+    """Department channels are members-only: reading, posting and managing members need membership."""
+    if not await is_member(session, user, department_id):
+        raise ForbiddenError("Only members of this channel can do that. Ask a member to add you.")
+
+
+async def messages_after(session: AsyncSession, department_id: str, after_seq: int, user: User) -> list[RoomMessage]:
     await _department(session, department_id)
+    await require_member(session, user, department_id)
     query = _messages_query(department_id).where(RoomMessage.seq > after_seq).order_by(RoomMessage.seq).limit(PAGE)
     return list(await session.scalars(query))
 
@@ -166,8 +209,9 @@ async def _join(session: AsyncSession, department_id: str, user_id: uuid.UUID) -
 async def post_message(
     session: AsyncSession, user: User, department_id: str, message_id: uuid.UUID, content: str, is_milestone: bool
 ) -> RoomMessage:
-    """Idempotent on the client-generated id. Posting joins the room (every room is open to everyone)."""
+    """Idempotent on the client-generated id. Members only."""
     department = await _department(session, department_id)
+    await require_member(session, user, department_id)
     existing = await session.get(RoomMessage, message_id)
     if existing is not None:
         if existing.department_id != department_id or existing.user_id != user.id:
@@ -197,8 +241,10 @@ async def post_message(
     return message
 
 
-async def add_member(session: AsyncSession, department_id: str, user_id: uuid.UUID) -> None:
+async def add_member(session: AsyncSession, department_id: str, user_id: uuid.UUID, actor: User | None = None) -> None:
     department = await _department(session, department_id)
+    if actor is not None:
+        await require_member(session, actor, department_id)
     member = await session.get(User, user_id)
     if member is None:
         raise NotFoundError("Unknown user")
@@ -209,10 +255,17 @@ async def add_member(session: AsyncSession, department_id: str, user_id: uuid.UU
     await session.commit()
 
 
-async def remove_member(session: AsyncSession, department_id: str, user_id: uuid.UUID) -> None:
+async def remove_member(
+    session: AsyncSession, department_id: str, user_id: uuid.UUID, actor: User | None = None
+) -> None:
     department = await _department(session, department_id)
+    if actor is not None:
+        await require_member(session, actor, department_id)
     if department.lead_user_id == user_id:
         raise ConflictError("The department lead always stays in the room")
+    person = await session.get(User, user_id)
+    if person is not None and person.primary_department_id == department_id:
+        raise ConflictError("People in this department are always members of its channel")
     member = await session.get(RoomMember, (department_id, user_id))
     if member is not None:
         await session.delete(member)
@@ -231,6 +284,7 @@ async def set_pinned_case(session: AsyncSession, department_id: str, case_id: uu
 async def mark_read(session: AsyncSession, user: User, department_id: str, seq: int) -> None:
     """Only ever moves forward, so out-of-order calls are harmless."""
     await _ensure_room(session, await _department(session, department_id))
+    await require_member(session, user, department_id)
     stmt = insert(RoomRead).values(department_id=department_id, user_id=user.id, last_read_seq=seq)
     await session.execute(
         stmt.on_conflict_do_update(
@@ -250,3 +304,63 @@ async def mentions_of(session: AsyncSession, case_code: str) -> list[RoomMessage
         .order_by(RoomMessage.seq)
     )
     return list(await session.scalars(query))
+
+
+# --- access requests (non-members asking to join a department channel) -------------------------------------------
+
+
+async def _pending(session: AsyncSession, department_id: str, user_id: uuid.UUID) -> RoomAccessRequest | None:
+    return await session.scalar(
+        select(RoomAccessRequest)
+        .where(
+            RoomAccessRequest.department_id == department_id,
+            RoomAccessRequest.user_id == user_id,
+            RoomAccessRequest.status == "PENDING",
+        )
+        .options(selectinload(RoomAccessRequest.user))
+    )
+
+
+async def access_requests(session: AsyncSession, department_id: str) -> list[RoomAccessRequest]:
+    return list(
+        await session.scalars(
+            select(RoomAccessRequest)
+            .where(RoomAccessRequest.department_id == department_id, RoomAccessRequest.status == "PENDING")
+            .options(selectinload(RoomAccessRequest.user))
+            .order_by(RoomAccessRequest.created_at)
+        )
+    )
+
+
+async def request_access(session: AsyncSession, user: User, department_id: str) -> RoomAccessRequest:
+    """Idempotent: asking twice returns the same pending request."""
+    await _ensure_room(session, await _department(session, department_id))
+    await session.commit()
+    if await is_member(session, user, department_id):
+        raise ConflictError("You're already a member of this channel")
+    if (existing := await _pending(session, department_id, user.id)) is None:
+        session.add(RoomAccessRequest(department_id=department_id, user_id=user.id))
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+        existing = await _pending(session, department_id, user.id)
+    return existing
+
+
+async def decide_access(
+    session: AsyncSession, user: User, department_id: str, request_id: uuid.UUID, approve: bool
+) -> RoomAccessRequest:
+    """A member approves (the requester joins) or dismisses. Deciding twice is a no-op."""
+    await require_member(session, user, department_id)
+    request = await session.get(RoomAccessRequest, request_id)
+    if request is None or request.department_id != department_id:
+        raise NotFoundError("Unknown access request")
+    if request.status == "PENDING":
+        if approve:
+            await _join(session, department_id, request.user_id)
+        request.status = "APPROVED" if approve else "DISMISSED"
+        request.decided_by_user_id = user.id
+        request.decided_at = datetime.now(UTC)
+        await session.commit()
+    return request

@@ -19,7 +19,9 @@ import {
   OutcomeForm,
   type OutcomeUpload,
 } from "@/components/memory/OutcomeForm";
+import { AccessRequests } from "@/components/rooms/AccessRequests";
 import { Composer, type Mentionable } from "@/components/rooms/Composer";
+import { LockedChat } from "@/components/rooms/LockedChat";
 import {
   MessageThread,
   type AgentStatus,
@@ -48,6 +50,8 @@ import { useDepartments } from "@/store/org";
 import { usePeople, useRoomSocket } from "@/store/rooms";
 import {
   useChangeCaseMember,
+  useDecideCaseAccess,
+  useRequestCaseAccess,
   useOpenCases,
   useSendThreadMessage,
   useThread,
@@ -92,7 +96,8 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   const openCases = useOpenCases(departmentId, signedIn);
   const thread = useThread(signedIn ? caseId : null);
   const jobs = useCaseJobs(signedIn ? caseId : null);
-  const copilot = useCopilot(signedIn ? caseId : null);
+  const member = thread.data?.is_member === true;
+  const copilot = useCopilot(signedIn && member ? caseId : null);
 
   const analyze = useAnalyze();
   const updateCase = useUpdateCase(caseId);
@@ -104,6 +109,8 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   const resolve = useResolve(caseId);
   const commitMemory = useCommitMemory(caseId);
   const changeMember = useChangeCaseMember(caseId);
+  const requestAccess = useRequestCaseAccess(caseId);
+  const decideAccess = useDecideCaseAccess(caseId);
   const [askOutcome, setAskOutcome] = useState(false);
   const openArtifact = useOpenArtifact();
   const panels = usePanels();
@@ -128,8 +135,12 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   );
 
   const handlers = useThreadCacheHandlers(caseId);
-  const socket = useRoomSocket(`case-${caseId}`, me, handlers);
-  useThreadPolling(caseId, thread.isSuccess, socket.status === "live");
+  const socket = useRoomSocket(member ? `case-${caseId}` : null, me, handlers);
+  useThreadPolling(
+    caseId,
+    thread.isSuccess && member,
+    socket.status === "live",
+  );
 
   // When an analysis finishes, reload the case so the new matches and delta appear.
   const analysisJob = jobs.data?.analyze ?? null;
@@ -190,6 +201,20 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   }
 
   const isOpenCase = t.status === "OPEN";
+  const isMember = t.is_member !== false;
+  const canAct = isOpenCase && isMember;
+  const pendingRequests = t.access_requests ?? [];
+  const locked = (title: string, description: string) => (
+    <LockedChat
+      title={title}
+      description={description}
+      members={t.members.map((m) => m.user)}
+      requested={Boolean(t.my_access_request)}
+      onRequest={() => me && requestAccess.mutate(me)}
+      isRequesting={requestAccess.isPending}
+      error={requestAccess.error?.message}
+    />
+  );
   const top = t.precedents[0];
   const chips = [
     top && `Why did ${top.case_code} go the way it did?`,
@@ -339,7 +364,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     <CaseHeader
       thread={t}
       status={socket.status}
-      onComplete={isOpenCase && !reviewing ? openReview : undefined}
+      onComplete={canAct && !reviewing ? openReview : undefined}
       onBack={() => router.push("/workbench")}
       leftOpen={panels.isOpen("left")}
       onToggleLeft={() => panels.toggle("left")}
@@ -451,10 +476,19 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
               id: "copilot",
               label: `Memory copilot${copilotThinking ? " · thinking" : ""}`,
             },
-            { id: "people", label: `People (${t.members.length})` },
+            {
+              id: "people",
+              label: `People (${t.members.length})${pendingRequests.length ? ` · ${pendingRequests.length} asking` : ""}`,
+            },
           ]}
         />
-        {tab === "channel" && (
+        {tab === "channel" &&
+          !isMember &&
+          locked(
+            "This case channel is members-only",
+            "You can see the case, its precedents and reusable kit. The team's conversation is visible to members of the case.",
+          )}
+        {tab === "channel" && isMember && (
           <>
             {top && (
               <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-surface-2 px-6 py-2 text-xs text-muted-foreground">
@@ -515,7 +549,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
               departmentCodes={departmentCodes}
               analysis={analysisJob}
               onRunAnalysis={
-                isOpenCase
+                canAct
                   ? () =>
                       analyze.mutate({
                         caseId: t.id,
@@ -534,7 +568,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
                     trace={analysisJob?.trace ?? []}
                     departmentCodes={departmentCodes}
                     memberIds={memberIds}
-                    canAct={isOpenCase}
+                    canAct={canAct}
                     onCaseClick={handleCaseClick}
                     onAddMember={(userId) => {
                       const person = people.data?.find((p) => p.id === userId);
@@ -553,10 +587,27 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
         )}
         {tab === "people" && me && (
           <div className="min-h-0 flex-1 overflow-y-auto p-6">
-            <div className="max-w-xl">
+            <div className="flex max-w-xl flex-col gap-4">
+              {isMember && (
+                <AccessRequests
+                  requests={pendingRequests}
+                  departmentCodes={departmentCodes}
+                  onDecide={(requestId, approve) =>
+                    decideAccess.mutate({ requestId, approve })
+                  }
+                />
+              )}
+              {!isMember && (
+                <p className="text-xs text-muted-foreground">
+                  Only members can add people.{" "}
+                  {t.my_access_request
+                    ? "Your request to join is waiting for a member."
+                    : "Ask to join from the Case channel tab."}
+                </p>
+              )}
               <MemberList
                 noun="case"
-                readOnly={!isOpenCase}
+                readOnly={!canAct}
                 members={t.members}
                 people={people.data ?? []}
                 currentUserId={me.id}
@@ -576,7 +627,13 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
             </div>
           </div>
         )}
-        {tab === "copilot" && (
+        {tab === "copilot" &&
+          !isMember &&
+          locked(
+            "Memory copilot is members-only here",
+            "It reads this case's private channel to answer, so it's available to members of the case.",
+          )}
+        {tab === "copilot" && isMember && (
           <div className="flex min-h-0 flex-1 flex-col p-6">
             <div className="flex min-h-0 w-full max-w-3xl flex-1 flex-col">
               <CopilotPanel
@@ -618,6 +675,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
             error={updateCase.error?.message}
             fieldErrors={updateCase.error?.fieldErrors}
             onOpenFile={handleOpenArtifact}
+            canEdit={isMember}
           />
         ),
       }}
@@ -629,7 +687,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
               precedents={t.precedents}
               ownFiles={t.artifacts}
               usedFileIds={usedFileIds}
-              canUse={isOpenCase}
+              canUse={canAct}
               onPreview={handleOpenArtifact}
               onUse={(file) => {
                 sendThread.mutate(

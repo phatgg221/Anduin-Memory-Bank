@@ -71,6 +71,18 @@ class ConflictError(Exception):
     pass
 
 
+class ForbiddenError(Exception):
+    pass
+
+
+async def _require_member(session: AsyncSession, case_id: uuid.UUID, user: User) -> None:
+    """The copilot, analysis and memory drafts read the case chat, so they're members-only like the chat."""
+    try:
+        await cases.require_member(session, case_id, user)
+    except cases.ForbiddenError as error:
+        raise ForbiddenError(str(error)) from None
+
+
 class RateLimitedError(Exception):
     def __init__(self, message: str, retry_after: int | None = None):
         super().__init__(message)
@@ -129,6 +141,7 @@ async def request_summary(
     case = await session.get(CaseRecord, case_id)
     if case is None:
         raise NotFoundError("Unknown case")
+    await _require_member(session, case_id, user)
     if case.status != "OPEN":
         raise ConflictError("This case is already resolved")
     has_messages = await session.scalar(select(ChannelMessage.id).where(ChannelMessage.case_id == case_id).limit(1))
@@ -146,6 +159,7 @@ async def request_analysis(session: AsyncSession, user: User, case_id: uuid.UUID
     case = await session.get(CaseRecord, case_id)
     if case is None:
         raise NotFoundError("Unknown case")
+    await _require_member(session, case_id, user)
     if case.status != "OPEN":
         raise ConflictError("This case is already resolved")
     return await enqueue(session, job_id, case_id, "ANALYZE", user)
@@ -166,6 +180,7 @@ async def ask_copilot(
     """
     if await session.get(CaseRecord, case_id) is None:
         raise NotFoundError("Unknown case")
+    await _require_member(session, case_id, user)
     if existing := await session.get(CaseJob, job_id):
         return existing
     if reply_in_channel:
@@ -204,7 +219,8 @@ async def _check_channel_limits(session: AsyncSession, user: User, case_id: uuid
         )
 
 
-async def copilot_view(session: AsyncSession, case_id: uuid.UUID) -> tuple[list, list[CaseJob]]:
+async def copilot_view(session: AsyncSession, case_id: uuid.UUID, user: User) -> tuple[list, list[CaseJob]]:
+    await _require_member(session, case_id, user)
     messages = await cases.copilot_messages(session, case_id)
     pending = list(
         await session.scalars(
@@ -217,7 +233,7 @@ async def copilot_view(session: AsyncSession, case_id: uuid.UUID) -> tuple[list,
     return messages, pending
 
 
-async def latest_jobs(session: AsyncSession, case_id: uuid.UUID) -> dict[str, CaseJob | None]:
+async def latest_jobs(session: AsyncSession, case_id: uuid.UUID, user: User | None = None) -> dict[str, CaseJob | None]:
     jobs = await session.scalars(
         select(CaseJob)
         .where(CaseJob.case_id == case_id)
@@ -225,7 +241,12 @@ async def latest_jobs(session: AsyncSession, case_id: uuid.UUID) -> dict[str, Ca
         .ext(distinct_on(CaseJob.kind))
     )
     by_kind = {job.kind: job for job in jobs}
-    return {"analyze": by_kind.get("ANALYZE"), "summarize": by_kind.get("SUMMARIZE"), "index": by_kind.get("INDEX")}
+    member = user is None or await cases.is_member(session, case_id, user.id)
+    return {
+        "analyze": by_kind.get("ANALYZE"),
+        "summarize": by_kind.get("SUMMARIZE") if member else None,  # the draft is written from the chat
+        "index": by_kind.get("INDEX"),
+    }
 
 
 # --- commit (human-reviewed record → RESOLVED, then INDEX) -------------------------------------------------------
@@ -235,6 +256,7 @@ async def commit(
     session: AsyncSession, user: User, case_id: uuid.UUID, draft: CaseMemoryDraft
 ) -> tuple[CaseRecord, CaseJob, list[str]]:
     """The reviewer's edits are re-guarded (references re-checked, IDs re-derived by code) before they're stored."""
+    await _require_member(session, case_id, user)
     context, _ = await _thread_context(session, case_id)
     record, warnings = guard_memory(draft, context, build_transcript(context))
     try:

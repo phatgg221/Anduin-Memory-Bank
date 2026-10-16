@@ -7,6 +7,8 @@ from app.core.db import SessionDep
 from app.modules.auth.deps import CurrentUser
 from app.modules.cases import service
 from app.modules.cases.schemas import (
+    AccessDecisionIn,
+    AccessRequestOut,
     CaseCreateIn,
     CaseUpdateIn,
     ThreadMessageIn,
@@ -18,6 +20,7 @@ from app.modules.cases.schemas import (
 router = APIRouter(prefix="/cases", tags=["cases"])
 
 ERRORS = {
+    service.ForbiddenError: status.HTTP_403_FORBIDDEN,
     service.NotFoundError: status.HTTP_404_NOT_FOUND,
     service.ConflictError: status.HTTP_409_CONFLICT,
     service.InvalidError: status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -33,7 +36,8 @@ async def open_cases(
     user: CurrentUser, session: SessionDep, department_id: str | None = None
 ) -> list[ThreadSummaryOut]:
     """Active case rooms (open cases), for one department or all, newest activity first. Two queries."""
-    return [ThreadSummaryOut.model_validate(t) for t in await service.thread_summaries(session, department_id)]
+    summaries = await service.thread_summaries(session, department_id, user.id)
+    return [ThreadSummaryOut.model_validate(t) for t in summaries]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -68,9 +72,9 @@ async def create_case(data: CaseCreateIn, user: CurrentUser, session: SessionDep
 async def update_case(case_id: uuid.UUID, data: CaseUpdateIn, user: CurrentUser, session: SessionDep) -> ThreadViewOut:
     """Edits an open case's details. Returns the full thread view so the client reconciles without a refetch."""
     try:
-        _, departments = await service.update_case(session, case_id, data)
-        view = ThreadViewOut.model_validate(await service.thread_view(session, case_id), from_attributes=True)
-    except (service.NotFoundError, service.ConflictError, service.InvalidError) as error:
+        _, departments = await service.update_case(session, case_id, data, user)
+        view = ThreadViewOut.model_validate(await service.thread_view(session, case_id, user), from_attributes=True)
+    except (service.NotFoundError, service.ConflictError, service.InvalidError, service.ForbiddenError) as error:
         raise _http(error) from None
     await realtime.room_changed(realtime.thread_room(case_id), "threads")
     for department_id in departments:
@@ -81,7 +85,7 @@ async def update_case(case_id: uuid.UUID, data: CaseUpdateIn, user: CurrentUser,
 @router.get("/{case_id}/thread")
 async def thread_view(case_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> ThreadViewOut:
     try:
-        return ThreadViewOut.model_validate(await service.thread_view(session, case_id), from_attributes=True)
+        return ThreadViewOut.model_validate(await service.thread_view(session, case_id, user), from_attributes=True)
     except service.NotFoundError as error:
         raise _http(error) from None
 
@@ -92,8 +96,8 @@ async def thread_messages_after(
 ) -> list[ThreadMessageOut]:
     """Polling fallback: messages newer than the client's last seen seq."""
     try:
-        messages = await service.thread_messages_after(session, case_id, after_seq)
-    except service.NotFoundError as error:
+        messages = await service.thread_messages_after(session, case_id, after_seq, user)
+    except (service.NotFoundError, service.ForbiddenError) as error:
         raise _http(error) from None
     return [ThreadMessageOut.model_validate(m) for m in messages]
 
@@ -113,7 +117,7 @@ async def post_thread_message(
             data.attached_artifact_id,
             data.mentioned_user_ids,
         )
-    except (service.NotFoundError, service.ConflictError) as error:
+    except (service.NotFoundError, service.ConflictError, service.ForbiddenError) as error:
         raise _http(error) from None
     out = ThreadMessageOut.model_validate(message)
     await realtime.publish(
@@ -129,8 +133,8 @@ async def post_thread_message(
 @router.put("/{case_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def add_member(case_id: uuid.UUID, user_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> Response:
     try:
-        await service.add_member(session, case_id, user_id)
-    except (service.NotFoundError, service.ConflictError, service.InvalidError) as error:
+        await service.add_member(session, case_id, user_id, actor=user)
+    except (service.NotFoundError, service.ConflictError, service.InvalidError, service.ForbiddenError) as error:
         raise _http(error) from None
     await realtime.room_changed(realtime.thread_room(case_id), "members")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -139,8 +143,35 @@ async def add_member(case_id: uuid.UUID, user_id: uuid.UUID, user: CurrentUser, 
 @router.delete("/{case_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_member(case_id: uuid.UUID, user_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> Response:
     try:
-        await service.remove_member(session, case_id, user_id)
+        await service.remove_member(session, case_id, user_id, actor=user)
+    except (service.NotFoundError, service.ConflictError, service.ForbiddenError) as error:
+        raise _http(error) from None
+    await realtime.room_changed(realtime.thread_room(case_id), "members")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{case_id}/access-requests", status_code=status.HTTP_201_CREATED)
+async def request_access(case_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> AccessRequestOut:
+    """A non-member asks to join the case channel. Idempotent: asking again returns the pending request."""
+    try:
+        request = await service.request_access(session, case_id, user)
+        out = AccessRequestOut.model_validate(
+            {"id": request.id, "user": user, "status": request.status, "created_at": request.created_at}
+        )
     except (service.NotFoundError, service.ConflictError) as error:
+        raise _http(error) from None
+    await realtime.room_changed(realtime.thread_room(case_id), "members")
+    return out
+
+
+@router.put("/{case_id}/access-requests/{request_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def decide_access(
+    case_id: uuid.UUID, request_id: uuid.UUID, data: AccessDecisionIn, user: CurrentUser, session: SessionDep
+) -> Response:
+    """A member approves (the requester joins) or dismisses a request. Explicit state: safe to retry."""
+    try:
+        await service.decide_access(session, case_id, request_id, user, data.approve)
+    except (service.NotFoundError, service.ForbiddenError) as error:
         raise _http(error) from None
     await realtime.room_changed(realtime.thread_room(case_id), "members")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -64,3 +64,13 @@ def decode_token(token: str, expected_type: TokenType) -> dict[str, Any]:
         # Stops a refresh token being used as an access token (and vice versa).
         raise TokenError(f"expected a {expected_type} token")
     return claims
+
+
+ROOM_TICKET_TTL = timedelta(seconds=60)
+
+
+def create_room_ticket(user_id: uuid.UUID, room: str) -> str:
+    """A one-minute pass into one realtime room (PartyKit checks `room` and `sub`). Issued to members only."""
+    now = datetime.now(UTC)
+    payload = {"sub": str(user_id), "type": "room", "room": room, "iat": now, "exp": now + ROOM_TICKET_TTL}
+    return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)

@@ -11,7 +11,8 @@ type ConnectionState = { user: Presence } | null;
  * One PartyKit room per department war room (room id = department id, e.g. LEGAL_COMPLIANCE).
  *
  * The room never stores messages. FastAPI persists every write, then POSTs the event here and the room fans it
- * out to the authenticated sockets. Browsers authenticate by sending their access token as the first message, so
+ * out to the authenticated sockets. Browsers authenticate by sending a one-minute room ticket (issued by the API to
+ * members of that chat only) as the first message, so
  * tokens never appear in a URL.
  */
 export default class WarRoom implements Party.Server {
@@ -68,7 +69,7 @@ export default class WarRoom implements Party.Server {
   private async verify(token: string, userId: string): Promise<boolean> {
     try {
       const { payload } = await jwtVerify(token, this.secret, { algorithms: ["HS256"] });
-      return payload.type === "access" && payload.sub === userId;
+      return payload.type === "room" && payload.room === this.room.id && payload.sub === userId;
     } catch {
       return false;
     }

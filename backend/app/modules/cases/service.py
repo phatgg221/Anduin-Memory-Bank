@@ -16,6 +16,7 @@ from app.core.storage import internal
 from app.core.text import slugify
 from app.modules.auth.models import User
 from app.modules.cases.models import (
+    CaseAccessRequest,
     CaseArtifact,
     CaseMember,
     CaseRecord,
@@ -34,6 +35,10 @@ class NotFoundError(Exception):
 
 
 class ConflictError(Exception):
+    pass
+
+
+class ForbiddenError(Exception):
     pass
 
 
@@ -116,12 +121,19 @@ async def precedents_for(session: AsyncSession, case: CaseRecord) -> list[dict]:
     return precedents
 
 
-async def thread_summaries(session: AsyncSession, department_id: str | None) -> list[dict]:
-    """Open case threads (a department's, or all), newest activity first (two queries)."""
+async def thread_summaries(
+    session: AsyncSession, department_id: str | None, user_id: uuid.UUID | None = None
+) -> list[dict]:
+    """Open case threads (a department's, or all), newest activity first (three queries)."""
     query = select(CaseRecord).where(CaseRecord.status == "OPEN")
     if department_id:
         query = query.where(in_department(department_id))
     cases = list(await session.scalars(query))
+    mine = (
+        set(await session.scalars(select(CaseMember.case_id).where(CaseMember.user_id == user_id)))
+        if user_id
+        else set()
+    )
     stats = {}
     if cases:
         rows = await session.execute(
@@ -147,6 +159,7 @@ async def thread_summaries(session: AsyncSession, department_id: str | None) -> 
             "top_match_score": (c.comparison_results or [{}])[0].get("similarityScore"),
             "message_count": stats.get(c.id, (0, None))[0],
             "last_message_at": stats.get(c.id, (0, None))[1],
+            "is_member": c.id in mine if user_id else None,
         }
         for c in cases
     ]
@@ -196,6 +209,19 @@ async def sync_members(session: AsyncSession) -> None:
     await session.execute(SYNC_MEMBERS)
 
 
+async def is_member(session: AsyncSession, case_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    found = await session.scalar(
+        select(CaseMember.user_id).where(CaseMember.case_id == case_id, CaseMember.user_id == user_id)
+    )
+    return found is not None
+
+
+async def require_member(session: AsyncSession, case_id: uuid.UUID, user: User) -> None:
+    """Case channels are members-only: the chat, the copilot and every write need membership."""
+    if not await is_member(session, case_id, user.id):
+        raise ForbiddenError("Only members of this case can do that. Ask a member to add you.")
+
+
 async def case_members(session: AsyncSession, case_id: uuid.UUID) -> list[CaseMember]:
     query = (
         select(CaseMember)
@@ -206,9 +232,11 @@ async def case_members(session: AsyncSession, case_id: uuid.UUID) -> list[CaseMe
     return list(await session.scalars(query))
 
 
-async def add_member(session: AsyncSession, case_id: uuid.UUID, user_id: uuid.UUID) -> None:
-    """Idempotent. Alumni can't be added; they're cited, not invited."""
+async def add_member(session: AsyncSession, case_id: uuid.UUID, user_id: uuid.UUID, actor: User | None = None) -> None:
+    """Idempotent. Only members add people. Alumni can't be added; they're cited, not invited."""
     case = await _case(session, case_id)
+    if actor is not None:
+        await require_member(session, case_id, actor)
     if case.status != "OPEN":
         raise ConflictError("This case is committed to memory; its members are read-only")
     member = await session.get(User, user_id)
@@ -220,9 +248,13 @@ async def add_member(session: AsyncSession, case_id: uuid.UUID, user_id: uuid.UU
     await session.commit()
 
 
-async def remove_member(session: AsyncSession, case_id: uuid.UUID, user_id: uuid.UUID) -> None:
-    """Idempotent. The owner stays; change the owner in the case details first."""
+async def remove_member(
+    session: AsyncSession, case_id: uuid.UUID, user_id: uuid.UUID, actor: User | None = None
+) -> None:
+    """Idempotent. Only members remove people. The owner stays; change the owner in the case details first."""
     case = await _case(session, case_id)
+    if actor is not None:
+        await require_member(session, case_id, actor)
     if case.status != "OPEN":
         raise ConflictError("This case is committed to memory; its members are read-only")
     if case.lead_resolver_user_id == user_id:
@@ -231,11 +263,27 @@ async def remove_member(session: AsyncSession, case_id: uuid.UUID, user_id: uuid
     await session.commit()
 
 
-async def thread_view(session: AsyncSession, case_id: uuid.UUID) -> dict:
+async def thread_view(session: AsyncSession, case_id: uuid.UUID, user: User | None = None) -> dict:
+    """The case screen. Non-members get everything except the conversation (messages, participants)."""
     case = await _case(session, case_id)
-    latest = list(await session.scalars(_messages_query(case_id).order_by(ChannelMessage.seq.desc()).limit(PAGE)))
-    messages = list(reversed(latest))
+    member = user is None or await is_member(session, case_id, user.id)
+    messages = []
+    if member:
+        query = _messages_query(case_id).order_by(ChannelMessage.seq.desc()).limit(PAGE)
+        messages = list(reversed(list(await session.scalars(query))))
     participants = {m.author.id: m.author for m in messages if m.author}
+    pending = await access_requests(session, case_id) if member else []
+    mine = None
+    if not member:
+        mine = await session.scalar(
+            select(CaseAccessRequest)
+            .where(
+                CaseAccessRequest.case_id == case_id,
+                CaseAccessRequest.user_id == user.id,
+                CaseAccessRequest.status == "PENDING",
+            )
+            .options(selectinload(CaseAccessRequest.user))
+        )
     return {
         **{key: getattr(case, key) for key in ("id", "case_code", "channel_slug", "title", "status", "department_id")},
         "client_name": case.client_name,
@@ -259,11 +307,17 @@ async def thread_view(session: AsyncSession, case_id: uuid.UUID) -> dict:
         "participants": list(participants.values()),
         "members": await case_members(session, case_id),
         "messages": messages,
+        "is_member": member,
+        "access_requests": pending,
+        "my_access_request": mine,
     }
 
 
-async def thread_messages_after(session: AsyncSession, case_id: uuid.UUID, after_seq: int) -> list[ChannelMessage]:
+async def thread_messages_after(
+    session: AsyncSession, case_id: uuid.UUID, after_seq: int, user: User
+) -> list[ChannelMessage]:
     await _case(session, case_id)
+    await require_member(session, case_id, user)
     query = _messages_query(case_id).where(ChannelMessage.seq > after_seq).order_by(ChannelMessage.seq).limit(PAGE)
     return list(await session.scalars(query))
 
@@ -283,6 +337,7 @@ async def post_thread_message(
     Mentioned colleagues join the case; alumni and unknown ids are dropped. Returns whether anyone joined.
     """
     case = await _case(session, case_id)
+    await require_member(session, case_id, user)
     existing = await session.get(ChannelMessage, message_id)
     joined = False
     if existing is not None:
@@ -402,9 +457,13 @@ async def _valid_lead(session: AsyncSession, lead_id: uuid.UUID | None) -> uuid.
     return lead.id
 
 
-async def update_case(session: AsyncSession, case_id: uuid.UUID, data) -> tuple[CaseRecord, list[str]]:
+async def update_case(
+    session: AsyncSession, case_id: uuid.UUID, data, user: User | None = None
+) -> tuple[CaseRecord, list[str]]:
     """Patches an OPEN case's details. Returns the case and every department that was or is involved."""
     case = await _case(session, case_id)
+    if user is not None:
+        await require_member(session, case_id, user)
     if case.status != "OPEN":
         raise ConflictError("This case is committed to memory; its details are read-only")
     before = [case.department_id, *case.secondary_department_ids]
@@ -530,6 +589,7 @@ async def upload_file(
 ) -> CaseArtifact:
     """Stores a file on an open case (MinIO + case_artifacts). Re-uploading the same name replaces it."""
     case = await _case(session, case_id)
+    await require_member(session, case_id, user)
     if case.status != "OPEN":
         raise ConflictError("This case is committed to memory; its files are read-only")
     name = FILE_NAME.sub("_", file_name).strip("._")[:200]
@@ -737,3 +797,55 @@ async def flagged_files(session: AsyncSession, case_id: uuid.UUID) -> dict[str, 
         select(CaseArtifact.file_name, CaseArtifact.risk_flags).where(CaseArtifact.case_id == case_id)
     )
     return {name: flags for name, flags in rows if flags}
+
+
+# --- access requests (non-members asking to join a case channel) --------------------------------------------------
+
+
+async def access_requests(session: AsyncSession, case_id: uuid.UUID) -> list[CaseAccessRequest]:
+    return list(
+        await session.scalars(
+            select(CaseAccessRequest)
+            .where(CaseAccessRequest.case_id == case_id, CaseAccessRequest.status == "PENDING")
+            .options(selectinload(CaseAccessRequest.user))
+            .order_by(CaseAccessRequest.created_at)
+        )
+    )
+
+
+async def request_access(session: AsyncSession, case_id: uuid.UUID, user: User) -> CaseAccessRequest:
+    """Idempotent: asking twice returns the same pending request."""
+    await _case(session, case_id)
+    if await is_member(session, case_id, user.id):
+        raise ConflictError("You're already a member of this case")
+    pending = select(CaseAccessRequest).where(
+        CaseAccessRequest.case_id == case_id,
+        CaseAccessRequest.user_id == user.id,
+        CaseAccessRequest.status == "PENDING",
+    )
+    if (existing := await session.scalar(pending)) is None:
+        session.add(CaseAccessRequest(case_id=case_id, user_id=user.id))
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+        existing = await session.scalar(pending)
+    return existing
+
+
+async def decide_access(
+    session: AsyncSession, case_id: uuid.UUID, request_id: uuid.UUID, actor: User, approve: bool
+) -> CaseAccessRequest:
+    """A member approves (the requester joins) or dismisses. Deciding twice is a no-op."""
+    await require_member(session, case_id, actor)
+    request = await session.get(CaseAccessRequest, request_id)
+    if request is None or request.case_id != case_id:
+        raise NotFoundError("Unknown access request")
+    if request.status == "PENDING":
+        if approve:
+            await session.execute(_join(case_id, request.user_id))
+        request.status = "APPROVED" if approve else "DISMISSED"
+        request.decided_by_user_id = actor.id
+        request.decided_at = datetime.now(UTC)
+        await session.commit()
+    return request
