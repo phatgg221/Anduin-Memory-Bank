@@ -86,6 +86,7 @@ class ArtifactRefOut(BaseModel):
     description: str
     text_status: str = "READY"
     text_method: str | None = None
+    risk_flags: list[dict[str, str]] = []
 
 
 class ThreadSummaryOut(BaseModel):

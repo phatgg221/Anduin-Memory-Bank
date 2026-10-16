@@ -183,4 +183,5 @@ export interface TriageReport {
   };
   guard_warnings: string[];
   fallback?: boolean;
+  injection_flags?: { source: string; reason: string; excerpt: string }[];
 }

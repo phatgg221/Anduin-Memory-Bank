@@ -10,6 +10,7 @@ import {
   LoaderCircle,
   RotateCcw,
   Search,
+  ShieldAlert,
   ShieldCheck,
   Timer,
   TriangleAlert,
@@ -31,6 +32,7 @@ const ICONS: Record<string, LucideIcon> = {
   estimate_effort: Timer,
   guard: ShieldCheck,
   fallback: TriangleAlert,
+  injection: ShieldAlert,
 };
 
 const plane = (cy: number) => `M120 ${cy - 46} L200 ${cy} L120 ${cy + 46} L40 ${cy} Z`;
@@ -78,7 +80,7 @@ function FeedRow({ event, startedAt, latest }: { event: TraceEvent; startedAt: n
       <span
         className={cn(
           "flex size-7 shrink-0 items-center justify-center",
-          event.tool === "fallback" ? "bg-modified-bg text-modified" : "bg-navy text-white",
+          event.tool === "fallback" || event.tool === "injection" ? "bg-modified-bg text-modified" : "bg-navy text-white",
         )}
       >
         <Icon className="size-3.5" aria-hidden />

@@ -78,6 +78,7 @@ export interface CaseFile {
   description: string;
   text_status?: "PENDING" | "READY" | "UNREADABLE";
   text_method?: "TEXT" | "OCR" | null;
+  risk_flags?: { reason: string; excerpt: string }[];
 }
 
 export interface DeltaItem {

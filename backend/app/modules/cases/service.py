@@ -718,10 +718,22 @@ async def pending_artifacts(session: AsyncSession, case_id: uuid.UUID) -> list[C
 
 
 async def set_artifact_text(
-    session: AsyncSession, artifact_id: uuid.UUID, text: str | None, method: str = "TEXT"
+    session: AsyncSession,
+    artifact_id: uuid.UUID,
+    text: str | None,
+    method: str = "TEXT",
+    risk_flags: list[dict[str, str]] | None = None,
 ) -> None:
     artifact = await session.get_one(CaseArtifact, artifact_id)
+    artifact.risk_flags = risk_flags or []
     artifact.preview_text = text
     artifact.text_status = "READY" if text else "UNREADABLE"
     artifact.text_method = method if text else None
     await session.commit()
+
+
+async def flagged_files(session: AsyncSession, case_id: uuid.UUID) -> dict[str, list[dict[str, str]]]:
+    rows = await session.execute(
+        select(CaseArtifact.file_name, CaseArtifact.risk_flags).where(CaseArtifact.case_id == case_id)
+    )
+    return {name: flags for name, flags in rows if flags}

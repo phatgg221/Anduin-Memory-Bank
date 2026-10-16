@@ -4,6 +4,7 @@ import asyncio
 import re
 from collections.abc import Awaitable, Callable
 
+from app.core import injection
 from app.modules.intelligence import llm_client
 from app.modules.intelligence.guard import guard_memory
 from app.modules.intelligence.prompts import SEGMENT_SYSTEM, SUMMARIZE_SYSTEM, summarize_user
@@ -33,13 +34,14 @@ async def summarize_thread(context: ThreadContext, on_step: OnStep) -> tuple[Cas
     if not context.messages:
         raise EmptyThreadError("The thread has no messages yet, so there's nothing to summarize.")
     transcript = build_transcript(context)
+    marker = injection.nonce()
     case_block = "\n".join(
         [
             f"Case: {context.case_code} · {context.title}",
             f"Customer: {context.client_name or 'not recorded'}",
             f"Severity: {context.severity}" + (f" · deadline {context.due_date}" if context.due_date else ""),
             f"Department: {context.department}",
-            f"Incoming request: {context.initial_request_brief}",
+            injection.fence("client request", context.initial_request_brief, marker),
             *(f"{k}: {v}" for k, v in context.context_tags.items()),
         ]
     )
@@ -110,9 +112,10 @@ def outcome_block(context: ThreadContext) -> str:
     lines = [f"Outcome: {context.outcome or 'not given'}", f"Final output: {context.final_output or 'not given'}"]
     if context.deliverables:
         lines.append("Final deliverables: " + ", ".join(context.deliverables))
+    marker = injection.nonce()
     for name, (file_type, text) in context.deliverable_texts.items():
-        kind = "Client approval" if file_type == "CLIENT_APPROVAL" else "Delivered file"
-        lines.append(f'<file name="{name}" kind="{kind}">\n{text[:2500]}\n</file>')
+        kind = "client approval" if file_type == "CLIENT_APPROVAL" else "delivered file"
+        lines.append(injection.fence(f"{kind} {name}", text[:2500], marker))
     return "\n".join(lines)
 
 

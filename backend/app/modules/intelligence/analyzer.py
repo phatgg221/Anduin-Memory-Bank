@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import injection
 from app.modules.cases import service as cases
 from app.modules.intelligence import llm_client
 from app.modules.intelligence.prompts import ANALYZE_SYSTEM, analyze_user
@@ -88,14 +89,15 @@ async def compare(
 ) -> tuple[list[dict], list[str]]:
     if not precedents:
         raise NoPrecedentsError("The Memory Bank has no indexed cases to compare against yet.")
+    marker = injection.nonce()
     incoming_block = "\n".join(
         [
             f"Case: {incoming.case_code} · {incoming.title}",
             f"Customer: {incoming.client_name or 'not recorded'} · Fund: {incoming.fund_name or 'not recorded'}",
             f"Source: {incoming.source_type or 'not recorded'}",
             *(f"{k}: {v}" for k, v in incoming.context_tags.items()),
-            f"Request:\n{incoming.brief}",
-            *(f'<artifact name="{name}">\n{text[:3000]}\n</artifact>' for name, text in incoming.file_texts.items()),
+            injection.fence("client request", incoming.brief, marker),
+            *(injection.fence(f"file {name}", text[:3000], marker) for name, text in incoming.file_texts.items()),
         ]
     )
     precedent_blocks = "\n\n".join(

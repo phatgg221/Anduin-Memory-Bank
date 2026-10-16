@@ -15,6 +15,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import injection
 from app.core.config import settings
 from app.modules.cases import service as cases
 from app.modules.intelligence import llm_client
@@ -417,13 +418,14 @@ async def investigate(
 
 
 def _request_block(incoming: IncomingRequest, precedents: list[PrecedentContext]) -> str:
+    marker = injection.nonce()
     lines = [
         f"Case: {incoming.case_code} · {incoming.title}",
         f"Customer: {incoming.client_name or 'not recorded'} · Fund: {incoming.fund_name or 'not recorded'}",
         f"Source: {incoming.source_type or 'not recorded'}",
         *(f"{k}: {v}" for k, v in incoming.context_tags.items()),
-        f"Request:\n{incoming.brief}",
-        *(f'<file name="{name}">\n{text[:2500]}\n</file>' for name, text in incoming.file_texts.items()),
+        injection.fence("client request", incoming.brief, marker),
+        *(injection.fence(f"file {name}", text[:2500], marker) for name, text in incoming.file_texts.items()),
         "Top precedents by retrieval (scores computed by code): "
         + ", ".join(f"{p.case_code} {p.similarity}%" for p in precedents),
     ]

@@ -213,6 +213,16 @@ export function CaseDetailsPanel({ thread, departments, people, onSave, isSaving
                     </span>
                   ) : (
                     <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                      {!!file.risk_flags?.length && (
+                        <span
+                          className="micro-label border border-modified-border bg-modified-bg px-1 text-[10px] text-modified"
+                          title={`Contains instructions aimed at AI tools — treated as data, never followed.\n${file.risk_flags
+                            .map((f) => `• ${f.reason}: “${f.excerpt}”`)
+                            .join("\n")}`}
+                        >
+                          AI instructions
+                        </span>
+                      )}
                       {file.text_method === "OCR" && (
                         <span
                           className="micro-label border border-reusable-border bg-reusable-bg px-1 text-[10px] text-reusable"

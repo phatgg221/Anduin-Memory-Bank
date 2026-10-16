@@ -7,6 +7,7 @@ import {
   CircleHelp,
   Copy,
   MessageSquarePlus,
+  ShieldAlert,
   ShieldCheck,
   TriangleAlert,
   UserPlus,
@@ -109,6 +110,23 @@ export function TriageReportPanel({
         <p className="text-sm leading-relaxed text-ink">
           <Cited text={report.summary} onCaseClick={onCaseClick} />
         </p>
+        {report.injection_flags && report.injection_flags.length > 0 && (
+          <div className="flex flex-col gap-1 border border-modified-border bg-modified-bg px-3 py-2 text-xs text-ink">
+            <span className="micro-label flex items-center gap-1.5 text-modified">
+              <ShieldAlert className="size-3.5" aria-hidden /> Instructions aimed at AI tools — ignored
+            </span>
+            {report.injection_flags.slice(0, 3).map((flag) => (
+              <span key={flag.source + flag.excerpt}>
+                <span className="font-medium">{flag.source}</span>: “{flag.excerpt}”{" "}
+                <span className="text-muted-foreground">({flag.reason.toLowerCase()})</span>
+              </span>
+            ))}
+            <span className="text-muted-foreground">
+              Dejavu treated this as client data: it can&apos;t change ratings, people or sources, which are set and
+              checked by code.
+            </span>
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setShowTrace((v) => !v)}

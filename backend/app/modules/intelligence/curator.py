@@ -6,6 +6,7 @@ shown; anything else is dropped.
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import injection
 from app.modules.cases import service as cases
 from app.modules.intelligence import llm_client
 from app.modules.intelligence.prompts import CURATOR_SYSTEM, curator_user
@@ -51,8 +52,11 @@ async def curate(
         f"[{case.case_code} · {chunk.reference_label or chunk.chunk_type}] {chunk.content[:700]}"
         for chunk, case in hits
     )
+    marker = injection.nonce()
     files_text = "\n".join(
-        f'<file name="{name}"{' deliverable="true"' if name in context.deliverables else ""}>\n{preview[:600]}\n</file>'
+        injection.fence(
+            f"file {name}{' (final deliverable)' if name in context.deliverables else ''}", preview[:600], marker
+        )
         for name, (_, preview) in files.items()
     )
     draft = await llm_client.complete_json(

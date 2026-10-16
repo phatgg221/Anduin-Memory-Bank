@@ -11,7 +11,7 @@ from sqlalchemy import func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB, distinct_on, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import documents, realtime, storage
+from app.core import documents, injection, realtime, storage
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.modules.auth.models import User
@@ -406,9 +406,18 @@ async def extract_pending(case_id: uuid.UUID, job_id: uuid.UUID | None = None) -
                         logger.warning("OCR unavailable for %s, keeping the text layer: %s", name, error)
             except Exception:  # noqa: BLE001 — an unreadable file mustn't block the case
                 logger.exception("Couldn't convert %s", name)
+            flags = injection.detect(text)
             async with SessionLocal() as session:
-                await cases.set_artifact_text(session, artifact_id, text, method)
-            converted.append({"file_name": name, "chars": len(text or ""), "readable": bool(text), "method": method})
+                await cases.set_artifact_text(session, artifact_id, text, method, flags)
+            converted.append(
+                {
+                    "file_name": name,
+                    "chars": len(text or ""),
+                    "readable": bool(text),
+                    "method": method,
+                    "flags": len(flags),
+                }
+            )
     if converted:
         await realtime.room_changed(realtime.thread_room(case_id), "threads")
     return converted
@@ -450,6 +459,17 @@ async def _analyze(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
                 + (f" · {others} other open case{'s' if others != 1 else ''} indexed" if others else ""),
             }
         )
+        flagged = await cases.flagged_files(session, case_id)
+        if brief_flags := injection.detect(incoming.brief):
+            flagged = {"the client request": brief_flags, **flagged}
+        for source, flags in flagged.items():
+            await trace(
+                {
+                    "tool": "injection",
+                    "label": "Found instructions aimed at AI tools — treated as data",
+                    "detail": f"{source}: “{flags[0]['excerpt']}”",
+                }
+            )
         departments = [case.department_id, *case.secondary_department_ids]
         precedents = await analyzer.rank_precedents(session, incoming, departments, case_id)
         if not precedents:
@@ -481,6 +501,7 @@ async def _analyze(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
             "detail": f"{len(warnings)} unverifiable reference(s) removed" if warnings else "All references verified",
         }
     )
+    report["injection_flags"] = [{"source": source, **flag} for source, flags in flagged.items() for flag in flags]
     async with SessionLocal() as session:
         await cases.set_comparison_results(session, case_id, results)
         await cases.set_triage_report(session, case_id, report)
@@ -557,6 +578,9 @@ async def _summarize(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
         }
         files = {a.file_name: (str(a.id), a.preview_text or a.description or "") for a in case.artifacts}
     record, warnings = await summarizer.summarize_thread(context, lambda step: heartbeat(job_id, step))
+    async with SessionLocal() as session:
+        for name in await cases.flagged_files(session, case_id):
+            warnings.append(f"{name} contains instructions aimed at AI tools; they were treated as data, not followed.")
     await heartbeat(job_id, curator.CURATE_STEP)
     async with SessionLocal() as session:
         suggestions, curator_warnings = await curator.curate(session, case_id, context, record, files)

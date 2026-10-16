@@ -130,6 +130,8 @@ class CaseArtifact(Base):
     text_status: Mapped[str] = mapped_column(String(12), server_default=text("'READY'"))
     # TEXT = read from the file's text layer; OCR = a scan or photo read by a vision model.
     text_method: Mapped[str | None] = mapped_column(String(8))
+    # Phrases that look like instructions to an AI (core.injection.detect): shown as a warning, never followed.
+    risk_flags: Mapped[list[dict[str, str]]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     case: Mapped[CaseRecord] = relationship(back_populates="artifacts", lazy="raise")
