@@ -345,3 +345,47 @@ def test_scans_without_an_ocr_model_are_marked_unreadable(client, sql):
     run_job(client, fetchval(f"SELECT id::text FROM case_jobs WHERE case_id = '{APOLLO}' AND kind = 'EXTRACT'"))
     [artifact] = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["artifacts"]
     assert artifact["text_status"] == "UNREADABLE" and artifact["text_method"] is None
+
+
+def _ask_in_channel(client, headers, case_id=APOLLO):
+    body = {
+        "message_id": str(uuid.uuid4()),
+        "job_id": str(uuid.uuid4()),
+        "question": "@Dejavu what did we do last time?",
+        "reply_in_channel": True,
+    }
+    return client.post(f"/api/cases/{case_id}/copilot", json=body, headers=headers)
+
+
+def test_dejavu_cooldown_and_queue_limit(client, sql, monkeypatch):
+    from app.modules.triage import service
+
+    elena, ryan = signed_in(client, sql)
+    first = _ask_in_channel(client, elena)
+    assert first.status_code == 202 and first.json()["asked_message_id"]
+    again = _ask_in_channel(client, elena)
+    assert again.status_code == 429 and again.headers["retry-after"] in {str(s) for s in range(1, 21)}
+    assert "again in" in again.json()["detail"]
+    assert _ask_in_channel(client, ryan).status_code == 202  # the cooldown is per person
+
+    monkeypatch.setattr(service, "CHANNEL_COOLDOWN_SECONDS", 0)
+    assert _ask_in_channel(client, elena).status_code == 202  # 3 live questions now
+    full = _ask_in_channel(client, ryan)
+    assert full.status_code == 429 and "3 questions waiting" in full.json()["detail"]
+
+
+def test_channel_answers_run_one_at_a_time_per_case(client, sql, monkeypatch):
+    from app.modules.triage import service
+
+    monkeypatch.setattr(service, "CHANNEL_COOLDOWN_SECONDS", 0)
+    elena, _ = signed_in(client, sql)
+    a = _ask_in_channel(client, elena).json()["id"]
+    b = _ask_in_channel(client, elena).json()["id"]
+    other_case = _ask_in_channel(client, elena, SOVEREIGN).json()["id"]
+
+    claim = lambda: client.portal.call(service.claim_next)  # noqa: E731
+    assert str(claim()) == a
+    assert str(claim()) == other_case  # b waits: the Apollo channel already has an answer in progress
+    assert claim() is None
+    client.portal.call(service.complete, uuid.UUID(a), {})
+    assert str(claim()) == b

@@ -20,8 +20,11 @@ import {
   type OutcomeUpload,
 } from "@/components/memory/OutcomeForm";
 import { Composer, type Mentionable } from "@/components/rooms/Composer";
+import {
+  MessageThread,
+  type AgentStatus,
+} from "@/components/rooms/MessageThread";
 import { MemberList } from "@/components/rooms/MemberList";
-import { MessageThread } from "@/components/rooms/MessageThread";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CaseHeader } from "@/components/workspace/CaseHeader";
@@ -96,6 +99,8 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   const uploadFiles = useUploadFiles();
   const sendThread = useSendThreadMessage(caseId);
   const askCopilot = useAskCopilot(caseId);
+  const askInChannel = useAskCopilot(caseId);
+  const [refused, setRefused] = useState<Record<string, string>>({});
   const resolve = useResolve(caseId);
   const commitMemory = useCommitMemory(caseId);
   const changeMember = useChangeCaseMember(caseId);
@@ -259,15 +264,49 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     sendThread.mutate(message, {
       onSuccess: () => {
         if (/@dejavu\b/i.test(content))
-          askCopilot.mutate({
-            message_id: message.input.id,
-            job_id: crypto.randomUUID(),
-            question: content,
-            reply_in_channel: true,
-          });
+          askInChannel.mutate(
+            {
+              message_id: message.input.id,
+              job_id: crypto.randomUUID(),
+              question: content,
+              reply_in_channel: true,
+            },
+            {
+              onError: (error) =>
+                setRefused((all) => ({
+                  ...all,
+                  [message.input.id]: `Not sent to Dejavu: ${error.message}`,
+                })),
+            },
+          );
       },
     });
   };
+  const channelJobs = (copilot.data?.jobs ?? [])
+    .filter((j) => j.in_channel && j.asked_message_id)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const waiting = channelJobs.filter((j) => j.status === "QUEUED");
+  const agentStatus: Record<string, AgentStatus> = Object.fromEntries(
+    Object.entries(refused).map(([id, note]) => [
+      id,
+      { state: "limited", note },
+    ]),
+  );
+  for (const job of channelJobs) {
+    const position = waiting.indexOf(job);
+    agentStatus[job.asked_message_id!] =
+      job.status === "PROCESSING"
+        ? { state: "answering", note: "Dejavu is answering…" }
+        : job.status === "QUEUED"
+          ? {
+              state: "queued",
+              note:
+                position <= 0
+                  ? "Queued · Dejavu will answer after the current question"
+                  : `Queued · ${position + 1}${position === 1 ? "nd" : "rd"} in line`,
+            }
+          : { state: "failed", note: "Dejavu couldn't answer — ask again" };
+  }
   const memberIds = new Set(t.members.map((m) => m.user.id));
   const mentionables: Mentionable[] = [
     {
@@ -440,6 +479,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
                   lastReadSeq={Infinity}
                   currentUserId={user!.id}
                   currentUserName={user!.name}
+                  agentStatus={agentStatus}
                   mentionNames={mentionNames}
                   onOpenArtifact={handleOpenArtifact}
                   onCaseClick={handleCaseClick}

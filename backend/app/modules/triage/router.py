@@ -82,6 +82,9 @@ async def ask_copilot(case_id: uuid.UUID, data: CopilotAskIn, user: CurrentUser,
         )
     except service.NotFoundError as error:
         raise _http(error) from None
+    except service.RateLimitedError as error:
+        headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(error), headers=headers) from None
     return JobOut.model_validate(job)
 
 

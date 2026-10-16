@@ -1,10 +1,15 @@
 "use client";
 
-import { Bot, FileText, Star } from "lucide-react";
+import { Bot, Clock, FileText, LoaderCircle, Star, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types/rooms";
 import { Avatar } from "./Avatar";
+
+export interface AgentStatus {
+  state: "answering" | "queued" | "failed" | "limited";
+  note: string;
+}
 
 interface MessageThreadProps {
   messages: ChatMessage[];
@@ -15,6 +20,7 @@ interface MessageThreadProps {
   /** Names that render as @mentions (Dejavu is always one). */
   mentionNames?: string[];
   currentUserName?: string;
+  agentStatus?: Record<string, AgentStatus>;
 }
 
 const DAY = new Intl.DateTimeFormat("en", {
@@ -95,6 +101,7 @@ export function MessageThread({
   onCaseClick,
   mentionNames = [],
   currentUserName,
+  agentStatus = {},
 }: MessageThreadProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const namesKey = mentionNames.join("|");
@@ -210,6 +217,26 @@ export function MessageThread({
                     onCaseClick={onCaseClick}
                   />
                 </div>
+                {agentStatus[message.id] && (
+                  <span
+                    role="status"
+                    className={cn(
+                      "flex items-center gap-1.5 text-[11px]",
+                      agentStatus[message.id].state === "failed" || agentStatus[message.id].state === "limited"
+                        ? "text-modified"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {agentStatus[message.id].state === "answering" ? (
+                      <LoaderCircle className="size-3 animate-spin" aria-hidden />
+                    ) : agentStatus[message.id].state === "queued" ? (
+                      <Clock className="size-3" aria-hidden />
+                    ) : (
+                      <TriangleAlert className="size-3" aria-hidden />
+                    )}
+                    {agentStatus[message.id].note}
+                  </span>
+                )}
                 {message.attached_artifact && (
                   <button
                     type="button"

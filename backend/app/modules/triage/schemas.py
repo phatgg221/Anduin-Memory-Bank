@@ -23,12 +23,19 @@ class JobOut(BaseModel):
     updated_at: datetime
     input: dict[str, Any] | None = Field(default=None, exclude=True)
     trace: list[dict[str, Any]] = []
+    requested_by_user_id: uuid.UUID | None = None
 
     @computed_field
     @property
     def in_channel(self) -> bool:
         """A copilot question asked with @Dejavu in the case channel; the answer is posted there."""
         return bool((self.input or {}).get("reply_in_channel"))
+
+    @computed_field
+    @property
+    def asked_message_id(self) -> str | None:
+        """For an @Dejavu question: the channel message that asked it (the UI shows its status there)."""
+        return (self.input or {}).get("message_id") if self.in_channel else None
 
     @computed_field
     @property

@@ -1,12 +1,13 @@
 import asyncio
 import json
 import logging
+import math
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import literal, select, text, update
+from sqlalchemy import func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB, distinct_on, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,16 +43,24 @@ STEPS = {
     "COPILOT": copilot.COPILOT_STEPS,
 }
 
+# Oldest queued job first, except that a case's @Dejavu channel answers run one at a time, in order.
 CLAIM_SQL = text("""
     UPDATE case_jobs
        SET status = 'PROCESSING', attempts = attempts + 1, heartbeat_at = now(), updated_at = now(), error = NULL
-     WHERE id = (SELECT id FROM case_jobs
-                  WHERE status = 'QUEUED'
-                  ORDER BY created_at
+     WHERE id = (SELECT q.id FROM case_jobs q
+                  WHERE q.status = 'QUEUED'
+                    AND NOT (q.kind = 'COPILOT' AND (q.input->>'reply_in_channel')::boolean IS TRUE
+                             AND EXISTS (SELECT 1 FROM case_jobs p
+                                          WHERE p.case_id = q.case_id AND p.kind = 'COPILOT'
+                                            AND p.status = 'PROCESSING'
+                                            AND (p.input->>'reply_in_channel')::boolean IS TRUE))
+                  ORDER BY q.created_at
                   LIMIT 1
-                  FOR UPDATE SKIP LOCKED)
+                  FOR UPDATE OF q SKIP LOCKED)
  RETURNING id
 """)
+CHANNEL_COOLDOWN_SECONDS = 20  # per person: one @Dejavu question every 20 s
+CHANNEL_QUEUE_LIMIT = 3  # per case: at most 3 @Dejavu questions waiting or being answered
 
 
 class NotFoundError(Exception):
@@ -60,6 +69,12 @@ class NotFoundError(Exception):
 
 class ConflictError(Exception):
     pass
+
+
+class RateLimitedError(Exception):
+    def __init__(self, message: str, retry_after: int | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class PermanentError(Exception):
@@ -154,11 +169,39 @@ async def ask_copilot(
     if existing := await session.get(CaseJob, job_id):
         return existing
     if reply_in_channel:
+        await _check_channel_limits(session, user, case_id)
         question = MENTION.sub("", question).strip() or "Summarise where this case stands and what to do next."
     elif not await session.get(CopilotMessage, message_id):
         await cases.add_copilot_message(session, case_id, "user", question, message_id=message_id, user_id=user.id)
     job_input = {"question": question, "message_id": str(message_id), "reply_in_channel": reply_in_channel}
     return await enqueue(session, job_id, case_id, "COPILOT", user, job_input)
+
+
+async def _check_channel_limits(session: AsyncSession, user: User, case_id: uuid.UUID) -> None:
+    """@Dejavu in a channel: one question per person every CHANNEL_COOLDOWN_SECONDS, and a short queue per case."""
+    in_channel = CaseJob.input["reply_in_channel"].as_boolean().is_(True)
+    last = await session.scalar(
+        select(func.max(CaseJob.created_at)).where(
+            CaseJob.kind == "COPILOT", CaseJob.requested_by_user_id == user.id, in_channel
+        )
+    )
+    if last is not None:
+        waited = (datetime.now(UTC) - last).total_seconds()
+        if waited < CHANNEL_COOLDOWN_SECONDS:
+            wait = math.ceil(CHANNEL_COOLDOWN_SECONDS - waited)
+            raise RateLimitedError(f"You can ask Dejavu again in {wait}s.", retry_after=wait)
+    live = await session.scalar(
+        select(func.count()).where(
+            CaseJob.case_id == case_id,
+            CaseJob.kind == "COPILOT",
+            CaseJob.status.in_(("QUEUED", "PROCESSING")),
+            in_channel,
+        )
+    )
+    if live >= CHANNEL_QUEUE_LIMIT:
+        raise RateLimitedError(
+            f"Dejavu already has {live} questions waiting in this channel. Try again once one is answered."
+        )
 
 
 async def copilot_view(session: AsyncSession, case_id: uuid.UUID) -> tuple[list, list[CaseJob]]:

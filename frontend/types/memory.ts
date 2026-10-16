@@ -70,6 +70,8 @@ export interface CaseJob {
   step: string | null;
   steps: string[];
   in_channel?: boolean;
+  asked_message_id?: string | null;
+  requested_by_user_id?: string | null;
   trace?: TraceEvent[];
   attempts: number;
   error: string | null;
