@@ -339,7 +339,8 @@ class Toolbox:
             return effort, "No durations recorded for those cases"
         span = effort["range_days"]
         deadline = f" · {days_left} days to deadline" if days_left is not None else " · no deadline set"
-        return effort, f"Similar cases took {span[0]}–{span[1]} days (median {median}){deadline}"
+        took = f"~{span[0]} days" if span[0] == span[1] else f"{span[0]}–{span[1]} days (median {median})"
+        return effort, f"Similar cases took {took}{deadline}"
 
 
 async def investigate(
@@ -504,6 +505,12 @@ def guard_triage(
             warnings.append(f"Removed source {source} from a question: not in the evidence.")
             source = None
         missing.append({"question": item.question, "why": item.why, "source_case_code": source})
+    if not missing:
+        missing = [
+            {"question": f"Can you confirm: {pitfall[:200]}", "why": pitfall[:300], "source_case_code": p.case_code}
+            for p in precedents[:2]
+            for pitfall in p.pitfalls[:1]
+        ]
 
     for code in set(CASE_CODE.findall(draft.summary)) - known:
         warnings.append(f"The summary mentions {code}, which no tool returned.")

@@ -2,6 +2,7 @@
 
 import { ArrowUpRight, MessagesSquare, TriangleAlert } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { GuardWarnings } from "@/components/workspace/GuardWarnings";
 import { SectionLabel } from "@/components/brand/SectionLabel";
 import { SimilarityMeter } from "@/components/brand/SimilarityMeter";
 import { AlumniBadge, StatusBadge } from "@/components/brand/StatusBadge";
@@ -100,11 +101,7 @@ export function PrecedentDelta({
             </button>
           ))}
         </div>
-        {analysis?.result?.guard_warnings && analysis.result.guard_warnings.length > 0 && (
-          <p className="text-xs text-muted-foreground">
-            Source check: {analysis.result.guard_warnings.length} unverifiable reference(s) removed.
-          </p>
-        )}
+        <GuardWarnings warnings={analysis?.result?.guard_warnings ?? []} prefix="Source check: " />
       </section>
 
       <section className="flex flex-col gap-3 bg-navy p-5 text-white">

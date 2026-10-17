@@ -10,6 +10,7 @@ import { MemberList } from "@/components/rooms/MemberList";
 import { MessageThread } from "@/components/rooms/MessageThread";
 import { PanelToggle } from "@/components/rooms/PanelToggle";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NotFoundState } from "@/components/workspace/NotFoundState";
 import { PaneLayout } from "@/components/workspace/PaneLayout";
 import { usePanels } from "@/lib/usePanels";
 import { useSession } from "@/store/auth";
@@ -112,7 +113,12 @@ export default function DepartmentRoomPage({
   if (!view || !me) {
     return (
       <div className="flex min-w-0 flex-1 flex-col">
-        {room.error ? (
+        {room.error?.status === 404 ? (
+          <NotFoundState
+            title="Room not found"
+            detail={`There is no department room “${departmentId}”. Pick a department channel from the Workbench.`}
+          />
+        ) : room.error ? (
           <p role="alert" className="p-6 text-sm text-destructive">
             {room.error.message}
           </p>

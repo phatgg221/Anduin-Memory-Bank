@@ -82,6 +82,10 @@ export interface CaseFile {
   risk_flags?: { reason: string; excerpt: string }[];
 }
 
+export interface LinkedFile extends CaseFile {
+  source_case_code: string;
+}
+
 export interface DeltaItem {
   category: string;
   past_approach: string;
@@ -139,6 +143,7 @@ export interface ThreadView {
   lead: RoomPerson | null;
   created_at: string;
   artifacts: CaseFile[];
+  linked_artifacts?: LinkedFile[];
   /** Set once the case is committed to memory. */
   summary: string | null;
   outcome?: string | null;

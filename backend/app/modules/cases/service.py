@@ -4,6 +4,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 
+from minio.commonconfig import CopySource
 from sqlalchemy import ColumnElement, delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
@@ -263,6 +264,24 @@ async def remove_member(
     await session.commit()
 
 
+LINKED_FIELDS = (
+    "id", "file_name", "file_type", "is_reusable", "description", "text_status", "text_method", "risk_flags"
+)
+
+
+async def linked_artifacts(session: AsyncSession, case_id: uuid.UUID) -> list[dict]:
+    """Files from other cases reused into this channel ("Use in case"), each once, with the case they came from."""
+    rows = await session.execute(
+        select(CaseArtifact, CaseRecord.case_code)
+        .join(ChannelMessage, ChannelMessage.attached_artifact_id == CaseArtifact.id)
+        .join(CaseRecord, CaseRecord.id == CaseArtifact.case_id)
+        .where(ChannelMessage.case_id == case_id, CaseArtifact.case_id != case_id)
+        .distinct()
+        .order_by(CaseArtifact.file_name)
+    )
+    return [{**{k: getattr(a, k) for k in LINKED_FIELDS}, "source_case_code": code} for a, code in rows]
+
+
 async def thread_view(session: AsyncSession, case_id: uuid.UUID, user: User | None = None) -> dict:
     """The case screen. Non-members get everything except the conversation (messages, participants)."""
     case = await _case(session, case_id)
@@ -272,6 +291,7 @@ async def thread_view(session: AsyncSession, case_id: uuid.UUID, user: User | No
         query = _messages_query(case_id).order_by(ChannelMessage.seq.desc()).limit(PAGE)
         messages = list(reversed(list(await session.scalars(query))))
     participants = {m.author.id: m.author for m in messages if m.author}
+    own_names = {a.file_name for a in case.artifacts}
     pending = await access_requests(session, case_id) if member else []
     mine = None
     if not member:
@@ -293,6 +313,7 @@ async def thread_view(session: AsyncSession, case_id: uuid.UUID, user: User | No
         "due_date": case.due_date,
         "lead": case.lead_resolver,
         "artifacts": case.artifacts,
+        "linked_artifacts": [a for a in await linked_artifacts(session, case_id) if a["file_name"] not in own_names],
         "secondary_department_ids": case.secondary_department_ids,
         "initial_request_brief": case.initial_request_brief,
         "context_tags": case.context_tags,
@@ -525,6 +546,7 @@ async def commit_memory(
     """OPEN → RESOLVED (into the Knowledge Base) with the reviewed record. The thread becomes read-only.
 
     `reusable_file_ids` is explicit state for this case's files: listed ones become reusable, the rest don't.
+    Listed files reused from other cases are copied in as reusable.
     """
     case = await session.get(CaseRecord, case_id, with_for_update=True)
     if case is None:
@@ -542,13 +564,49 @@ async def commit_memory(
     case.final_output = final_output
     if reusable_file_ids is not None:
         keep = set(reusable_file_ids)
-        for artifact in await session.scalars(select(CaseArtifact).where(CaseArtifact.case_id == case_id)):
+        own = list(await session.scalars(select(CaseArtifact).where(CaseArtifact.case_id == case_id)))
+        for artifact in own:
             artifact.is_reusable = artifact.id in keep
+        linked = [a for a in await linked_artifacts(session, case_id) if a["id"] in keep]
+        await _adopt_linked(session, case, own, linked)
     case.status = "RESOLVED"
     case.resolved_at = now
     case.duration_days = (now - case.created_at).days
     await session.commit()
     return case
+
+
+async def _adopt_linked(session: AsyncSession, case: CaseRecord, own: list[CaseArtifact], linked: list[dict]) -> None:
+    """Reused files kept for the Knowledge Base are copied into the case, so its memory record carries its kit."""
+    names = {a.file_name: a for a in own}
+    query = select(CaseArtifact).where(CaseArtifact.id.in_([f["id"] for f in linked]))
+    sources = {a.id: a for a in await session.scalars(query)}
+    for item in linked:
+        if item["file_name"] in names:
+            names[item["file_name"]].is_reusable = True
+            continue
+        source = sources[item["id"]]
+        key = f"cases/{case.channel_slug}/artifacts/{source.file_name}"
+        await asyncio.to_thread(
+            internal.copy_object, settings.minio_bucket, key, CopySource(settings.minio_bucket, source.minio_object_key)
+        )
+        session.add(
+            CaseArtifact(
+                case_id=case.id,
+                uploaded_by_user_id=source.uploaded_by_user_id,
+                file_name=source.file_name,
+                file_type=source.file_type,
+                content_type=source.content_type,
+                size_bytes=source.size_bytes,
+                is_reusable=True,
+                description=f"Reused from {item['source_case_code']}",
+                minio_object_key=key,
+                preview_text=source.preview_text,
+                text_status=source.text_status,
+                text_method=source.text_method,
+                risk_flags=source.risk_flags,
+            )
+        )
 
 
 async def replace_chunks(session: AsyncSession, case: CaseRecord, chunks: list[dict]) -> int:

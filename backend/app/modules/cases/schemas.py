@@ -102,6 +102,10 @@ class ArtifactRefOut(BaseModel):
     risk_flags: list[dict[str, str]] = []
 
 
+class LinkedArtifactOut(ArtifactRefOut):
+    source_case_code: str
+
+
 class ThreadSummaryOut(BaseModel):
     id: uuid.UUID
     case_code: str
@@ -187,6 +191,7 @@ class ThreadViewOut(BaseModel):
     lead: PersonOut | None
     created_at: datetime
     artifacts: list[ArtifactRefOut]
+    linked_artifacts: list[LinkedArtifactOut] = []
     summary: str | None
     outcome: str | None = None
     final_output: str | None = None

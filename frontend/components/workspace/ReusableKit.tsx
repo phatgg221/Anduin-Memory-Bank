@@ -2,6 +2,7 @@ import { Eye, FileText, Plus } from "lucide-react";
 import { SectionLabel } from "@/components/brand/SectionLabel";
 import { AlumniBadge } from "@/components/brand/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { CaseFile, PrecedentDetail } from "@/types/rooms";
 
 interface ReusableKitProps {
@@ -14,20 +15,41 @@ interface ReusableKitProps {
   onUse: (file: { id: string; name: string; caseCode: string }) => void;
 }
 
+const STRONG_MATCH = 80;
+const MATCH_FLOOR = 50;
+
 /** `■ 03A / REUSABLE KIT` — deliverables rescued from the matched past cases, ready to reuse here. */
 export function ReusableKit({ precedents, ownFiles, usedFileIds, canUse, onPreview, onUse }: ReusableKitProps) {
-  const files = precedents.flatMap((p) => p.artifacts.filter((a) => a.is_reusable).map((a) => ({ file: a, precedent: p })));
+  const cited = new Set(
+    precedents.flatMap((p) =>
+      p.delta_items.filter((d) => d.status !== "NET_NEW" && d.source_artifact_id).map((d) => d.source_artifact_id),
+    ),
+  );
+  const files = precedents
+    .filter((p) => p.similarity_score >= MATCH_FLOOR)
+    .flatMap((p) =>
+      p.artifacts
+        .filter((a) => a.is_reusable)
+        .map((a) => ({ file: a, precedent: p, weak: !cited.has(a.id) && p.similarity_score < STRONG_MATCH })),
+    )
+    .sort((a, b) => Number(a.weak) - Number(b.weak));
 
   return (
     <section className="flex flex-col gap-3">
       <SectionLabel>03 / Reusable kit · {files.length}</SectionLabel>
-      {files.length === 0 && <p className="text-xs text-muted-foreground">Run the analysis to pull reusable files from past cases.</p>}
+      {files.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          {precedents.length === 0
+            ? "Run the analysis to pull reusable files from past cases."
+            : "No reusable files from close enough matches."}
+        </p>
+      )}
       <ul className="flex flex-col gap-2">
-        {files.map(({ file, precedent }) => {
+        {files.map(({ file, precedent, weak }) => {
           const used = usedFileIds.has(file.id);
           const author = file.uploaded_by;
           return (
-            <li key={file.id} className="flex flex-col gap-2 border bg-background p-3">
+            <li key={file.id} className={cn("flex flex-col gap-2 border bg-background p-3", weak && "border-dashed")}>
               <div className="flex items-start gap-2">
                 <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
                 <div className="flex min-w-0 flex-col gap-0.5">
@@ -39,6 +61,14 @@ export function ReusableKit({ precedents, ownFiles, usedFileIds, canUse, onPrevi
               </div>
               <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                 {precedent.case_code}
+                {weak && (
+                  <span
+                    className="micro-label border px-1 text-[10px]"
+                    title={`From a ${Math.round(precedent.similarity_score)}% match and not tied to any requirement in this request`}
+                  >
+                    Weak match
+                  </span>
+                )}
                 {author && ` · ${author.name}`}
                 {author && !author.is_active && <AlumniBadge>ALUMNI</AlumniBadge>}
               </span>

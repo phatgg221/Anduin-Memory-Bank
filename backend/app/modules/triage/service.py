@@ -520,7 +520,9 @@ async def _analyze(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
         {
             "tool": "guard",
             "label": "Checked sources and scores",
-            "detail": f"{len(warnings)} unverifiable reference(s) removed" if warnings else "All references verified",
+            "detail": f"{len(warnings)} unverifiable reference(s) removed: {'; '.join(warnings[:3])}"
+            if warnings
+            else "All references verified",
         }
     )
     report["injection_flags"] = [{"source": source, **flag} for source, flags in flagged.items() for flag in flags]

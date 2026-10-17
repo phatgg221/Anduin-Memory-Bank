@@ -6,7 +6,15 @@ import { SectionLabel } from "@/components/brand/SectionLabel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Department } from "@/types/org";
-import { SOURCE_TYPES, type CaseIntake, type RoomPerson, type ThreadView, type UpdateCaseInput } from "@/types/rooms";
+import {
+  SOURCE_TYPES,
+  type CaseFile,
+  type CaseIntake,
+  type LinkedFile,
+  type RoomPerson,
+  type ThreadView,
+  type UpdateCaseInput,
+} from "@/types/rooms";
 import { CaseIntakeFields } from "./CaseIntakeFields";
 import { deadlineLabel, SeverityBadge } from "./SeverityBadge";
 
@@ -62,6 +70,7 @@ export function CaseDetailsPanel({
 }: CaseDetailsPanelProps) {
   const [editing, setEditing] = useState<CaseIntake | null>(null);
   const open = thread.status === "OPEN";
+  const files: (CaseFile | LinkedFile)[] = [...thread.artifacts, ...(thread.linked_artifacts ?? [])];
   const names = Object.fromEntries(departments.map((d) => [d.id, d]));
   const deadline = deadlineLabel(thread.due_date);
 
@@ -199,12 +208,12 @@ export function CaseDetailsPanel({
       )}
 
       <div className="flex flex-col gap-1.5">
-        <span className="micro-label text-muted-foreground">Files · {thread.artifacts.length}</span>
-        {thread.artifacts.length === 0 ? (
+        <span className="micro-label text-muted-foreground">Files · {files.length}</span>
+        {files.length === 0 ? (
           <p className="text-xs text-muted-foreground">No files on this case yet.</p>
         ) : (
           <ul className="flex flex-col divide-y border">
-            {thread.artifacts.map((file) => (
+            {files.map((file) => (
               <li key={file.id}>
                 <button
                   type="button"
@@ -240,6 +249,11 @@ export function CaseDetailsPanel({
                           title="A scan or photo: its text was read by OCR (Gemini)"
                         >
                           OCR
+                        </span>
+                      )}
+                      {"source_case_code" in file && (
+                        <span className="micro-label border px-1 text-[10px] text-muted-foreground" title="Reused from a past case">
+                          From {file.source_case_code}
                         </span>
                       )}
                       <span className="micro-label text-muted-foreground">{file.file_type}</span>

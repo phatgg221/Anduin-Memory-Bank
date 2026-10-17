@@ -207,3 +207,57 @@ def test_outcome_curator_and_knowledge_base_commit(client, sql):
 
     bad = {"job_id": str(uuid.uuid4()), "outcome": "DONE"}
     assert client.post(f"/api/cases/{APOLLO}/resolve", json=bad, headers=elena).status_code == 422
+
+
+def test_reused_files_are_linked_and_copied_into_the_knowledge_base(client, sql):
+    import io
+
+    from app.core.config import settings
+    from app.core.storage import internal
+    from tests.test_case_threads import SOVEREIGN
+
+    elena, ryan = signed_in(client, sql)
+    discussion(client, elena, ryan)
+    key = f"test/{uuid.uuid4()}/master_rfp.csv"
+    internal.put_object(settings.minio_bucket, key, io.BytesIO(b"q,a\nDORA,yes\n"), 13, content_type="text/csv")
+    reused = str(uuid.uuid4())
+    sql(
+        "INSERT INTO case_artifacts (id, case_id, file_name, file_type, content_type, size_bytes, is_reusable,"
+        " minio_object_key, preview_text) VALUES ($1, $2, 'master_rfp.csv', 'RFP_MATRIX_CSV', 'text/csv', 13, true,"
+        " $3, 'q,a DORA,yes')",
+        uuid.UUID(reused),
+        uuid.UUID(SOVEREIGN),
+        key,
+    )
+    body = {"id": str(uuid.uuid4()), "content": "Reusing master_rfp.csv", "attached_artifact_id": reused}
+    assert client.post(f"/api/cases/{APOLLO}/thread/messages", json=body, headers=elena).status_code in (200, 201)
+    thread = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()
+    assert [(a["id"], a["source_case_code"]) for a in thread["linked_artifacts"]] == [(reused, "CASE-2025-052")]
+
+    job = resolve(client, elena).json()
+    run_job(client, job["id"])
+    record = jobs(client, elena)["summarize"]["result"]["record"]
+    commit = {**record, "final_output": "Answered the DORA tab from the master bank.", "reusable_file_ids": [reused]}
+    assert client.post(f"/api/cases/{APOLLO}/commit", json=commit, headers=elena).status_code == 200
+    thread = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()
+    copy = next(a for a in thread["artifacts"] if a["file_name"] == "master_rfp.csv")
+    assert copy["id"] != reused and copy["is_reusable"] and copy["description"] == "Reused from CASE-2025-052"
+    assert thread["linked_artifacts"] == []
+
+
+def test_triage_asks_about_precedent_pitfalls_when_the_model_lists_none():
+    from app.modules.intelligence.schemas import PrecedentContext, TriageReportDraft
+    from app.modules.intelligence.triage_agent import Evidence, guard_triage
+
+    precedent = PrecedentContext(
+        uuid.uuid4(), "CASE-2025-014", "t", None, "s", "h", [], ["Joint signers deadlock Step 4."], {}, [], 90, 0.8, 0
+    )
+    draft = TriageReportDraft(summary="Similar to [CASE-2025-014].", risk_level="LOW")
+    report, _ = guard_triage(draft, Evidence(), [precedent])
+    assert report["missing_info"] == [
+        {
+            "question": "Can you confirm: Joint signers deadlock Step 4.",
+            "why": "Joint signers deadlock Step 4.",
+            "source_case_code": "CASE-2025-014",
+        }
+    ]

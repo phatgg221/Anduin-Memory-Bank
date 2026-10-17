@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, LoaderCircle, SendHorizontal } from "lucide-react";
+import { Bot, Check, Copy, LoaderCircle, MessageSquarePlus, SendHorizontal } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +12,7 @@ interface CopilotPanelProps {
   jobs: CaseJob[];
   chips: string[];
   onAsk: (question: string) => void;
+  onPost?: (text: string) => void;
   onCaseClick: (caseCode: string) => void;
   error?: string;
 }
@@ -35,8 +36,9 @@ function Answer({ text, onCaseClick }: { text: string; onCaseClick: (code: strin
 }
 
 /** `■ 03B / DEJAVU AI MEMORY COPILOT` — grounded Q&A over this case and the Memory Bank. */
-export function CopilotPanel({ messages, jobs, chips, onAsk, onCaseClick, error }: CopilotPanelProps) {
+export function CopilotPanel({ messages, jobs, chips, onAsk, onPost, onCaseClick, error }: CopilotPanelProps) {
   const [question, setQuestion] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const thinking = jobs.find((j) => j.status === "QUEUED" || j.status === "PROCESSING");
   const failed = jobs.filter((j) => j.status === "FAILED");
@@ -72,6 +74,29 @@ export function CopilotPanel({ messages, jobs, chips, onAsk, onCaseClick, error 
                   <Bot className="size-3" aria-hidden /> Dejavu copilot
                 </span>
                 <Answer text={message.content} onCaseClick={onCaseClick} />
+                <div className="flex gap-1.5 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() =>
+                      void navigator.clipboard?.writeText(message.content).then(() => setCopied(message.id))
+                    }
+                  >
+                    {copied === message.id ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                    {copied === message.id ? "Copied" : "Copy"}
+                  </Button>
+                  {onPost && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1 px-2 text-xs"
+                      onClick={() => onPost(message.content)}
+                    >
+                      <MessageSquarePlus className="size-3.5" /> Post to channel
+                    </Button>
+                  )}
+                </div>
               </div>
             ) : (
               <p className={cn("max-w-[90%] border border-navy/20 bg-surface-3 px-2.5 py-1.5 text-sm text-ink", message.pending && "opacity-60")}>

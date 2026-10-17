@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CaseHeader } from "@/components/workspace/CaseHeader";
 import { CopilotPanel } from "@/components/workspace/CopilotPanel";
+import { NotFoundState } from "@/components/workspace/NotFoundState";
 import { PaneLayout } from "@/components/workspace/PaneLayout";
 import { PrecedentDelta } from "@/components/workspace/PrecedentDelta";
 import { ReusableKit } from "@/components/workspace/ReusableKit";
@@ -186,7 +187,12 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   if (!t) {
     return (
       <div className="flex min-w-0 flex-1 flex-col">
-        {thread.error ? (
+        {thread.error?.status === 404 || thread.error?.status === 422 ? (
+          <NotFoundState
+            title="Case not found"
+            detail="This case doesn't exist or the link is wrong. Open it from the Workbench or the Knowledge Vault."
+          />
+        ) : thread.error ? (
           <p role="alert" className="p-6 text-sm text-destructive">
             {thread.error.message}
           </p>
@@ -317,8 +323,11 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
       { state: "limited", note },
     ]),
   );
+  const running = (copilot.data?.jobs ?? []).filter(
+    (j) => j.status === "PROCESSING",
+  ).length;
   for (const job of channelJobs) {
-    const position = waiting.indexOf(job);
+    const ahead = running + waiting.indexOf(job);
     agentStatus[job.asked_message_id!] =
       job.status === "PROCESSING"
         ? { state: "answering", note: "Dejavu is answering…" }
@@ -326,9 +335,11 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
           ? {
               state: "queued",
               note:
-                position <= 0
-                  ? "Queued · Dejavu will answer after the current question"
-                  : `Queued · ${position + 1}${position === 1 ? "nd" : "rd"} in line`,
+                ahead <= 0
+                  ? "Queued · Dejavu is picking this up…"
+                  : ahead === 1 && running === 1
+                    ? "Queued · Dejavu will answer after the current question"
+                    : `Queued · ${ahead} question${ahead === 1 ? "" : "s"} ahead`,
             }
           : { state: "failed", note: "Dejavu couldn't answer — ask again" };
   }
@@ -414,7 +425,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
             guardWarnings={draft.guard_warnings ?? []}
             outcome={draft.outcome ?? "RESOLVED"}
             finalOutput={draft.final_output ?? ""}
-            files={t.artifacts}
+            files={[...t.artifacts, ...(t.linked_artifacts ?? [])]}
             curator={draft.curator}
             onCaseClick={handleCaseClick}
             isCommitting={commitMemory.isPending}
@@ -642,6 +653,15 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
                 chips={chips}
                 error={askCopilot.error?.message ?? copilot.error?.message}
                 onCaseClick={handleCaseClick}
+                onPost={
+                  canAct
+                    ? (text) => {
+                        if (!me) return;
+                        sendThread.mutate(newMessage(text.slice(0, 4000), false));
+                        setTab("channel");
+                      }
+                    : undefined
+                }
                 onAsk={(question) =>
                   askCopilot.mutate({
                     message_id: crypto.randomUUID(),

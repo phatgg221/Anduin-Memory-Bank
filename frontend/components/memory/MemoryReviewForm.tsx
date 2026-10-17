@@ -19,7 +19,7 @@ import {
   type MemoryRecord,
   type Severity,
 } from "@/types/memory";
-import type { CaseFile } from "@/types/rooms";
+import type { CaseFile, LinkedFile } from "@/types/rooms";
 
 interface MemoryReviewFormProps {
   draft: MemoryRecord;
@@ -27,7 +27,7 @@ interface MemoryReviewFormProps {
   guardWarnings: string[];
   outcome: CaseOutcome;
   finalOutput: string;
-  files: CaseFile[];
+  files: (CaseFile | LinkedFile)[];
   curator?: CuratorSuggestions;
   onCaseClick: (code: string) => void;
   onCommit: (input: CommitInput) => void;
@@ -277,6 +277,11 @@ export function MemoryReviewForm({
                         <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                         <span className="truncate font-mono text-xs text-ink">{file.file_name}</span>
                         {reason && <span className="micro-label shrink-0 text-reusable">Dejavu suggests</span>}
+                        {"source_case_code" in file && (
+                          <span className="micro-label shrink-0 text-muted-foreground">
+                            Reused from {file.source_case_code}
+                          </span>
+                        )}
                         {file.file_type === "CLIENT_APPROVAL" && (
                           <span className="micro-label shrink-0 text-muted-foreground">Client approval</span>
                         )}

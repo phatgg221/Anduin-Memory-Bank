@@ -3,12 +3,22 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ApiRequestError } from "@/lib/apiError";
 import { accessTokenStore } from "@/lib/accessToken";
 import { queryKeys } from "@/store/queryKeys";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } }),
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30_000,
+            retry: (failures, error) =>
+              failures < 1 && !(error instanceof ApiRequestError && error.status && error.status < 500),
+          },
+        },
+      }),
   );
 
   // A rejected token refresh (in the axios interceptor) ends the session everywhere in the UI.

@@ -16,6 +16,7 @@ import { useState, type ReactNode } from "react";
 import { SectionLabel } from "@/components/brand/SectionLabel";
 import { AlumniBadge } from "@/components/brand/StatusBadge";
 import { Avatar } from "@/components/rooms/Avatar";
+import { GuardWarnings } from "@/components/workspace/GuardWarnings";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { TraceEvent, TriageReport } from "@/types/memory";
@@ -151,8 +152,12 @@ export function TriageReportPanel({
             <li className="py-1 text-[11px] text-muted-foreground">
               {report.investigation.model}
               {report.fallback && " · report written by the fallback (the model was unavailable)"}
-              {report.guard_warnings.length > 0 && ` · ${report.guard_warnings.length} unverifiable reference(s) removed`}
             </li>
+            {report.guard_warnings.length > 0 && (
+              <li className="py-1">
+                <GuardWarnings warnings={report.guard_warnings} />
+              </li>
+            )}
           </ol>
         )}
       </section>
@@ -164,9 +169,15 @@ export function TriageReportPanel({
               <div className="flex flex-col gap-0.5 bg-background p-3">
                 <span className="micro-label text-muted-foreground">Similar cases took</span>
                 <span className="text-lg font-medium text-ink">
-                  {effort.range_days ? `${effort.range_days[0]}–${effort.range_days[1]}` : effort.median_days} days
+                  {effort.range_days && effort.range_days[0] !== effort.range_days[1]
+                    ? `${effort.range_days[0]}–${effort.range_days[1]} days`
+                    : `~${effort.median_days} days`}
                 </span>
-                <span className="text-xs text-muted-foreground">median {effort.median_days}</span>
+                <span className="text-xs text-muted-foreground">
+                  {effort.range_days && effort.range_days[0] !== effort.range_days[1]
+                    ? `median ${effort.median_days}`
+                    : `from ${Object.keys(effort.durations).length} past case${Object.keys(effort.durations).length === 1 ? "" : "s"}`}
+                </span>
               </div>
               <div className="flex flex-col gap-0.5 bg-background p-3">
                 <span className="micro-label text-muted-foreground">Deadline</span>
@@ -251,7 +262,7 @@ export function TriageReportPanel({
         </Block>
 
         <Block
-          title={`Ask the client first · ${report.missing_info.length}`}
+          title={report.missing_info.length ? `Ask the client first · ${report.missing_info.length}` : "Ask the client first"}
           icon={<CircleHelp className="size-3.5 text-navy" aria-hidden />}
         >
           {report.missing_info.length === 0 ? (
