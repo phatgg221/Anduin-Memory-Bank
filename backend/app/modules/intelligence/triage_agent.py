@@ -470,6 +470,10 @@ async def write_report(
     return report, warnings
 
 
+def pitfall_why(case_code: str) -> str:
+    return f"This went wrong on [{case_code}]. Confirm with the client it doesn't apply here."
+
+
 def guard_triage(
     draft: TriageReportDraft, evidence: Evidence, precedents: list[PrecedentContext]
 ) -> tuple[dict, list[str]]:
@@ -507,9 +511,9 @@ def guard_triage(
         missing.append({"question": item.question, "why": item.why, "source_case_code": source})
     if not missing:
         missing = [
-            {"question": f"Can you confirm: {pitfall[:200]}", "why": pitfall[:300], "source_case_code": p.case_code}
-            for p in precedents[:2]
-            for pitfall in p.pitfalls[:1]
+            {"question": pitfall[:300], "why": pitfall_why(p.case_code), "source_case_code": p.case_code}
+            for p in precedents[:1]
+            for pitfall in p.pitfalls[:2]
         ]
 
     for code in set(CASE_CODE.findall(draft.summary)) - known:
@@ -558,9 +562,7 @@ def _fake_report(evidence: Evidence, precedents: list[PrecedentContext], severit
         risk_level="HIGH" if severity in ("CRITICAL", "HIGH") else "MEDIUM",
         risk_reasons=[f"Severity {severity}."],
         missing_info=[
-            MissingInfoDraft(
-                question=f"Can you confirm: {warning[:200]}", why=warning[:300], source_case_code=top.case_code
-            )
+            MissingInfoDraft(question=warning[:300], why=pitfall_why(top.case_code), source_case_code=top.case_code)
             for warning in (top.pitfalls[:2] if top else [])
         ],
         team=[TeamPickDraft(user_id=p["user_id"], reason=f"Worked on {', '.join(p['cases'])}.") for p in people[:3]],

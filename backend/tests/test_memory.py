@@ -256,8 +256,8 @@ def test_triage_asks_about_precedent_pitfalls_when_the_model_lists_none():
     report, _ = guard_triage(draft, Evidence(), [precedent])
     assert report["missing_info"] == [
         {
-            "question": "Can you confirm: Joint signers deadlock Step 4.",
-            "why": "Joint signers deadlock Step 4.",
+            "question": "Joint signers deadlock Step 4.",
+            "why": "This went wrong on [CASE-2025-014]. Confirm with the client it doesn't apply here.",
             "source_case_code": "CASE-2025-014",
         }
     ]
