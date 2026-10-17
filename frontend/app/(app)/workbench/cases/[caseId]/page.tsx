@@ -27,6 +27,7 @@ import {
   type AgentStatus,
 } from "@/components/rooms/MessageThread";
 import { MemberList } from "@/components/rooms/MemberList";
+import { ReviewBar } from "@/components/rooms/ReviewBar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CaseHeader } from "@/components/workspace/CaseHeader";
@@ -63,7 +64,7 @@ import {
 } from "@/store/threads";
 import { useOpenArtifact } from "@/store/vault";
 import type { OutcomeInput } from "@/types/memory";
-import type { RoomPerson } from "@/types/rooms";
+import type { ReviewCitation, RoomPerson } from "@/types/rooms";
 
 type Tab = "channel" | "delta" | "copilot" | "people";
 const TABS: Tab[] = ["channel", "delta", "copilot", "people"];
@@ -107,6 +108,8 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   const askCopilot = useAskCopilot(caseId);
   const askInChannel = useAskCopilot(caseId);
   const [refused, setRefused] = useState<Record<string, string>>({});
+  const [picking, setPicking] = useState<{ from: string; to: string | null } | null>(null);
+  const [flash, setFlash] = useState<string[]>([]);
   const resolve = useResolve(caseId);
   const commitMemory = useCommitMemory(caseId);
   const changeMember = useChangeCaseMember(caseId);
@@ -167,13 +170,14 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   }, [analysisJob?.status, refetchThread]);
 
   const setTab = (next: Tab) => router.replace(`${base}?tab=${next}`);
-  const handleOpenArtifact = (artifactId: string) => {
+  const handleOpenArtifact = (artifactId: string, page?: number | null) => {
     const win = window.open("", "_blank");
     openArtifact.mutate(artifactId, {
       onSuccess: ({ url }) => {
-        if (!win) return void window.open(url, "_blank", "noopener");
+        const target = page ? `${url}#page=${page}` : url;
+        if (!win) return void window.open(target, "_blank", "noopener");
         win.opener = null;
-        win.location.href = url;
+        win.location.href = target;
       },
       onError: () => win?.close(),
     });
@@ -182,6 +186,20 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     const open = openCases.data?.find((c) => c.case_code === code);
     router.push(open ? `/workbench/cases/${open.id}` : "/vault");
   };
+  const handleJump = (ids: string[]) => {
+    document.getElementById(`message-${ids[0]}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setFlash(ids);
+    window.setTimeout(() => setFlash([]), 2000);
+  };
+  const handleOpenCitation = (citation: ReviewCitation) => {
+    if (citation.artifact_id) handleOpenArtifact(citation.artifact_id, citation.page);
+    else if (citation.this_case && citation.message_id) handleJump([citation.message_id]);
+    else handleCaseClick(citation.case_code);
+  };
+  const handlePick = (id: string) =>
+    setPicking((current) =>
+      !current ? { from: id, to: null } : id === current.from && !current.to ? null : { ...current, to: id },
+    );
 
   const t = thread.data;
   if (!t) {
@@ -313,6 +331,41 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
       },
     });
   };
+  const pickedIndexes = picking
+    ? [picking.from, picking.to ?? picking.from]
+        .map((id) => t.messages.findIndex((m) => m.id === id))
+        .sort((a, b) => a - b)
+    : [];
+  const pickedRange =
+    pickedIndexes.length && !pickedIndexes.includes(-1)
+      ? { first: t.messages[pickedIndexes[0]], last: t.messages[pickedIndexes[1]] }
+      : null;
+  const clock = (iso: string) =>
+    new Date(iso).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const requestReview = (focus: string) => {
+    if (!me || !pickedRange) return;
+    const { first, last } = pickedRange;
+    const count = pickedIndexes[1] - pickedIndexes[0] + 1;
+    const content = `@Dejavu review the ${count === 1 ? "message" : `${count} messages`} from ${clock(first.created_at)} to ${clock(last.created_at)}${focus ? `: ${focus}` : ""}`;
+    const message = newMessage(content, false);
+    setPicking(null);
+    sendThread.mutate(message, {
+      onSuccess: () =>
+        askInChannel.mutate(
+          {
+            message_id: message.input.id,
+            job_id: crypto.randomUUID(),
+            question: content,
+            reply_in_channel: true,
+            review: { from_message_id: first.id, to_message_id: last.id, ...(focus ? { focus } : {}) },
+          },
+          {
+            onError: (error) =>
+              setRefused((all) => ({ ...all, [message.input.id]: `Not sent to Dejavu: ${error.message}` })),
+          },
+        ),
+    });
+  };
   const channelJobs = (copilot.data?.jobs ?? [])
     .filter((j) => j.in_channel && j.asked_message_id)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -330,7 +383,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     const ahead = running + waiting.indexOf(job);
     agentStatus[job.asked_message_id!] =
       job.status === "PROCESSING"
-        ? { state: "answering", note: "Dejavu is answering…" }
+        ? { state: "answering", note: job.is_review ? `Dejavu is reviewing · ${job.step ?? "starting"}…` : "Dejavu is answering…" }
         : job.status === "QUEUED"
           ? {
               state: "queued",
@@ -528,9 +581,23 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
                   mentionNames={mentionNames}
                   onOpenArtifact={handleOpenArtifact}
                   onCaseClick={handleCaseClick}
+                  selection={picking}
+                  onPick={canAct ? handlePick : undefined}
+                  highlightIds={flash}
+                  onOpenCitation={handleOpenCitation}
+                  onJump={handleJump}
                 />
               )}
             </div>
+            {isOpenCase && pickedRange && (
+              <ReviewBar
+                count={pickedIndexes[1] - pickedIndexes[0] + 1}
+                span={`${clock(pickedRange.first.created_at)} → ${clock(pickedRange.last.created_at)}`}
+                complete={Boolean(picking?.to)}
+                onSubmit={requestReview}
+                onCancel={() => setPicking(null)}
+              />
+            )}
             {isOpenCase ? (
               <Composer
                 roomName={t.channel_slug}

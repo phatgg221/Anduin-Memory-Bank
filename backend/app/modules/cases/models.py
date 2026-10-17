@@ -154,6 +154,8 @@ class ChannelMessage(Base):
     # Posted by the Dejavu copilot (no human author); its id is the COPILOT job's id.
     is_agent: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     mentioned_user_ids: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    # A Dejavu review's structured findings (verdicts and checked citations); the content is its plain-text form.
+    agent_payload: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     case: Mapped[CaseRecord] = relationship(back_populates="channel_messages", lazy="raise")
@@ -245,6 +247,7 @@ class KnowledgeChunk(Base):
     message_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("channel_messages.id", ondelete="SET NULL"))
     chunk_type: Mapped[str] = mapped_column(String(50))
     reference_label: Mapped[str | None] = mapped_column(String(100))  # "Section 4.2", "Chat #L42"
+    page_number: Mapped[int | None] = mapped_column(Integer)
     content: Mapped[str] = mapped_column(Text)
     embedding: Mapped[list[float]] = mapped_column(Vector(settings.embedding_dim))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

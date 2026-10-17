@@ -81,6 +81,7 @@ class ThreadMessageOut(BaseModel):
     is_milestone: bool = Field(validation_alias="is_resolution_milestone")
     is_agent: bool = False
     mentioned_user_ids: list[uuid.UUID] = []
+    agent_payload: dict[str, Any] | None = None
     created_at: datetime
 
     @computed_field

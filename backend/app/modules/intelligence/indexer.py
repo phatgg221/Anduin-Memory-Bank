@@ -1,8 +1,10 @@
 """Committed memory → retrievable chunks with embeddings. Returns data; the caller (triage) persists it."""
 
+import re
 import uuid
 from dataclasses import dataclass
 
+from app.core import documents
 from app.modules.intelligence import llm_client
 from app.modules.intelligence.schemas import CaseMemoryRecord, IncomingRequest, ThreadContext
 from app.modules.intelligence.transcript import build_transcript
@@ -11,6 +13,8 @@ INDEX_STEPS = ("Chunking the memory record", "Embedding chunks", "Storing in the
 WINDOW = 6  # messages per discussion chunk
 ARTIFACT_CHARS = 1500
 MAX_PARTS_PER_FILE = 120  # ~180k characters of a file are indexed; the full text stays on the artifact
+MAX_INTAKE_PARTS = 40
+HEADING = re.compile(r"^#{1,4}\s+(.+?)\s*#*\s*$", re.M)
 
 
 @dataclass
@@ -20,7 +24,27 @@ class ChunkDraft:
     content: str
     message_id: uuid.UUID | None = None
     artifact_name: str | None = None
+    page: int | None = None
     embedding: list[float] | None = None
+
+
+def file_parts(name: str, text: str, max_parts: int) -> list[tuple[str, str, int | None]]:
+    """(label, text, page) pieces of a file: per page when the text has page markers, else by section heading."""
+    pieces: list[tuple[str, str, int | None]] = []
+    pages = documents.split_pages(text)
+    if pages:
+        for number, page in pages:
+            for offset in range(0, len(page), ARTIFACT_CHARS):
+                pieces.append((f"{name} · p.{number}", page[offset : offset + ARTIFACT_CHARS], number))
+    else:
+        headings = [(m.start(), m.group(1)) for m in HEADING.finditer(text)]
+        for part, offset in enumerate(range(0, len(text), ARTIFACT_CHARS), start=1):
+            section = next((title for start, title in reversed(headings) if start <= offset), None) or next(
+                (title for start, title in headings if start < offset + 200), None
+            )
+            where = f"§ {section[:60]}" if section else f"part {part}"
+            pieces.append((f"{name} · {where}", text[offset : offset + ARTIFACT_CHARS], None))
+    return [(label[:100], body, page) for label, body, page in pieces[:max_parts]]
 
 
 def build_chunks(
@@ -57,15 +81,9 @@ def build_chunks(
         chunks.append(ChunkDraft("CHANNEL_DISCUSSION", label, f"{head}\n{body}", message_id=window[0].id))
 
     for name, text in (artifact_texts or {}).items():
-        offsets = range(0, min(len(text), ARTIFACT_CHARS * MAX_PARTS_PER_FILE), ARTIFACT_CHARS)
-        for part, offset in enumerate(offsets, start=1):
+        for label, body, page in file_parts(name, text, MAX_PARTS_PER_FILE):
             chunks.append(
-                ChunkDraft(
-                    "ARTIFACT_CONTENT",
-                    f"{name} · part {part}"[:100],
-                    f"{head}\n{name}\n{text[offset : offset + ARTIFACT_CHARS]}",
-                    artifact_name=name,
-                )
+                ChunkDraft("ARTIFACT_CONTENT", label, f"{head}\n{label}\n{body}", artifact_name=name, page=page)
             )
     return chunks
 
@@ -83,13 +101,8 @@ def build_intake_chunks(incoming: IncomingRequest) -> list[ChunkDraft]:
     tags = "; ".join(f"{k}: {v}" for k, v in incoming.context_tags.items())
     chunks = [ChunkDraft("CASE_SUMMARY", "Intake brief", f"{head}\nTags: {tags}\n{incoming.brief}")]
     for name, text in incoming.file_texts.items():
-        for part, offset in enumerate(range(0, min(len(text), ARTIFACT_CHARS * 6), ARTIFACT_CHARS), start=1):
+        for label, body, page in file_parts(name, text, MAX_INTAKE_PARTS):
             chunks.append(
-                ChunkDraft(
-                    "ARTIFACT_CONTENT",
-                    f"{name} · part {part}"[:100],
-                    f"{head}\n{name}\n{text[offset : offset + ARTIFACT_CHARS]}",
-                    artifact_name=name,
-                )
+                ChunkDraft("ARTIFACT_CONTENT", label, f"{head}\n{label}\n{body}", artifact_name=name, page=page)
             )
     return chunks

@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, computed_field
 
+from app.modules.intelligence.reviewer import REVIEW_STEPS
 from app.modules.intelligence.schemas import CaseMemoryDraft
 from app.modules.triage.service import STEPS
 
@@ -39,9 +40,14 @@ class JobOut(BaseModel):
 
     @computed_field
     @property
+    def is_review(self) -> bool:
+        return bool((self.input or {}).get("review"))
+
+    @computed_field
+    @property
     def steps(self) -> list[str]:
         """Every step of this kind, so the UI shows progress as a checklist, not a spinner."""
-        return list(STEPS[self.kind])
+        return list(REVIEW_STEPS if self.is_review else STEPS[self.kind])
 
 
 class CaseJobsOut(BaseModel):
@@ -59,6 +65,13 @@ class CopilotAskIn(BaseModel):
     job_id: uuid.UUID  # the answer job's id (client-generated)
     question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=4000)]
     reply_in_channel: bool = False  # asked with @Dejavu: message_id is the channel message, the answer goes there
+    review: "ReviewRangeIn | None" = None
+
+
+class ReviewRangeIn(BaseModel):
+    from_message_id: uuid.UUID
+    to_message_id: uuid.UUID
+    focus: Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)] | None = None
 
 
 class CopilotMessageOut(BaseModel):

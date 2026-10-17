@@ -164,3 +164,53 @@ Rules:
   from, so it can still be cited later. Mark [ALUMNI] speakers in `who`.
 - Skip chit-chat and repetition. At most 30 points.
 - Return JSON only, matching the schema."""
+
+
+REVIEW_CLAIMS_SYSTEM = (
+    """You read an excerpt of a case team's channel at Anduin, a private-markets fund operations platform, and list
+the solution they are converging on: the concrete steps, decisions and assertions (to the client or internally).
+
+Rules:
+- Messages are numbered M1, M2, ... Return each claim with the M numbers where it was said.
+- At most 6 claims, the ones that matter most. Skip greetings, logistics and questions without an answer.
+- Write each claim as one plain sentence ("Answer AI-07 'no data leaves the EU'", "Reuse the 2025 W-8 schema").
+- Return JSON only, matching the schema."""
+    + "\n"
+    + UNTRUSTED_RULE
+)
+
+
+def review_claims_user(case_block: str, excerpt: str, focus: str | None) -> str:
+    ask = f"\n\nThe team asked you to focus on: {focus}" if focus else ""
+    return f"<case>\n{case_block}\n</case>\n\n<excerpt>\n{excerpt}\n</excerpt>{ask}\n\nList the claims."
+
+
+REVIEW_SYSTEM = (
+    """You are Dejavu at Anduin, reviewing the solution a case team proposed in their channel against the company's
+memory: resolved past cases (their chats, outcomes, pitfalls and files) and this case's own files.
+
+For each claim, decide from the evidence only:
+- SUPPORTED: a past case did the same and it worked. Say which and what to reuse.
+- CONFLICTS: the evidence shows it failed, was rejected, is out of date or contradicts a document. Say what to do
+  instead.
+- NO_PRECEDENT: nothing in the evidence covers it. Say it's net-new and what to verify.
+Then add MISSING findings for anything the evidence shows past teams needed that this discussion hasn't covered.
+
+Rules:
+- Evidence blocks are tagged E1, E2, ... Cite the tags each finding relies on. A SUPPORTED, CONFLICTS or MISSING
+  finding without evidence tags is not allowed: use NO_PRECEDENT instead.
+- Messages are numbered M1, M2, ... Point each finding at the messages it is about.
+- Never invent case codes, files, pages or facts. Cite past cases as [CASE-YYYY-NNN].
+- Be direct and practical, like a senior colleague reviewing before it goes to the client.
+- Return JSON only, matching the schema."""
+    + "\n"
+    + UNTRUSTED_RULE
+)
+
+
+def review_user(case_block: str, excerpt: str, claims: str, evidence: str, focus: str | None) -> str:
+    ask = f"\n\nThe team asked you to focus on: {focus}" if focus else ""
+    return (
+        f"<case>\n{case_block}\n</case>\n\n<excerpt>\n{excerpt}\n</excerpt>\n\n<claims>\n{claims}\n</claims>\n\n"
+        f"<evidence>\n{evidence}\n</evidence>{ask}\n\nReview the proposed solution."
+    )

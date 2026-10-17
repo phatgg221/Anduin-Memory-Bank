@@ -2,6 +2,7 @@
 
 import io
 import logging
+import re
 
 from pypdf import PdfReader, PdfWriter
 
@@ -35,6 +36,18 @@ def suffix(file_name: str) -> str:
 
 
 MARKDOWN_TYPES = {".pdf", ".docx", ".xlsx", ".csv", ".html"}
+PAGE_MARKER = re.compile(r"<!-- page (\d+) -->")
+
+
+def mark_pages(pages: list[str]) -> str:
+    """Pages joined with the same `<!-- page N -->` markers the OCR model writes, so chunks can cite a page."""
+    return "\n\n".join(f"<!-- page {number} -->\n{page.strip()}" for number, page in enumerate(pages, start=1))
+
+
+def split_pages(text: str) -> list[tuple[int, str]]:
+    """(page number, text) for text with page markers; [] when it has none."""
+    parts = PAGE_MARKER.split(text)
+    return [(int(parts[i]), parts[i + 1].strip()) for i in range(1, len(parts) - 1, 2) if parts[i + 1].strip()]
 
 
 def extract_text(file_name: str, data: bytes) -> str | None:
@@ -46,6 +59,8 @@ def extract_text(file_name: str, data: bytes) -> str | None:
     if kind in MARKDOWN_TYPES:
         try:
             markdown = get_markitdown_tool().convert_bytes(data, file_extension=kind, filename=file_name).markdown
+            if kind == ".pdf" and markdown.strip():
+                markdown = mark_pages(markdown.split("\f"))
             if markdown.strip():
                 return markdown[:MAX_CHARS]
         except Exception as exc:  # noqa: BLE001 — fall back to the simple readers below
@@ -55,7 +70,8 @@ def extract_text(file_name: str, data: bytes) -> str | None:
             return data.decode("utf-8", errors="replace")[:MAX_CHARS]
         if kind == ".pdf":
             reader = PdfReader(io.BytesIO(data))
-            return "\n".join(page.extract_text() or "" for page in reader.pages)[:MAX_CHARS] or None
+            pages = [page.extract_text() or "" for page in reader.pages]
+            return mark_pages(pages)[:MAX_CHARS] if any(p.strip() for p in pages) else None
     except Exception as exc:  # noqa: BLE001 — a malformed file shouldn't fail the upload
         logger.warning("Text extraction failed for %s: %s", file_name, exc)
     return None

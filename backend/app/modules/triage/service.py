@@ -18,7 +18,17 @@ from app.modules.auth.models import User
 from app.modules.cases import service as cases
 from app.modules.cases.models import CaseRecord, ChannelMessage, CopilotMessage
 from app.modules.cases.schemas import ThreadMessageOut
-from app.modules.intelligence import analyzer, copilot, curator, indexer, llm_client, ocr, summarizer, triage_agent
+from app.modules.intelligence import (
+    analyzer,
+    copilot,
+    curator,
+    indexer,
+    llm_client,
+    ocr,
+    reviewer,
+    summarizer,
+    triage_agent,
+)
 from app.modules.intelligence.guard import guard_memory
 from app.modules.intelligence.schemas import (
     CaseMemoryDraft,
@@ -72,6 +82,10 @@ class ConflictError(Exception):
 
 
 class ForbiddenError(Exception):
+    pass
+
+
+class InvalidError(Exception):
     pass
 
 
@@ -173,22 +187,40 @@ async def ask_copilot(
     job_id: uuid.UUID,
     question: str,
     reply_in_channel: bool = False,
+    review: dict | None = None,
 ) -> CaseJob:
     """Stores the question (idempotent on its id) and queues the answer job.
 
     With @Dejavu in the case channel the question is already a channel message, and the answer is posted there.
+    `review` (a range of channel messages) asks for a review of the solution discussed there instead of an answer.
     """
-    if await session.get(CaseRecord, case_id) is None:
+    case = await session.get(CaseRecord, case_id)
+    if case is None:
         raise NotFoundError("Unknown case")
     await _require_member(session, case_id, user)
     if existing := await session.get(CaseJob, job_id):
         return existing
+    picked = None
+    if review:
+        if not reply_in_channel:
+            raise InvalidError("Reviews are posted in the case channel")
+        if case.status != "OPEN":
+            raise ConflictError("This case is committed to memory; its channel is read-only")
+        try:
+            picked = await cases.review_range(
+                session, case_id, uuid.UUID(review["from_message_id"]), uuid.UUID(review["to_message_id"])
+            )
+        except cases.InvalidError as error:
+            raise InvalidError(str(error)) from None
+        picked["focus"] = (review.get("focus") or "").strip() or None
     if reply_in_channel:
         await _check_channel_limits(session, user, case_id)
         question = MENTION.sub("", question).strip() or "Summarise where this case stands and what to do next."
     elif not await session.get(CopilotMessage, message_id):
         await cases.add_copilot_message(session, case_id, "user", question, message_id=message_id, user_id=user.id)
     job_input = {"question": question, "message_id": str(message_id), "reply_in_channel": reply_in_channel}
+    if picked:
+        job_input["review"] = picked
     return await enqueue(session, job_id, case_id, "COPILOT", user, job_input)
 
 
@@ -393,6 +425,7 @@ async def _index_intake(session: AsyncSession, case: CaseRecord, incoming: Incom
             {
                 "chunk_type": c.chunk_type,
                 "reference_label": c.reference_label,
+                "page_number": c.page,
                 "content": c.content,
                 "embedding": c.embedding,
                 "artifact_id": artifact_ids.get((target.id, c.artifact_name)) if c.artifact_name else None,
@@ -538,7 +571,56 @@ async def _analyze(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
     }
 
 
+async def _review(job_id: uuid.UUID, case_id: uuid.UUID, picked: dict) -> dict[str, Any]:
+    """A review of the solution discussed in a range of the channel, posted back there as a structured message."""
+    await heartbeat(job_id, reviewer.REVIEW_STEPS[0])
+    await extract_pending(case_id)
+    async with SessionLocal() as session:
+        case = await session.get_one(CaseRecord, case_id)
+        if not await cases.has_chunks(session, case_id):
+            texts = await cases.case_files_text(session, case_id)
+            await _index_intake(session, case, _incoming(case, texts))
+        rows = await cases.messages_between(session, case_id, picked["from_seq"], picked["to_seq"])
+        if not rows:
+            raise cases.InvalidError("The selected messages are gone")
+        context = reviewer.ReviewContext(
+            case_id=case_id,
+            case_code=case.case_code,
+            case_block=(
+                f"{case.case_code} · {case.title}\nCustomer: {case.client_name} · Fund: {case.fund_name}\n"
+                f"Severity: {case.severity}\n{case.initial_request_brief}"
+            ),
+            messages=[
+                reviewer.ReviewMessage(
+                    id=m.id,
+                    author="Dejavu" if m.is_agent else (m.author.name if m.author else "Former member"),
+                    at=m.created_at.strftime("%d %b %H:%M UTC"),
+                    sent_at=m.created_at.isoformat(),
+                    content=m.content,
+                    file_name=m.attached_artifact.file_name if m.attached_artifact else None,
+                )
+                for m in rows
+            ],
+            focus=picked.get("focus"),
+        )
+        payload = await reviewer.review(session, context, lambda step: heartbeat(job_id, step))
+        posted = await cases.post_agent_message(session, case_id, job_id, reviewer.review_text(payload), payload)
+        out = ThreadMessageOut.model_validate(posted).model_dump(mode="json")
+        await realtime.publish(realtime.thread_room(case_id), {"type": "message.created", "message": out})
+    return {
+        "channel_message_id": str(posted.id),
+        "findings": len(payload["findings"]),
+        "sources_checked": payload["sources_checked"],
+        "guard_warnings": payload["guard_warnings"],
+        "provider": llm_client.provider_label(),
+    }
+
+
 async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
+    async with SessionLocal() as session:
+        picked = ((await session.get_one(CaseJob, job_id)).input or {}).get("review")
+    if picked:
+        return await _review(job_id, case_id, picked)
     await heartbeat(job_id, copilot.COPILOT_STEPS[0])
     async with SessionLocal() as session:
         job = await session.get_one(CaseJob, job_id)
@@ -641,6 +723,7 @@ async def _index(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
         {
             "chunk_type": c.chunk_type,
             "reference_label": c.reference_label,
+            "page_number": c.page,
             "content": c.content,
             "embedding": c.embedding,
             "message_id": c.message_id,

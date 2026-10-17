@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, BeforeValidator, Field, StringConstraints
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -234,3 +234,55 @@ class SegmentNote(BaseModel):
 
 class SegmentNotes(BaseModel):
     notes: list[SegmentNote] = Field(default_factory=list, max_length=30)
+
+
+REVIEW_VERDICTS = ("SUPPORTED", "CONFLICTS", "NO_PRECEDENT", "MISSING")
+
+
+def _clip(limit: int) -> BeforeValidator:
+    """Over-long model output is cut to size instead of failing the whole review."""
+    return BeforeValidator(lambda value: value[:limit] if isinstance(value, str | list) else value)
+
+
+def _verdict(value):
+    return value.strip().upper().replace(" ", "_").replace("-", "_") if isinstance(value, str) else value
+
+
+ReviewText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2)]
+
+
+class ReviewClaimDraft(BaseModel):
+    text: Annotated[ReviewText, _clip(400)] = Field(
+        description="One concrete step, decision or assertion the team proposed, in a single sentence."
+    )
+    messages: Annotated[list[int], _clip(6)] = Field(
+        default_factory=list, description="The M numbers where it was said."
+    )
+
+
+class ReviewClaimsDraft(BaseModel):
+    claims: Annotated[list[ReviewClaimDraft], _clip(6)] = Field(default_factory=list, description="At most 6.")
+
+
+class ReviewFindingDraft(BaseModel):
+    claim: Annotated[ReviewText, _clip(400)]
+    verdict: Annotated[Literal["SUPPORTED", "CONFLICTS", "NO_PRECEDENT", "MISSING"], BeforeValidator(_verdict)] = Field(
+        description="SUPPORTED: past work did the same and it worked. CONFLICTS: memory shows it failed, was rejected "
+        "or is wrong. NO_PRECEDENT: nothing in the evidence covers it. MISSING: past cases needed something the "
+        "discussion hasn't covered (the claim says what)."
+    )
+    comment: Annotated[ReviewText, _clip(900)] = Field(
+        description="Why, specifically, and what to do about it, in at most 4 sentences. Cite past cases as "
+        "[CASE-YYYY-NNN]."
+    )
+    evidence: Annotated[list[str], _clip(4)] = Field(
+        default_factory=list, description='At most 4 evidence tags, e.g. ["E3", "E7"].'
+    )
+    messages: Annotated[list[int], _clip(6)] = Field(default_factory=list, description="M numbers it is about.")
+
+
+class ReviewDraft(BaseModel):
+    overall: Annotated[ReviewText, _clip(600)] = Field(
+        description="Two sentences: is the proposed solution sound, and the single most important thing to change."
+    )
+    findings: Annotated[list[ReviewFindingDraft], _clip(8)] = Field(default_factory=list, description="At most 8.")

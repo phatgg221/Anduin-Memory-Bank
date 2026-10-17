@@ -35,6 +35,8 @@ UPLOAD_ERRORS = {
 def _http(error: Exception) -> HTTPException:
     if isinstance(error, service.ForbiddenError):
         return HTTPException(status.HTTP_403_FORBIDDEN, str(error))
+    if isinstance(error, service.InvalidError):
+        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
     code = status.HTTP_404_NOT_FOUND if isinstance(error, service.NotFoundError) else status.HTTP_409_CONFLICT
     return HTTPException(code, str(error))
 
@@ -84,9 +86,16 @@ async def ask_copilot(case_id: uuid.UUID, data: CopilotAskIn, user: CurrentUser,
     """Asks the Memory Copilot about this case. The answer arrives as a copilot message when the job completes."""
     try:
         job = await service.ask_copilot(
-            session, user, case_id, data.message_id, data.job_id, data.question, data.reply_in_channel
+            session,
+            user,
+            case_id,
+            data.message_id,
+            data.job_id,
+            data.question,
+            data.reply_in_channel,
+            data.review.model_dump(mode="json") if data.review else None,
         )
-    except (service.NotFoundError, service.ForbiddenError) as error:
+    except (service.NotFoundError, service.ForbiddenError, service.ConflictError, service.InvalidError) as error:
         raise _http(error) from None
     except service.RateLimitedError as error:
         headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None

@@ -16,6 +16,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import documents
 from app.core.config import settings
 from app.core.db import SessionLocal, engine
 from app.core.security import UNUSABLE_PASSWORD, hash_password, verify_password
@@ -102,6 +103,9 @@ def object_key(case: SeedCase, file_name: str) -> str:
 
 
 def preview_text(case: SeedCase, artifact: dict[str, Any]) -> str | None:
+    pdf = case.folder / artifact["file"]
+    if pdf.suffix == ".pdf" and pdf.exists() and (text := documents.extract_text(pdf.name, pdf.read_bytes())):
+        return text
     path = case.folder / (artifact.get("source") or artifact["file"])
     if path.suffix == ".pdf":
         return None

@@ -265,7 +265,14 @@ async def remove_member(
 
 
 LINKED_FIELDS = (
-    "id", "file_name", "file_type", "is_reusable", "description", "text_status", "text_method", "risk_flags"
+    "id",
+    "file_name",
+    "file_type",
+    "is_reusable",
+    "description",
+    "text_status",
+    "text_method",
+    "risk_flags",
 )
 
 
@@ -394,10 +401,16 @@ async def post_thread_message(
     return message, case, joined
 
 
-async def post_agent_message(session: AsyncSession, case_id: uuid.UUID, message_id: uuid.UUID, content: str):
+async def post_agent_message(
+    session: AsyncSession, case_id: uuid.UUID, message_id: uuid.UUID, content: str, payload: dict | None = None
+):
     """The copilot's reply in the case channel. Idempotent: the id is the job's, so a retried job posts once."""
     if await session.get(ChannelMessage, message_id) is None:
-        session.add(ChannelMessage(id=message_id, case_id=case_id, user_id=None, content=content, is_agent=True))
+        session.add(
+            ChannelMessage(
+                id=message_id, case_id=case_id, user_id=None, content=content, is_agent=True, agent_payload=payload
+            )
+        )
         await session.commit()
     return await session.scalar(_messages_query(case_id).where(ChannelMessage.id == message_id))
 
@@ -618,7 +631,13 @@ async def replace_chunks(session: AsyncSession, case: CaseRecord, chunks: list[d
 
 
 async def nearest_chunks(
-    session: AsyncSession, vector: list[float], department_id: str | None, limit: int, *, resolved_only: bool = False
+    session: AsyncSession,
+    vector: list[float],
+    department_id: str | None,
+    limit: int,
+    *,
+    resolved_only: bool = False,
+    case_id: uuid.UUID | None = None,
 ) -> list[tuple[KnowledgeChunk, CaseRecord, float]]:
     """Cosine-nearest chunks (HNSW index) with their case, in one query. Returns (chunk, case, distance)."""
     distance = KnowledgeChunk.embedding.cosine_distance(vector).label("distance")
@@ -633,7 +652,41 @@ async def nearest_chunks(
         query = query.where(in_department(department_id))
     if resolved_only:
         query = query.where(CaseRecord.status == "RESOLVED")
+    if case_id:
+        query = query.where(KnowledgeChunk.case_id == case_id)
     return [(chunk, case, float(dist)) for chunk, case, dist in await session.execute(query)]
+
+
+async def has_chunks(session: AsyncSession, case_id: uuid.UUID) -> bool:
+    return bool(
+        await session.scalar(select(select(KnowledgeChunk.id).where(KnowledgeChunk.case_id == case_id).exists()))
+    )
+
+
+MAX_REVIEW_MESSAGES = 60
+
+
+async def review_range(session: AsyncSession, case_id: uuid.UUID, first: uuid.UUID, last: uuid.UUID) -> dict:
+    """The channel messages from `first` to `last` (either order), checked to belong to the case and be few enough."""
+    ends = list(
+        await session.scalars(
+            select(ChannelMessage.seq).where(ChannelMessage.case_id == case_id, ChannelMessage.id.in_([first, last]))
+        )
+    )
+    if len(ends) != len({first, last}):
+        raise InvalidError("Pick messages from this case's channel")
+    low, high = min(ends), max(ends)
+    count = await session.scalar(
+        select(func.count()).where(ChannelMessage.case_id == case_id, ChannelMessage.seq.between(low, high))
+    )
+    if count > MAX_REVIEW_MESSAGES:
+        raise InvalidError(f"Pick at most {MAX_REVIEW_MESSAGES} messages to review ({count} selected)")
+    return {"from_seq": low, "to_seq": high, "count": count}
+
+
+async def messages_between(session: AsyncSession, case_id: uuid.UUID, low: int, high: int) -> list[ChannelMessage]:
+    query = _messages_query(case_id).where(ChannelMessage.seq.between(low, high)).order_by(ChannelMessage.seq)
+    return list(await session.scalars(query.limit(MAX_REVIEW_MESSAGES)))
 
 
 # --- files ----------------------------------------------------------------------------------------------------------

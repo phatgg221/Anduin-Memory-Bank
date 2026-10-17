@@ -70,6 +70,7 @@ export interface CaseJob {
   step: string | null;
   steps: string[];
   in_channel?: boolean;
+  is_review?: boolean;
   asked_message_id?: string | null;
   requested_by_user_id?: string | null;
   trace?: TraceEvent[];
@@ -124,6 +125,7 @@ export interface CopilotAsk {
   job_id: string;
   question: string;
   reply_in_channel?: boolean;
+  review?: { from_message_id: string; to_message_id: string; focus?: string };
 }
 
 export interface TraceEvent {

@@ -28,9 +28,44 @@ export interface ChatMessage {
   is_milestone: boolean;
   is_agent?: boolean;
   mentioned_user_ids?: string[];
+  agent_payload?: ReviewPayload | null;
   created_at: string;
   /** Client-only: sent optimistically, not confirmed by the server yet. */
   pending?: boolean;
+}
+
+export type ReviewVerdict = "SUPPORTED" | "CONFLICTS" | "NO_PRECEDENT" | "MISSING";
+
+export interface ReviewCitation {
+  case_id: string;
+  case_code: string;
+  case_title: string;
+  this_case: boolean;
+  label: string;
+  artifact_id: string | null;
+  file_name: string | null;
+  page: number | null;
+  message_id: string | null;
+  quote: string;
+}
+
+export interface ReviewFinding {
+  claim: string;
+  verdict: ReviewVerdict;
+  comment: string;
+  message_ids: string[];
+  citations: ReviewCitation[];
+}
+
+export interface ReviewPayload {
+  kind: "review";
+  range: { from_message_id: string; to_message_id: string; count: number; from_at: string; to_at: string };
+  focus: string | null;
+  overall: string;
+  findings: ReviewFinding[];
+  counts: Partial<Record<ReviewVerdict, number>>;
+  sources_checked: number;
+  guard_warnings: string[];
 }
 
 export interface RoomMessage extends ChatMessage {
