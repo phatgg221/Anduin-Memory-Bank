@@ -125,7 +125,7 @@ export interface CopilotAsk {
   job_id: string;
   question: string;
   reply_in_channel?: boolean;
-  review?: { from_message_id: string; to_message_id: string; focus?: string };
+  review?: { message_ids: string[]; focus?: string };
 }
 
 export interface TraceEvent {

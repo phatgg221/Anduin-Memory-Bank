@@ -89,7 +89,7 @@ def test_review_a_range_of_the_case_channel(client, sql):
         "job_id": job_id,
         "question": ask["content"],
         "reply_in_channel": True,
-        "review": {"from_message_id": ids[2], "to_message_id": ids[0], "focus": "Is the MFN tier right?"},
+        "review": {"message_ids": [ids[2], ids[0]], "focus": "Is the MFN tier right?"},
     }
     job = client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=elena).json()
     assert job["is_review"] and job["steps"][0] == "Reading the selected messages" and job["in_channel"]
@@ -98,12 +98,12 @@ def test_review_a_range_of_the_case_channel(client, sql):
     reply = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["messages"][-1]
     review = reply["agent_payload"]
     assert reply["id"] == job_id and reply["is_agent"] and review["kind"] == "review"
-    assert review["range"]["count"] == 3 and review["range"]["from_message_id"] == ids[0]
+    assert review["range"]["count"] == 2 and review["range"]["message_ids"] == [ids[0], ids[2]]
     assert review["focus"] == "Is the MFN tier right?" and review["sources_checked"] > 0
     cited = [c for f in review["findings"] for c in f["citations"]]
     assert cited and all(c["case_code"] and c["label"] for c in cited)
     assert review["findings"][0]["message_ids"] == [ids[0]]
-    assert reply["content"].startswith("Review of 3 messages:")
+    assert reply["content"].startswith("Review of 2 messages:")
 
 
 def test_review_range_must_be_in_this_channel(client, sql):
@@ -117,10 +117,10 @@ def test_review_range_must_be_in_this_channel(client, sql):
         "job_id": str(uuid.uuid4()),
         "question": "@Dejavu review",
         "reply_in_channel": True,
-        "review": {"from_message_id": mine["id"], "to_message_id": "00000000-0000-0000-0000-00000000aa01"},
+        "review": {"message_ids": [mine["id"], "00000000-0000-0000-0000-00000000aa01"]},
     }
     refused = client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=elena)
     assert refused.status_code == 422 and "this case" in refused.json()["detail"]
     body["reply_in_channel"] = False
-    body["review"]["to_message_id"] = mine["id"]
+    body["review"]["message_ids"] = [mine["id"]]
     assert client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=elena).status_code == 422

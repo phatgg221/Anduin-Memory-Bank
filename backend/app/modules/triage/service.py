@@ -207,9 +207,7 @@ async def ask_copilot(
         if case.status != "OPEN":
             raise ConflictError("This case is committed to memory; its channel is read-only")
         try:
-            picked = await cases.review_range(
-                session, case_id, uuid.UUID(review["from_message_id"]), uuid.UUID(review["to_message_id"])
-            )
+            picked = await cases.review_selection(session, case_id, [uuid.UUID(i) for i in review["message_ids"]])
         except cases.InvalidError as error:
             raise InvalidError(str(error)) from None
         picked["focus"] = (review.get("focus") or "").strip() or None
@@ -580,7 +578,7 @@ async def _review(job_id: uuid.UUID, case_id: uuid.UUID, picked: dict) -> dict[s
         if not await cases.has_chunks(session, case_id):
             texts = await cases.case_files_text(session, case_id)
             await _index_intake(session, case, _incoming(case, texts))
-        rows = await cases.messages_between(session, case_id, picked["from_seq"], picked["to_seq"])
+        rows = await cases.messages_at(session, case_id, picked["seqs"])
         if not rows:
             raise cases.InvalidError("The selected messages are gone")
         context = reviewer.ReviewContext(

@@ -59,7 +59,14 @@ export interface ReviewFinding {
 
 export interface ReviewPayload {
   kind: "review";
-  range: { from_message_id: string; to_message_id: string; count: number; from_at: string; to_at: string };
+  range: {
+    from_message_id: string;
+    to_message_id: string;
+    message_ids?: string[];
+    count: number;
+    from_at: string;
+    to_at: string;
+  };
   focus: string | null;
   overall: string;
   findings: ReviewFinding[];

@@ -43,7 +43,7 @@ export function ReviewCard({ review, onOpenCitation, onJump }: ReviewCardProps) 
         <span className="micro-label text-navy">Solution review</span>
         <button
           type="button"
-          onClick={() => onJump([review.range.from_message_id, review.range.to_message_id])}
+          onClick={() => onJump(review.range.message_ids ?? [review.range.from_message_id, review.range.to_message_id])}
           className="flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:text-ink hover:underline"
         >
           <CornerLeftUp className="size-3" aria-hidden />

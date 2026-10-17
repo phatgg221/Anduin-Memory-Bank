@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Clock, FileText, ListChecks, LoaderCircle, Star, TriangleAlert } from "lucide-react";
+import { Bot, Check, Clock, FileText, ListChecks, LoaderCircle, Star, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { ChatMessage, ReviewCitation } from "@/types/rooms";
@@ -22,9 +22,9 @@ interface MessageThreadProps {
   mentionNames?: string[];
   currentUserName?: string;
   agentStatus?: Record<string, AgentStatus>;
-  /** Picking a range of messages for Dejavu to review: `from` set first, then `to`. */
-  selection?: { from: string; to: string | null } | null;
-  onPick?: (messageId: string) => void;
+  /** Messages picked for a Dejavu review; `extend` = shift-click, selecting the run since the last pick. */
+  selectedIds?: string[];
+  onSelect?: (messageId: string, extend: boolean) => void;
   highlightIds?: string[];
   onOpenCitation?: (citation: ReviewCitation) => void;
   onJump?: (messageIds: string[]) => void;
@@ -109,8 +109,8 @@ export function MessageThread({
   mentionNames = [],
   currentUserName,
   agentStatus = {},
-  selection,
-  onPick,
+  selectedIds = [],
+  onSelect,
   highlightIds = [],
   onOpenCitation,
   onJump,
@@ -127,10 +127,7 @@ export function MessageThread({
     endRef.current?.scrollIntoView({ block: "end" });
   }, [lastId]);
 
-  const ends = selection
-    ? [selection.from, selection.to ?? selection.from].map((id) => messages.findIndex((m) => m.id === id))
-    : [];
-  const [low, high] = ends.length && !ends.includes(-1) ? [Math.min(...ends), Math.max(...ends)] : [-1, -2];
+  const selecting = Boolean(onSelect) && selectedIds.length > 0;
 
   const firstUnread = messages.find(
     (m) => !m.pending && m.seq > lastReadSeq && m.author?.id !== currentUserId,
@@ -146,7 +143,8 @@ export function MessageThread({
         const mine = message.author?.id === currentUserId;
         const agent = Boolean(message.is_agent);
         const review = message.agent_payload?.kind === "review" ? message.agent_payload : null;
-        const selected = index >= low && index <= high;
+        const selected = selectedIds.includes(message.id);
+        const selectable = Boolean(onSelect) && !message.pending;
         return (
           <li key={message.id} id={`message-${message.id}`} className="flex scroll-mt-4 flex-col gap-4">
             {showDay && (
@@ -168,9 +166,14 @@ export function MessageThread({
                 mine && "flex-row-reverse",
                 message.pending && "opacity-60",
                 selected && "border-navy bg-surface-2",
+                selecting && selectable && "cursor-pointer select-none hover:bg-surface-2",
                 highlightIds.includes(message.id) && "bg-modified-bg",
               )}
               aria-label={mine ? "Your message" : undefined}
+              onClick={(event) => {
+                if (!selecting || !selectable || (event.target as HTMLElement).closest("button, a")) return;
+                onSelect!(message.id, event.shiftKey);
+              }}
             >
               {agent ? (
                 <span
@@ -222,19 +225,31 @@ export function MessageThread({
                       <Star className="size-3" aria-hidden /> Milestone
                     </span>
                   )}
-                  {onPick && !message.pending && (
-                    <button
-                      type="button"
-                      onClick={() => onPick(message.id)}
-                      className={cn(
-                        "micro-label flex items-center gap-1 px-1 text-muted-foreground hover:text-navy focus-visible:opacity-100",
-                        selection ? "opacity-100" : "opacity-0 group-hover/message:opacity-100",
-                      )}
-                    >
-                      <ListChecks className="size-3" aria-hidden />
-                      {!selection ? "Review from here" : selected && message.id === selection.from ? "Start" : "Review to here"}
-                    </button>
-                  )}
+                  {selectable &&
+                    (selecting ? (
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={selected}
+                        aria-label={selected ? "Remove from review" : "Add to review"}
+                        onClick={(event) => onSelect!(message.id, event.shiftKey)}
+                        className={cn(
+                          "flex size-4 items-center justify-center self-center border",
+                          selected ? "border-navy bg-navy text-white" : "border-hairline bg-background hover:border-navy",
+                        )}
+                      >
+                        {selected && <Check className="size-3" aria-hidden />}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(event) => onSelect!(message.id, event.shiftKey)}
+                        className="micro-label flex items-center gap-1 px-1 text-muted-foreground opacity-0 hover:text-navy focus-visible:opacity-100 group-hover/message:opacity-100"
+                      >
+                        <ListChecks className="size-3" aria-hidden />
+                        Select for review
+                      </button>
+                    ))}
                 </header>
                 <div
                   className={cn(

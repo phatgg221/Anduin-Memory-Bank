@@ -108,7 +108,8 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   const askCopilot = useAskCopilot(caseId);
   const askInChannel = useAskCopilot(caseId);
   const [refused, setRefused] = useState<Record<string, string>>({});
-  const [picking, setPicking] = useState<{ from: string; to: string | null } | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const anchor = useRef<string | null>(null);
   const [flash, setFlash] = useState<string[]>([]);
   const resolve = useResolve(caseId);
   const commitMemory = useCommitMemory(caseId);
@@ -196,10 +197,19 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     else if (citation.this_case && citation.message_id) handleJump([citation.message_id]);
     else handleCaseClick(citation.case_code);
   };
-  const handlePick = (id: string) =>
-    setPicking((current) =>
-      !current ? { from: id, to: null } : id === current.from && !current.to ? null : { ...current, to: id },
-    );
+  const handleSelect = (id: string, extend: boolean) => {
+    const order = (thread.data?.messages ?? []).filter((m) => !m.pending).map((m) => m.id);
+    const from = anchor.current ? order.indexOf(anchor.current) : -1;
+    const to = order.indexOf(id);
+    setPicked((current) => {
+      if (extend && from >= 0 && to >= 0) {
+        const run = order.slice(Math.min(from, to), Math.max(from, to) + 1);
+        return [...new Set([...current, ...run])];
+      }
+      return current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+    });
+    anchor.current = id;
+  };
 
   const t = thread.data;
   if (!t) {
@@ -331,24 +341,25 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
       },
     });
   };
-  const pickedIndexes = picking
-    ? [picking.from, picking.to ?? picking.from]
-        .map((id) => t.messages.findIndex((m) => m.id === id))
-        .sort((a, b) => a - b)
-    : [];
-  const pickedRange =
-    pickedIndexes.length && !pickedIndexes.includes(-1)
-      ? { first: t.messages[pickedIndexes[0]], last: t.messages[pickedIndexes[1]] }
-      : null;
+  const pickedMessages = t.messages.filter((m) => picked.includes(m.id));
   const clock = (iso: string) =>
     new Date(iso).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const day = (iso: string) => new Date(iso).toLocaleDateString("en", { day: "numeric", month: "short" });
+  const [firstPick, lastPick] = [pickedMessages[0], pickedMessages[pickedMessages.length - 1]];
+  const stamp = (iso: string) =>
+    day(firstPick.created_at) === day(lastPick.created_at) ? clock(iso) : `${day(iso)} ${clock(iso)}`;
+  const pickedSpan = pickedMessages.length ? `${stamp(firstPick.created_at)} → ${stamp(lastPick.created_at)}` : "";
+  const clearPicked = () => {
+    setPicked([]);
+    anchor.current = null;
+  };
   const requestReview = (focus: string) => {
-    if (!me || !pickedRange) return;
-    const { first, last } = pickedRange;
-    const count = pickedIndexes[1] - pickedIndexes[0] + 1;
-    const content = `@Dejavu review the ${count === 1 ? "message" : `${count} messages`} from ${clock(first.created_at)} to ${clock(last.created_at)}${focus ? `: ${focus}` : ""}`;
+    if (!me || !pickedMessages.length) return;
+    const count = pickedMessages.length;
+    const content = `@Dejavu review ${count === 1 ? "this message" : `these ${count} messages`} (${pickedSpan.replace(" → ", "–")})${focus ? `: ${focus}` : ""}`;
     const message = newMessage(content, false);
-    setPicking(null);
+    const ids = pickedMessages.map((m) => m.id);
+    clearPicked();
     sendThread.mutate(message, {
       onSuccess: () =>
         askInChannel.mutate(
@@ -357,7 +368,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
             job_id: crypto.randomUUID(),
             question: content,
             reply_in_channel: true,
-            review: { from_message_id: first.id, to_message_id: last.id, ...(focus ? { focus } : {}) },
+            review: { message_ids: ids, ...(focus ? { focus } : {}) },
           },
           {
             onError: (error) =>
@@ -581,22 +592,16 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
                   mentionNames={mentionNames}
                   onOpenArtifact={handleOpenArtifact}
                   onCaseClick={handleCaseClick}
-                  selection={picking}
-                  onPick={canAct ? handlePick : undefined}
+                  selectedIds={picked}
+                  onSelect={canAct ? handleSelect : undefined}
                   highlightIds={flash}
                   onOpenCitation={handleOpenCitation}
                   onJump={handleJump}
                 />
               )}
             </div>
-            {isOpenCase && pickedRange && (
-              <ReviewBar
-                count={pickedIndexes[1] - pickedIndexes[0] + 1}
-                span={`${clock(pickedRange.first.created_at)} → ${clock(pickedRange.last.created_at)}`}
-                complete={Boolean(picking?.to)}
-                onSubmit={requestReview}
-                onCancel={() => setPicking(null)}
-              />
+            {isOpenCase && pickedMessages.length > 0 && (
+              <ReviewBar count={pickedMessages.length} span={pickedSpan} onSubmit={requestReview} onCancel={clearPicked} />
             )}
             {isOpenCase ? (
               <Composer

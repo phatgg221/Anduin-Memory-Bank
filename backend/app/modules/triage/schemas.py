@@ -69,8 +69,7 @@ class CopilotAskIn(BaseModel):
 
 
 class ReviewRangeIn(BaseModel):
-    from_message_id: uuid.UUID
-    to_message_id: uuid.UUID
+    message_ids: Annotated[list[uuid.UUID], Field(min_length=1, max_length=60)]
     focus: Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)] | None = None
 
 

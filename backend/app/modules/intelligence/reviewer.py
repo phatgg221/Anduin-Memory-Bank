@@ -248,6 +248,7 @@ async def review(session: AsyncSession, context: ReviewContext, on_step: OnStep)
         "range": {
             "from_message_id": str(first.id),
             "to_message_id": str(last.id),
+            "message_ids": [str(m.id) for m in context.messages],
             "count": len(context.messages),
             "from_at": first.sent_at or first.at,
             "to_at": last.sent_at or last.at,

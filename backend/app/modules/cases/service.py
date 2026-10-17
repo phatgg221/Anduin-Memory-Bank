@@ -666,26 +666,25 @@ async def has_chunks(session: AsyncSession, case_id: uuid.UUID) -> bool:
 MAX_REVIEW_MESSAGES = 60
 
 
-async def review_range(session: AsyncSession, case_id: uuid.UUID, first: uuid.UUID, last: uuid.UUID) -> dict:
-    """The channel messages from `first` to `last` (either order), checked to belong to the case and be few enough."""
-    ends = list(
+async def review_selection(session: AsyncSession, case_id: uuid.UUID, message_ids: list[uuid.UUID]) -> dict:
+    """The picked channel messages' positions, checked to belong to the case and be few enough."""
+    wanted = set(message_ids)
+    if not wanted:
+        raise InvalidError("Pick at least one message to review")
+    if len(wanted) > MAX_REVIEW_MESSAGES:
+        raise InvalidError(f"Pick at most {MAX_REVIEW_MESSAGES} messages to review ({len(wanted)} selected)")
+    seqs = list(
         await session.scalars(
-            select(ChannelMessage.seq).where(ChannelMessage.case_id == case_id, ChannelMessage.id.in_([first, last]))
+            select(ChannelMessage.seq).where(ChannelMessage.case_id == case_id, ChannelMessage.id.in_(wanted))
         )
     )
-    if len(ends) != len({first, last}):
+    if len(seqs) != len(wanted):
         raise InvalidError("Pick messages from this case's channel")
-    low, high = min(ends), max(ends)
-    count = await session.scalar(
-        select(func.count()).where(ChannelMessage.case_id == case_id, ChannelMessage.seq.between(low, high))
-    )
-    if count > MAX_REVIEW_MESSAGES:
-        raise InvalidError(f"Pick at most {MAX_REVIEW_MESSAGES} messages to review ({count} selected)")
-    return {"from_seq": low, "to_seq": high, "count": count}
+    return {"seqs": sorted(seqs), "count": len(seqs)}
 
 
-async def messages_between(session: AsyncSession, case_id: uuid.UUID, low: int, high: int) -> list[ChannelMessage]:
-    query = _messages_query(case_id).where(ChannelMessage.seq.between(low, high)).order_by(ChannelMessage.seq)
+async def messages_at(session: AsyncSession, case_id: uuid.UUID, seqs: list[int]) -> list[ChannelMessage]:
+    query = _messages_query(case_id).where(ChannelMessage.seq.in_(seqs)).order_by(ChannelMessage.seq)
     return list(await session.scalars(query.limit(MAX_REVIEW_MESSAGES)))
 
 

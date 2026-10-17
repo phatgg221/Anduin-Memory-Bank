@@ -1,18 +1,22 @@
 import { ListChecks, X } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 interface ReviewBarProps {
   count: number;
   span: string;
-  complete: boolean;
   onSubmit: (focus: string) => void;
   onCancel: () => void;
 }
 
-export function ReviewBar({ count, span, complete, onSubmit, onCancel }: ReviewBarProps) {
+export function ReviewBar({ count, span, onSubmit, onCancel }: ReviewBarProps) {
   const [focus, setFocus] = useState("");
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onCancel();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     onSubmit(focus.trim());
@@ -24,15 +28,12 @@ export function ReviewBar({ count, span, complete, onSubmit, onCancel }: ReviewB
       aria-label="Review messages with Dejavu"
     >
       <ListChecks className="size-4 text-navy" aria-hidden />
-      <span className="text-sm text-ink">
-        {complete ? (
-          <>
-            Review <span className="font-medium">{count}</span> message{count === 1 ? "" : "s"}
-          </>
-        ) : (
-          "Now click the last message to review"
-        )}
-        <span className="text-muted-foreground"> · {span}</span>
+      <span className="flex flex-col text-sm text-ink">
+        <span>
+          <span className="font-medium">{count}</span> message{count === 1 ? "" : "s"} selected
+          <span className="text-muted-foreground"> · {span}</span>
+        </span>
+        <span className="text-xs text-muted-foreground">Click messages to add or remove · shift-click for a run</span>
       </span>
       <Input
         value={focus}
