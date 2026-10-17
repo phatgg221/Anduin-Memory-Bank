@@ -1,0 +1,65 @@
+# Production override for a single VM behind Caddy (see docs/DEPLOY.md):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Only Caddy publishes ports. Needs Docker Compose >= 2.24.4 for !reset / !override.
+
+services:
+  postgres:
+    ports: !reset []
+    restart: unless-stopped
+
+  minio:
+    ports: !reset []
+    restart: unless-stopped
+
+  mailpit:
+    profiles: ["dev-only"]
+
+  pgweb:
+    profiles: ["dev-only"]
+
+  backend:
+    build:
+      target: prod
+    environment:
+      MINIO_PUBLIC_ENDPOINT: files.${DEPLOY_DOMAIN:?set DEPLOY_DOMAIN in .env}
+      MINIO_PUBLIC_SECURE: "true"
+      REFRESH_COOKIE_SECURE: "true"
+    volumes: !reset []
+    ports: !reset []
+
+  frontend:
+    build:
+      target: prod
+      args:
+        BACKEND_INTERNAL_URL: http://backend:8000
+        NEXT_PUBLIC_REALTIME_HOST: rt.${DEPLOY_DOMAIN:?set DEPLOY_DOMAIN in .env}
+    environment:
+      NEXT_PUBLIC_REALTIME_HOST: rt.${DEPLOY_DOMAIN}
+    volumes: !reset []
+    ports: !reset []
+
+  realtime:
+    volumes: !reset []
+    ports: !reset []
+
+  caddy:
+    image: caddy:2.10
+    environment:
+      DEPLOY_DOMAIN: ${DEPLOY_DOMAIN:?set DEPLOY_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - minio
+      - realtime
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,17 @@
+# Used by docker-compose.prod.yml. DNS: dejavu., files. and rt.<DEPLOY_DOMAIN> all point at the VM.
+# Caddy obtains and renews the TLS certificates itself.
+
+dejavu.{$DEPLOY_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy frontend:3000
+}
+
+# Presigned MinIO links. SigV4 signs the Host header, so it must reach MinIO unchanged (reverse_proxy keeps it).
+files.{$DEPLOY_DOMAIN} {
+	reverse_proxy minio:9000
+}
+
+# PartyKit websockets (wss).
+rt.{$DEPLOY_DOMAIN} {
+	reverse_proxy realtime:1999
+}

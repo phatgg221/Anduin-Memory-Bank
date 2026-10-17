@@ -1,5 +1,6 @@
 # Secrets
 .env
+deploy/prod.env
 
 # Dependencies & builds
 node_modules/

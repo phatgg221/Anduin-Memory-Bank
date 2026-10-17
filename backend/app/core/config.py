@@ -1,6 +1,7 @@
 from typing import Literal
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,12 +12,26 @@ class Settings(BaseSettings):
 
     database_url: str
 
+    @field_validator("database_url")
+    @classmethod
+    def _asyncpg_url(cls, url: str) -> str:
+        # Hosted Postgres (Neon, Supabase) hands out libpq URLs; asyncpg takes `ssl` and rejects libpq-only params.
+        parts = urlsplit(url)
+        scheme = "postgresql+asyncpg" if parts.scheme in ("postgres", "postgresql") else parts.scheme
+        query = [
+            ("ssl" if key == "sslmode" else key, value)
+            for key, value in parse_qsl(parts.query)
+            if key != "channel_binding"
+        ]
+        return urlunsplit(parts._replace(scheme=scheme, query=urlencode(query)))
+
     minio_endpoint: str = "minio:9000"
     minio_public_endpoint: str = "localhost:9000"
     minio_access_key: str
     minio_secret_key: str
     minio_bucket: str = "memory-bank"
     minio_secure: bool = False
+    minio_public_secure: bool = False
     presign_ttl_seconds: int = 600
 
     llm_provider: Literal["gemini", "openrouter", "fake"] = "fake"

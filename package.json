@@ -13,6 +13,7 @@
     "test": "bun scripts/docker.ts test",
     "lint": "bun scripts/docker.ts lint",
     "reset": "bun scripts/docker.ts reset",
+    "deploy": "bun scripts/deploy.ts",
     "db:revision": "bun scripts/db.ts revision",
     "db:migrate": "bun scripts/db.ts migrate",
     "db:downgrade": "bun scripts/db.ts downgrade",

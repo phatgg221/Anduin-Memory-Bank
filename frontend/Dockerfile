@@ -22,6 +22,9 @@ COPY . .
 # Rewrites are resolved at build time: the backend URL must be known here.
 ARG BACKEND_INTERNAL_URL=http://backend:8000
 ENV BACKEND_INTERNAL_URL=$BACKEND_INTERNAL_URL
+# NEXT_PUBLIC_* is inlined into the client bundle at build time.
+ARG NEXT_PUBLIC_REALTIME_HOST=localhost:1999
+ENV NEXT_PUBLIC_REALTIME_HOST=$NEXT_PUBLIC_REALTIME_HOST
 RUN bun run build
 
 # Production: standalone server output only.

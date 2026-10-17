@@ -29,7 +29,7 @@ _probe = Minio(
 # Signs URLs for the browser. SigV4 signs the Host header, so this client must use the host the browser
 # will hit. With the region fixed, signing never touches the network (the public host isn't reachable from
 # inside the container).
-public_signer = Minio(settings.minio_public_endpoint, **_credentials)
+public_signer = Minio(settings.minio_public_endpoint, **{**_credentials, "secure": settings.minio_public_secure})
 
 
 def ensure_bucket() -> None:
