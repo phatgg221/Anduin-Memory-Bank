@@ -117,7 +117,7 @@ class Evidence:
     agent_ran: bool = False
 
     def known_codes(self) -> set[str]:
-        return set(self.vault) | set(self.details)
+        return set(self.vault) | set(self.details) | set(self.duplicates)
 
 
 WORDS = re.compile(r"[a-z0-9%$.]+")

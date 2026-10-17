@@ -261,3 +261,14 @@ def test_triage_asks_about_precedent_pitfalls_when_the_model_lists_none():
             "source_case_code": "CASE-2025-014",
         }
     ]
+
+
+def test_triage_summary_may_cite_a_duplicate_the_tool_returned():
+    from app.modules.intelligence.schemas import TriageReportDraft
+    from app.modules.intelligence.triage_agent import Evidence, guard_triage
+
+    evidence = Evidence()
+    evidence.duplicates["CASE-2026-048"] = {"case_code": "CASE-2026-048"}
+    draft = TriageReportDraft(summary="Duplicate of the open [CASE-2026-048].", risk_level="LOW")
+    _, warnings = guard_triage(draft, evidence, [])
+    assert not any("CASE-2026-048" in w for w in warnings)

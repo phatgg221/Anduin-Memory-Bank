@@ -114,7 +114,10 @@ export function useSendThreadMessage(caseId: string) {
               members: [...view.members, { user: author, role: "MEMBER" as const, joined_at: new Date().toISOString() }],
             };
       }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all }),
+    onSettled: (_message, _error, { input }) => {
+      if (input.attached_artifact_id) queryClient.invalidateQueries({ queryKey: key });
+      return queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all });
+    },
   });
 }
 
