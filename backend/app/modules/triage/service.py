@@ -25,6 +25,7 @@ from app.modules.intelligence import (
     indexer,
     llm_client,
     ocr,
+    reuse_brief,
     reviewer,
     summarizer,
     triage_agent,
@@ -188,6 +189,7 @@ async def ask_copilot(
     question: str,
     reply_in_channel: bool = False,
     review: dict | None = None,
+    reuse: dict | None = None,
 ) -> CaseJob:
     """Stores the question (idempotent on its id) and queues the answer job.
 
@@ -211,18 +213,30 @@ async def ask_copilot(
         except cases.InvalidError as error:
             raise InvalidError(str(error)) from None
         picked["focus"] = (review.get("focus") or "").strip() or None
+    reused = None
+    if reuse:
+        if not reply_in_channel:
+            raise InvalidError("Reuse briefs are posted in the case channel")
+        if case.status != "OPEN":
+            raise ConflictError("This case is committed to memory; its channel is read-only")
+        source = await cases.reusable_source(session, uuid.UUID(reuse["artifact_id"]))
+        if source is None or source[0].case_id == case_id:
+            raise InvalidError("Pick a file from a past case")
+        reused = {"artifact_id": str(source[0].id)}
     if reply_in_channel:
-        await _check_channel_limits(session, user, case_id)
+        await _check_channel_limits(session, user, case_id, cooldown=reused is None)
         question = MENTION.sub("", question).strip() or "Summarise where this case stands and what to do next."
     elif not await session.get(CopilotMessage, message_id):
         await cases.add_copilot_message(session, case_id, "user", question, message_id=message_id, user_id=user.id)
     job_input = {"question": question, "message_id": str(message_id), "reply_in_channel": reply_in_channel}
     if picked:
         job_input["review"] = picked
+    if reused:
+        job_input["reuse"] = reused
     return await enqueue(session, job_id, case_id, "COPILOT", user, job_input)
 
 
-async def _check_channel_limits(session: AsyncSession, user: User, case_id: uuid.UUID) -> None:
+async def _check_channel_limits(session: AsyncSession, user: User, case_id: uuid.UUID, cooldown: bool = True) -> None:
     """@Dejavu in a channel: one question per person every CHANNEL_COOLDOWN_SECONDS, and a short queue per case."""
     in_channel = CaseJob.input["reply_in_channel"].as_boolean().is_(True)
     last = await session.scalar(
@@ -230,7 +244,7 @@ async def _check_channel_limits(session: AsyncSession, user: User, case_id: uuid
             CaseJob.kind == "COPILOT", CaseJob.requested_by_user_id == user.id, in_channel
         )
     )
-    if last is not None:
+    if cooldown and last is not None:
         waited = (datetime.now(UTC) - last).total_seconds()
         if waited < CHANNEL_COOLDOWN_SECONDS:
             wait = math.ceil(CHANNEL_COOLDOWN_SECONDS - waited)
@@ -614,11 +628,78 @@ async def _review(job_id: uuid.UUID, case_id: uuid.UUID, picked: dict) -> dict[s
     }
 
 
+async def _reuse(job_id: uuid.UUID, case_id: uuid.UUID, reused: dict) -> dict[str, Any]:
+    """A brief on a file reused from a past case, posted in the channel as a structured message."""
+    await heartbeat(job_id, reuse_brief.REUSE_STEPS[0])
+    async with SessionLocal() as session:
+        case = await session.get_one(CaseRecord, case_id)
+        if not await cases.has_chunks(session, case_id):
+            texts = await cases.case_files_text(session, case_id)
+            await _index_intake(session, case, _incoming(case, texts))
+        found = await cases.reusable_source(session, uuid.UUID(reused["artifact_id"]))
+        if found is None:
+            raise cases.InvalidError("The reused file is gone")
+        artifact, past = found
+        lead = past.lead_resolver
+        alumni = " [ALUMNI, has left]" if lead and not lead.is_active else ""
+        match = next((p for p in await cases.precedents_for(session, case) if p["case_code"] == past.case_code), None)
+        delta = [d for d in (match or {}).get("delta_items", []) if d["source_artifact_id"] == str(artifact.id)]
+        pitfalls = [p["warning"] for p in past.pitfalls or []]
+        source_block = "\n".join(
+            [
+                f"[{past.case_code}] {past.title} · customer {past.client_name or 'unknown'}",
+                f"Lead: {lead.name if lead else 'unknown'}{alumni}",
+                f"Match with the current case: {match['similarity_score']}%" if match else "Not a top match.",
+                f"Summary: {past.summary or ''}",
+                f"How it went: {past.how_it_went or ''}",
+                "Pitfalls: " + "; ".join(pitfalls[:4]),
+                *(
+                    f"Delta for this file: {d['status']} · {d['category']} · then: {d['past_approach']} · now: "
+                    f"{d['current_requirement']} · do: {d['action_recommendation']}"
+                    for d in delta
+                ),
+            ]
+        )
+        context = reuse_brief.ReuseContext(
+            case_id=case_id,
+            case_block=(
+                f"{case.case_code} · {case.title}\nCustomer: {case.client_name} · Fund: {case.fund_name}\n"
+                f"Severity: {case.severity} · Tags: {case.context_tags}\n{case.initial_request_brief}"
+            ),
+            file_id=artifact.id,
+            file_name=artifact.file_name,
+            file_type=artifact.file_type,
+            file_text=artifact.preview_text or artifact.description or "",
+            source={
+                "case_id": str(past.id),
+                "case_code": past.case_code,
+                "case_title": past.title,
+                "lead_name": lead.name if lead else None,
+                "lead_alumni": bool(lead and not lead.is_active),
+                "first_pitfall": pitfalls[0] if pitfalls else None,
+                "block": source_block,
+            },
+        )
+        payload = await reuse_brief.brief(session, context, lambda step: heartbeat(job_id, step))
+        posted = await cases.post_agent_message(session, case_id, job_id, reuse_brief.brief_text(payload), payload)
+        out = ThreadMessageOut.model_validate(posted).model_dump(mode="json")
+        await realtime.publish(realtime.thread_room(case_id), {"type": "message.created", "message": out})
+    return {
+        "channel_message_id": str(posted.id),
+        "verdict": payload["verdict"],
+        "sources_checked": payload["sources_checked"],
+        "guard_warnings": payload["guard_warnings"],
+        "provider": llm_client.provider_label(),
+    }
+
+
 async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
     async with SessionLocal() as session:
-        picked = ((await session.get_one(CaseJob, job_id)).input or {}).get("review")
-    if picked:
-        return await _review(job_id, case_id, picked)
+        job_input = (await session.get_one(CaseJob, job_id)).input or {}
+    if job_input.get("review"):
+        return await _review(job_id, case_id, job_input["review"])
+    if job_input.get("reuse"):
+        return await _reuse(job_id, case_id, job_input["reuse"])
     await heartbeat(job_id, copilot.COPILOT_STEPS[0])
     async with SessionLocal() as session:
         job = await session.get_one(CaseJob, job_id)

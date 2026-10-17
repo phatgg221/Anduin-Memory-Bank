@@ -286,3 +286,32 @@ class ReviewDraft(BaseModel):
         description="Two sentences: is the proposed solution sound, and the single most important thing to change."
     )
     findings: Annotated[list[ReviewFindingDraft], _clip(8)] = Field(default_factory=list, description="At most 8.")
+
+
+class ReuseChangeDraft(BaseModel):
+    change: Annotated[ReviewText, _clip(300)] = Field(description="What to change in the file for this case.")
+    why: Annotated[ReviewText, _clip(500)] = Field(description="Why: what differs in this case.")
+    evidence: Annotated[list[str], _clip(3)] = Field(default_factory=list, description='Evidence tags, e.g. ["E2"].')
+
+
+class ReuseWarningDraft(BaseModel):
+    warning: Annotated[ReviewText, _clip(500)]
+    evidence: Annotated[list[str], _clip(3)] = Field(default_factory=list)
+
+
+def _reuse_verdict(value):
+    return value.strip().upper().replace(" ", "_") if isinstance(value, str) else value
+
+
+class ReuseBriefDraft(BaseModel):
+    verdict: Annotated[Literal["READY", "ADAPT", "CAUTION"], BeforeValidator(_reuse_verdict)] = Field(
+        description="READY: usable as is. ADAPT: usable after the listed changes. CAUTION: only partly fits."
+    )
+    what_it_is: Annotated[ReviewText, _clip(500)] = Field(
+        description="What the file is and what problem it solved in its case, in 1-2 sentences."
+    )
+    fit: Annotated[ReviewText, _clip(700)] = Field(
+        description="Why it is effective for the current case: which of its requirements it covers, in 2-3 sentences."
+    )
+    changes: Annotated[list[ReuseChangeDraft], _clip(5)] = Field(default_factory=list, description="At most 5.")
+    watch_outs: Annotated[list[ReuseWarningDraft], _clip(3)] = Field(default_factory=list, description="At most 3.")

@@ -638,6 +638,7 @@ async def nearest_chunks(
     *,
     resolved_only: bool = False,
     case_id: uuid.UUID | None = None,
+    artifact_id: uuid.UUID | None = None,
 ) -> list[tuple[KnowledgeChunk, CaseRecord, float]]:
     """Cosine-nearest chunks (HNSW index) with their case, in one query. Returns (chunk, case, distance)."""
     distance = KnowledgeChunk.embedding.cosine_distance(vector).label("distance")
@@ -654,7 +655,22 @@ async def nearest_chunks(
         query = query.where(CaseRecord.status == "RESOLVED")
     if case_id:
         query = query.where(KnowledgeChunk.case_id == case_id)
+    if artifact_id:
+        query = query.where(KnowledgeChunk.artifact_id == artifact_id)
     return [(chunk, case, float(dist)) for chunk, case, dist in await session.execute(query)]
+
+
+async def reusable_source(session: AsyncSession, artifact_id: uuid.UUID) -> tuple[CaseArtifact, CaseRecord] | None:
+    """A file and the case it came from (with its lead), for a reuse brief."""
+    row = (
+        await session.execute(
+            select(CaseArtifact, CaseRecord)
+            .join(CaseRecord, CaseRecord.id == CaseArtifact.case_id)
+            .options(selectinload(CaseRecord.lead_resolver))
+            .where(CaseArtifact.id == artifact_id)
+        )
+    ).first()
+    return (row[0], row[1]) if row else None
 
 
 async def has_chunks(session: AsyncSession, case_id: uuid.UUID) -> bool:

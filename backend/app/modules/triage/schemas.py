@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, computed_field
 
+from app.modules.intelligence.reuse_brief import REUSE_STEPS
 from app.modules.intelligence.reviewer import REVIEW_STEPS
 from app.modules.intelligence.schemas import CaseMemoryDraft
 from app.modules.triage.service import STEPS
@@ -45,9 +46,14 @@ class JobOut(BaseModel):
 
     @computed_field
     @property
+    def is_reuse(self) -> bool:
+        return bool((self.input or {}).get("reuse"))
+
+    @computed_field
+    @property
     def steps(self) -> list[str]:
         """Every step of this kind, so the UI shows progress as a checklist, not a spinner."""
-        return list(REVIEW_STEPS if self.is_review else STEPS[self.kind])
+        return list(REVIEW_STEPS if self.is_review else REUSE_STEPS if self.is_reuse else STEPS[self.kind])
 
 
 class CaseJobsOut(BaseModel):
@@ -66,6 +72,11 @@ class CopilotAskIn(BaseModel):
     question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=4000)]
     reply_in_channel: bool = False  # asked with @Dejavu: message_id is the channel message, the answer goes there
     review: "ReviewRangeIn | None" = None
+    reuse: "ReuseIn | None" = None
+
+
+class ReuseIn(BaseModel):
+    artifact_id: uuid.UUID
 
 
 class ReviewRangeIn(BaseModel):

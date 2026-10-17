@@ -124,3 +124,50 @@ def test_review_range_must_be_in_this_channel(client, sql):
     body["reply_in_channel"] = False
     body["review"]["message_ids"] = [mine["id"]]
     assert client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=elena).status_code == 422
+
+
+def _reuse_ask(client, headers, file_id: str):
+    post = {"id": str(uuid.uuid4()), "content": "Reusing the file.", "attached_artifact_id": file_id}
+    client.post(f"/api/cases/{APOLLO}/thread/messages", json=post, headers=headers)
+    body = {
+        "message_id": post["id"],
+        "job_id": str(uuid.uuid4()),
+        "question": "Brief on reusing the file",
+        "reply_in_channel": True,
+        "reuse": {"artifact_id": file_id},
+    }
+    return client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=headers), body["job_id"]
+
+
+def test_reusing_a_past_file_posts_a_brief(client, sql):
+    from tests.test_workspace import SOVEREIGN_FILE
+
+    elena, _ = signed_in(client, sql)
+    with_indexed_precedent(client, sql, elena)
+    asked, job_id = _reuse_ask(client, elena, SOVEREIGN_FILE)
+    assert asked.status_code == 202 and asked.json()["is_reuse"]
+    assert asked.json()["steps"][0] == "Opening the file and its case"
+    again, _ = _reuse_ask(client, elena, SOVEREIGN_FILE)
+    assert again.status_code == 202  # a button, not chat: no per-person cooldown
+
+    run_job(client, job_id)
+    reply = next(
+        m for m in client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["messages"] if m["id"] == job_id
+    )
+    brief = reply["agent_payload"]
+    assert brief["kind"] == "reuse" and brief["verdict"] in ("READY", "ADAPT", "CAUTION")
+    assert (
+        brief["file"]["case_code"] == "CASE-2025-052"
+        and brief["file"]["file_name"] == "mfn_tier_eligibility_matrix.csv"
+    )
+    assert brief["sources_checked"] > 0 and brief["what_it_is"] and brief["fit"]
+    assert reply["content"].startswith("Reuse brief · mfn_tier_eligibility_matrix.csv from [CASE-2025-052]")
+
+
+def test_reuse_brief_needs_a_file_from_another_case(client, sql):
+    elena, _ = signed_in(client, sql)
+    sql(f"""INSERT INTO case_artifacts (id, case_id, file_name, file_type, content_type, size_bytes, minio_object_key)
+            VALUES ('00000000-0000-0000-0000-0000000000f7', '{APOLLO}', 'own.csv', 'MATRIX_CSV', 'text/csv', 1, 'k')""")
+    own, _ = _reuse_ask(client, elena, "00000000-0000-0000-0000-0000000000f7")
+    missing, _ = _reuse_ask(client, elena, str(uuid.uuid4()))
+    assert own.status_code == 422 and missing.status_code == 422

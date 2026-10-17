@@ -94,6 +94,7 @@ async def ask_copilot(case_id: uuid.UUID, data: CopilotAskIn, user: CurrentUser,
             data.question,
             data.reply_in_channel,
             data.review.model_dump(mode="json") if data.review else None,
+            data.reuse.model_dump(mode="json") if data.reuse else None,
         )
     except (service.NotFoundError, service.ForbiddenError, service.ConflictError, service.InvalidError) as error:
         raise _http(error) from None

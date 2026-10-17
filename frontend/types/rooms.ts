@@ -28,7 +28,7 @@ export interface ChatMessage {
   is_milestone: boolean;
   is_agent?: boolean;
   mentioned_user_ids?: string[];
-  agent_payload?: ReviewPayload | null;
+  agent_payload?: ReviewPayload | ReusePayload | null;
   created_at: string;
   /** Client-only: sent optimistically, not confirmed by the server yet. */
   pending?: boolean;
@@ -55,6 +55,27 @@ export interface ReviewFinding {
   comment: string;
   message_ids: string[];
   citations: ReviewCitation[];
+}
+
+export interface ReusePayload {
+  kind: "reuse";
+  file: {
+    artifact_id: string;
+    file_name: string;
+    file_type: string;
+    case_id: string;
+    case_code: string;
+    case_title: string;
+    lead_name: string | null;
+    lead_alumni: boolean;
+  };
+  verdict: "READY" | "ADAPT" | "CAUTION";
+  what_it_is: string;
+  fit: string;
+  changes: { change: string; why: string; citations: ReviewCitation[] }[];
+  watch_outs: { warning: string; citations: ReviewCitation[] }[];
+  sources_checked: number;
+  guard_warnings: string[];
 }
 
 export interface ReviewPayload {

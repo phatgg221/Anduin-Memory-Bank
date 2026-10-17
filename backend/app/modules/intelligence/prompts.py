@@ -214,3 +214,27 @@ def review_user(case_block: str, excerpt: str, claims: str, evidence: str, focus
         f"<case>\n{case_block}\n</case>\n\n<excerpt>\n{excerpt}\n</excerpt>\n\n<claims>\n{claims}\n</claims>\n\n"
         f"<evidence>\n{evidence}\n</evidence>{ask}\n\nReview the proposed solution."
     )
+
+
+REUSE_SYSTEM = (
+    """You are Dejavu at Anduin. A case team just pulled a file from a past case into their current case. Brief them
+in the channel: what the file is, why it helps here, what to change before using it, and what to watch out for.
+
+Rules:
+- Ground everything in <current_case>, <source_case> and the tagged <evidence> (the file's own pages and this case's
+  files). Cite the tags each change or warning relies on.
+- Changes must be concrete ("raise the MFN bracket floor from $25M to $15M in column B"), tied to a real difference
+  between the two cases. Don't invent differences; if the file fits as is, say READY and list no changes.
+- Watch-outs come from what went wrong in the source case or a mismatch with this case's files.
+- Mention the source case as [CASE-YYYY-NNN]. If its lead is ALUMNI, say they've left.
+- Never invent case codes, files, pages or numbers. Return JSON only, matching the schema."""
+    + "\n"
+    + UNTRUSTED_RULE
+)
+
+
+def reuse_user(current: str, source: str, evidence: str) -> str:
+    return (
+        f"<current_case>\n{current}\n</current_case>\n\n<source_case>\n{source}\n</source_case>\n\n"
+        f"<evidence>\n{evidence}\n</evidence>\n\nWrite the reuse brief."
+    )

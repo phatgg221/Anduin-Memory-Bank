@@ -394,7 +394,14 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     const ahead = running + waiting.indexOf(job);
     agentStatus[job.asked_message_id!] =
       job.status === "PROCESSING"
-        ? { state: "answering", note: job.is_review ? `Dejavu is reviewing · ${job.step ?? "starting"}…` : "Dejavu is answering…" }
+        ? {
+            state: "answering",
+            note: job.is_review
+              ? `Dejavu is reviewing · ${job.step ?? "starting"}…`
+              : job.is_reuse
+                ? `Dejavu is writing a reuse brief · ${job.step ?? "starting"}…`
+                : "Dejavu is answering…",
+          }
         : job.status === "QUEUED"
           ? {
               state: "queued",
@@ -782,13 +789,23 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
               canUse={canAct}
               onPreview={handleOpenArtifact}
               onUse={(file) => {
-                sendThread.mutate(
-                  newMessage(
-                    `Reusing ${file.name} from ${file.caseCode}.`,
-                    false,
-                    file.id,
-                  ),
-                );
+                const message = newMessage(`Reusing ${file.name} from ${file.caseCode}.`, false, file.id);
+                sendThread.mutate(message, {
+                  onSuccess: () =>
+                    askInChannel.mutate(
+                      {
+                        message_id: message.input.id,
+                        job_id: crypto.randomUUID(),
+                        question: `Brief on reusing ${file.name}`,
+                        reply_in_channel: true,
+                        reuse: { artifact_id: file.id },
+                      },
+                      {
+                        onError: (error) =>
+                          setRefused((all) => ({ ...all, [message.input.id]: `No reuse brief: ${error.message}` })),
+                      },
+                    ),
+                });
                 setTab("channel");
               }}
             />

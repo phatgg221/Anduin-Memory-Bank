@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { ChatMessage, ReviewCitation } from "@/types/rooms";
 import { Avatar } from "./Avatar";
+import { ReuseCard } from "./ReuseCard";
 import { ReviewCard } from "./ReviewCard";
 
 export interface AgentStatus {
@@ -143,6 +144,7 @@ export function MessageThread({
         const mine = message.author?.id === currentUserId;
         const agent = Boolean(message.is_agent);
         const review = message.agent_payload?.kind === "review" ? message.agent_payload : null;
+        const reuse = message.agent_payload?.kind === "reuse" ? message.agent_payload : null;
         const selected = selectedIds.includes(message.id);
         const selectable = Boolean(onSelect) && !message.pending;
         return (
@@ -257,11 +259,18 @@ export function MessageThread({
                       "max-w-[80%] border border-navy/20 bg-surface-2 px-3 py-2",
                     agent &&
                       "max-w-[85%] border-l-2 border-navy bg-surface-2 px-3 py-2",
-                    review && "w-full max-w-[min(100%,48rem)]",
+                    (review || reuse) && "w-full max-w-[min(100%,48rem)]",
                   )}
                 >
                   {review && onOpenCitation && onJump ? (
                     <ReviewCard review={review} onOpenCitation={onOpenCitation} onJump={onJump} />
+                  ) : reuse && onOpenCitation ? (
+                    <ReuseCard
+                      brief={reuse}
+                      onOpenCitation={onOpenCitation}
+                      onOpenFile={onOpenArtifact}
+                      onCaseClick={onCaseClick}
+                    />
                   ) : (
                     <Content
                       text={message.content}
