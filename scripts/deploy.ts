@@ -103,13 +103,13 @@ async function backend(env: Record<string, string>): Promise<void> {
 
 async function seed(env: Record<string, string>): Promise<void> {
   requireKeys(env, ["DATABASE_URL", "MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "JWT_SECRET"]);
-  // The local dev backend image, pointed at the production database and bucket.
+  // The local dev backend image, pointed at the production database and bucket. Cloud Run's worker embeds the cases.
   await must([
     "docker", "run", "--rm",
     "--env-file", ENV_PATH,
     "-v", `${join(ROOT, "backend")}:/app`,
     "anduin-memory-bank-backend",
-    "sh", "-c", "alembic upgrade head && python -m app.seed && python -m app.reindex",
+    "sh", "-c", "alembic upgrade head && python -m app.seed",
   ]);
 }
 

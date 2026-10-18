@@ -40,7 +40,7 @@ R2 values (`MINIO_*`) and the LLM keys. Neon's `postgresql://…?sslmode=require
 ```bash
 bun run deploy realtime   # prints the PartyKit host → put it in REALTIME_HOST
 bun run deploy backend    # builds backend/Dockerfile on Cloud Build, deploys dejavu-api, prints its URL
-bun run deploy seed       # migrations + demo data + embeddings into Neon and R2 (uses the local dev image)
+bun run deploy seed       # demo data + files into Neon and R2; Cloud Run's worker then embeds the cases
 bun run deploy frontend   # links the Vercel project (first run), sets its env vars, deploys to production
 ```
 

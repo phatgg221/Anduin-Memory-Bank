@@ -27,9 +27,9 @@ export function ReusableKit({ precedents, ownFiles, usedFileIds, canUse, onPrevi
   );
   const files = precedents
     .filter((p) => p.similarity_score >= MATCH_FLOOR)
-    .flatMap((p) =>
+    .flatMap((p, rank) =>
       p.artifacts
-        .filter((a) => a.is_reusable)
+        .filter((a) => a.is_reusable && (cited.has(a.id) || rank === 0))
         .map((a) => ({ file: a, precedent: p, weak: !cited.has(a.id) && p.similarity_score < STRONG_MATCH })),
     )
     .sort((a, b) => Number(a.weak) - Number(b.weak));

@@ -84,6 +84,10 @@ export function IntakePanel({
   const candidates = people.filter((p) => p.is_active && p.id !== currentUserId && !memberIds.includes(p.id));
 
   const set = <K extends keyof typeof intake>(key: K, value: (typeof intake)[K]) => setIntake((i) => ({ ...i, [key]: value }));
+  const describe = <K extends "client_name" | "fund_name" | "initial_request_brief">(key: K, value: (typeof intake)[K]) => {
+    setIntake((i) => ({ ...i, [key]: value, title: "", context_tags: {} }));
+    setScenarioDepartment(null);
+  };
   const ready = intake.client_name.trim().length >= 2 && intake.initial_request_brief.trim().length >= 10;
 
   const addFiles = (list: FileList | null) => {
@@ -139,7 +143,7 @@ export function IntakePanel({
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="intake-client" className="micro-label text-muted-foreground">Customer</Label>
-          <Input id="intake-client" className="h-8 bg-background text-xs" value={intake.client_name} placeholder="Apollo Global" onChange={(e) => set("client_name", e.target.value)} />
+          <Input id="intake-client" className="h-8 bg-background text-xs" value={intake.client_name} placeholder="Apollo Global" onChange={(e) => describe("client_name", e.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="intake-fund" className="micro-label text-muted-foreground">Project / fund</Label>
@@ -149,7 +153,7 @@ export function IntakePanel({
             className="h-8 bg-background text-xs"
             value={intake.fund_name ?? ""}
             placeholder="Crossover Feeder II"
-            onChange={(e) => set("fund_name", e.target.value || null)}
+            onChange={(e) => describe("fund_name", e.target.value || null)}
           />
           <datalist id="intake-fund-options">
             {fundSuggestions.map((fund) => (
@@ -186,7 +190,7 @@ export function IntakePanel({
           id="intake-brief"
           rows={6}
           value={intake.initial_request_brief}
-          onChange={(e) => set("initial_request_brief", e.target.value)}
+          onChange={(e) => describe("initial_request_brief", e.target.value)}
           placeholder="Paste the client email, ticket or counsel request…"
           className="resize-y bg-background font-mono text-xs"
           maxLength={4000}
