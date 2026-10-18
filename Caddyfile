@@ -11,7 +11,7 @@ files.{$DEPLOY_DOMAIN} {
 	reverse_proxy minio:9000
 }
 
-# PartyKit websockets (wss).
+# PartyServer websockets (wss).
 rt.{$DEPLOY_DOMAIN} {
 	reverse_proxy realtime:1999
 }

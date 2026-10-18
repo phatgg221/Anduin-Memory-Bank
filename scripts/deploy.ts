@@ -9,8 +9,10 @@ import { join } from "node:path";
 import { ROOT, run } from "./docker";
 
 const ENV_PATH = join(ROOT, "deploy", "prod.env");
-const SERVICE = "dejavu-api";
-const DEPLOY_ONLY = new Set(["GCP_PROJECT", "GCP_REGION", "REALTIME_HOST", "SEED_OPERATOR_EMAIL", "SEED_DEMO_PASSWORD"]);
+const API = "dejavu-api";
+const DEPLOY_ONLY = new Set([
+  "GCP_PROJECT", "GCP_REGION", "CLOUDFLARE_ACCOUNT_ID", "REALTIME_HOST", "SEED_OPERATOR_EMAIL", "SEED_DEMO_PASSWORD",
+]);
 
 function readProdEnv(): Record<string, string> {
   if (!existsSync(ENV_PATH)) {
@@ -35,13 +37,43 @@ function requireKeys(env: Record<string, string>, keys: string[]): void {
 
 async function must(cmd: string[], opts: { cwd?: string } = {}): Promise<void> {
   const code = await run(cmd, opts);
-  if (code !== 0) process.exit(code);
+  if (code !== 0) throw new Error(`${cmd.slice(0, 3).join(" ")} exited with ${code}`);
 }
 
-async function backendUrl(env: Record<string, string>): Promise<string> {
+async function serviceUrl(env: Record<string, string>, service: string): Promise<string> {
   const format = "--format=value(status.url)";
-  const out = await Bun.$`gcloud run services describe ${SERVICE} --project ${env.GCP_PROJECT} --region ${env.GCP_REGION} ${format}`.text();
-  return out.trim();
+  const out = await Bun.$`gcloud run services describe ${service} --project ${env.GCP_PROJECT} --region ${env.GCP_REGION} ${format}`
+    .quiet()
+    .nothrow();
+  const url = out.text().trim();
+  if (out.exitCode !== 0 || !url) throw new Error(`Cloud Run service ${service} not found: run \`bun run deploy backend\` first.`);
+  return url;
+}
+
+async function deployService(
+  env: Record<string, string>,
+  service: string,
+  source: string,
+  vars: Record<string, string>,
+  flags: string[],
+): Promise<string> {
+  const varsFile = join(tmpdir(), `dejavu-${service}-${process.pid}.yaml`);
+  writeFileSync(varsFile, Object.entries(vars).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n"), { mode: 0o600 });
+  try {
+    await must([
+      "gcloud", "run", "deploy", service,
+      "--source", join(ROOT, source),
+      "--project", env.GCP_PROJECT,
+      "--region", env.GCP_REGION,
+      "--allow-unauthenticated",
+      "--env-vars-file", varsFile,
+      "--quiet",
+      ...flags,
+    ]);
+  } finally {
+    rmSync(varsFile, { force: true });
+  }
+  return serviceUrl(env, service);
 }
 
 function init(): void {
@@ -60,13 +92,37 @@ function init(): void {
   console.log("Fill in the rest of deploy/prod.env, then: bun run deploy realtime");
 }
 
+function setProdEnv(key: string, value: string): void {
+  const text = readFileSync(ENV_PATH, "utf8");
+  const line = `${key}=${value}`;
+  const pattern = new RegExp(`^${key}=.*$`, "m");
+  writeFileSync(ENV_PATH, pattern.test(text) ? text.replace(pattern, line) : `${text.replace(/\n*$/, "\n")}${line}\n`);
+}
+
 async function realtime(env: Record<string, string>): Promise<void> {
-  requireKeys(env, ["JWT_SECRET", "REALTIME_SECRET"]);
-  await must(
-    ["bunx", "partykit", "deploy", "--var", `JWT_SECRET=${env.JWT_SECRET}`, "--var", `REALTIME_SECRET=${env.REALTIME_SECRET}`],
-    { cwd: join(ROOT, "realtime") },
-  );
-  console.log("\nPut the host it printed (without https://) into REALTIME_HOST in deploy/prod.env.");
+  requireKeys(env, ["CLOUDFLARE_ACCOUNT_ID", "JWT_SECRET", "REALTIME_SECRET"]);
+  const secretsFile = join(tmpdir(), `dejavu-realtime-${process.pid}.json`);
+  writeFileSync(secretsFile, JSON.stringify({ JWT_SECRET: env.JWT_SECRET, REALTIME_SECRET: env.REALTIME_SECRET }), { mode: 0o600 });
+  let output = "";
+  try {
+    const proc = Bun.spawn(["bunx", "wrangler", "deploy", "--secrets-file", secretsFile], {
+      cwd: join(ROOT, "realtime"),
+      env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID },
+      stdio: ["inherit", "pipe", "inherit"],
+    });
+    for await (const chunk of proc.stdout) {
+      const text = new TextDecoder().decode(chunk);
+      output += text;
+      process.stdout.write(text);
+    }
+    if ((await proc.exited) !== 0) throw new Error("wrangler deploy failed");
+  } finally {
+    rmSync(secretsFile, { force: true });
+  }
+  const host = output.match(/https:\/\/([\w.-]+\.workers\.dev)/)?.[1];
+  if (!host) throw new Error("Couldn't find the workers.dev URL in wrangler's output: set REALTIME_HOST in deploy/prod.env by hand.");
+  setProdEnv("REALTIME_HOST", host);
+  console.log(`\nRealtime: wss://${host}  (saved as REALTIME_HOST)  →  next: bun run deploy backend`);
 }
 
 async function backend(env: Record<string, string>): Promise<void> {
@@ -75,29 +131,10 @@ async function backend(env: Record<string, string>): Promise<void> {
   for (const [key, value] of Object.entries(env)) {
     if (!DEPLOY_ONLY.has(key) && value) vars[key] = value;
   }
-  const varsFile = join(tmpdir(), `dejavu-cloudrun-${process.pid}.yaml`);
-  writeFileSync(varsFile, Object.entries(vars).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n"), { mode: 0o600 });
-  try {
-    await must([
-      "gcloud", "run", "deploy", SERVICE,
-      "--source", join(ROOT, "backend"),
-      "--project", env.GCP_PROJECT,
-      "--region", env.GCP_REGION,
-      "--port", "8000",
-      "--allow-unauthenticated",
-      // The job worker and sweeper live in the API process: keep one instance with CPU always on.
-      "--min-instances", "1",
-      "--max-instances", "1",
-      "--no-cpu-throttling",
-      "--cpu", "1",
-      "--memory", "1Gi",
-      "--env-vars-file", varsFile,
-      "--quiet",
-    ]);
-  } finally {
-    rmSync(varsFile, { force: true });
-  }
-  const url = await backendUrl(env);
+  // The job worker and sweeper live in the API process: keep one instance with CPU always on.
+  const url = await deployService(env, API, "backend", vars, [
+    "--port", "8000", "--min-instances", "1", "--max-instances", "1", "--no-cpu-throttling", "--cpu", "1", "--memory", "1Gi",
+  ]);
   console.log(`\nBackend: ${url}  →  check ${url}/api/health, then: bun run deploy seed`);
 }
 
@@ -117,7 +154,11 @@ async function frontend(env: Record<string, string>): Promise<void> {
   requireKeys(env, ["GCP_PROJECT", "GCP_REGION", "REALTIME_HOST", "JWT_SECRET"]);
   const cwd = join(ROOT, "frontend");
   if (!existsSync(join(cwd, ".vercel", "project.json"))) await must(["vercel", "link"], { cwd });
-  const vars = { BACKEND_INTERNAL_URL: await backendUrl(env), NEXT_PUBLIC_REALTIME_HOST: env.REALTIME_HOST, JWT_SECRET: env.JWT_SECRET };
+  const vars = {
+    BACKEND_INTERNAL_URL: await serviceUrl(env, API),
+    NEXT_PUBLIC_REALTIME_HOST: env.REALTIME_HOST,
+    JWT_SECRET: env.JWT_SECRET,
+  };
   for (const [key, value] of Object.entries(vars)) {
     await Bun.$`vercel env rm ${key} production --yes`.cwd(cwd).quiet().nothrow();
     await Bun.$`vercel env add ${key} production < ${new Response(value)}`.cwd(cwd).quiet();
@@ -127,6 +168,10 @@ async function frontend(env: Record<string, string>): Promise<void> {
 }
 
 const [command] = process.argv.slice(2);
+process.on("unhandledRejection", (error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});
 switch (command) {
   case "init":
     init();

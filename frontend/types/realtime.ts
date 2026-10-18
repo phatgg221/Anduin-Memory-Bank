@@ -1,4 +1,4 @@
-// Mirrors realtime/party/protocol.ts (the PartyKit war-room protocol).
+// Mirrors realtime/party/protocol.ts (the PartyServer war-room protocol).
 import type { RoomMessage } from "./rooms";
 
 export interface Presence {

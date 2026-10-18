@@ -1,4 +1,4 @@
-"""Publish war-room events to PartyKit (realtime/), one PartyKit room per department.
+"""Publish war-room events to PartyServer (realtime/), one PartyServer room per department.
 
 Best effort by design: the database is the source of truth and clients still poll as a fallback, so a realtime
 outage only delays updates. Publish after the write has committed, never before.
@@ -29,7 +29,7 @@ async def publish(room_id: str, event: dict[str, Any]) -> None:
 
 
 def thread_room(case_id: uuid.UUID) -> str:
-    """PartyKit room id of a case thread (department rooms use the department id)."""
+    """PartyServer room id of a case thread (department rooms use the department id)."""
     return f"case-{case_id}"
 
 

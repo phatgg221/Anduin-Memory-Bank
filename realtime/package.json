@@ -3,15 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "partykit dev",
-    "typecheck": "tsc --noEmit"
+    "dev": "wrangler dev",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "jose": "^6.2.12",
-    "partykit": "0.0.115"
+    "partyserver": "^0.5.10"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261015.1",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wrangler": "^4.151.1"
   }
 }

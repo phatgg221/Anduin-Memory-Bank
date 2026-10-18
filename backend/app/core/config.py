@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     job_stale_after_seconds: int = 120
     sweeper_interval_seconds: int = 30
 
-    # PartyKit realtime service: the API POSTs persisted war-room events to it. Unset = realtime off (tests).
+    # PartyServer realtime service: the API POSTs persisted war-room events to it. Unset = realtime off (tests).
     realtime_url: str | None = None
     realtime_secret: str = ""
 

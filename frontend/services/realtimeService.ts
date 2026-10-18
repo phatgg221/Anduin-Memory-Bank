@@ -2,7 +2,7 @@ import PartySocket from "partysocket";
 import { roomsService } from "@/services/roomsService";
 import type { Presence, ServerEvent, SocketStatus } from "@/types/realtime";
 
-// Browser → PartyKit directly (websockets don't go through the Next /api rewrite), like presigned MinIO links.
+// Browser → PartyServer directly (websockets don't go through the Next /api rewrite), like presigned MinIO links.
 const HOST = process.env.NEXT_PUBLIC_REALTIME_HOST ?? "localhost:1999";
 
 export interface RoomConnection {
@@ -17,7 +17,7 @@ interface Handlers {
 
 /**
  * One socket per chat room (a department id, or case-<id>). On every (re)connect a one-minute room ticket, issued by
- * the API to members only, is sent as the first message, never in the URL; PartyKit closes sockets that don't
+ * the API to members only, is sent as the first message, never in the URL; PartyServer closes sockets that don't
  * authenticate.
  */
 export function connectRoom(departmentId: string, me: Presence, { onEvent, onStatus }: Handlers): RoomConnection {

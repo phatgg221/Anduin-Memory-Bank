@@ -111,8 +111,8 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  # PartyKit: one websocket room per department war room. The API stays the source of truth and POSTs
-  # persisted events here; browsers connect directly (ws://localhost:REALTIME_PORT) and authenticate in-band.
+  # PartyServer (a Cloudflare Worker, run locally by wrangler dev): one websocket room per chat room. The API stays the
+  # source of truth and POSTs persisted events here; browsers connect directly (ws://localhost:REALTIME_PORT) and authenticate in-band.
   realtime:
     build: ./realtime
     environment:

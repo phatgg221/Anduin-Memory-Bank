@@ -203,7 +203,7 @@ interface SocketHandlers {
 }
 
 /**
- * Live connection to one PartyKit room: a department war room (room id = department id) or a case thread
+ * Live connection to one PartyServer room: a department war room (room id = department id) or a case thread
  * (`case-<id>`). Delivers new messages and changes to the handlers, plus who's online and who's typing.
  * Polling keeps running as a fallback.
  */
