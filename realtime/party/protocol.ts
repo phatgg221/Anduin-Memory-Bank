@@ -8,10 +8,11 @@ export interface Presence {
 
 /** Room ids: a department id (war room) or `case-<case uuid>` (case thread). */
 
-/** Browser → room. The socket must send `auth` first; anything else before it is ignored. */
+/** Browser → room. The socket must send `auth` first; anything else before it is ignored. `ping` only keeps it open. */
 export type ClientEvent =
   | { type: "auth"; token: string; user: Presence }
-  | { type: "typing" };
+  | { type: "typing" }
+  | { type: "ping" };
 
 /** Room → browser. `message.created` and `room.changed` originate from the API after it has persisted a write. */
 export type ServerEvent =
