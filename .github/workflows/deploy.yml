@@ -90,21 +90,14 @@ jobs:
     env:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.11
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - run: bun install --frozen-lockfile
-      - name: Pull production settings and env vars
-        run: bunx vercel@latest pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
-      - name: Build
-        run: bunx vercel@latest build --prod --token="${{ secrets.VERCEL_TOKEN }}"
-      - name: Deploy
-        run: bunx vercel@latest deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"
+      # Built on Vercel, not here: the project's env vars are sensitive, so `vercel pull` would read them as empty
+      # and bake an empty backend URL and realtime host into the bundle.
+      - name: Deploy (remote build)
+        run: npx --yes vercel@latest deploy --prod --yes --token="${{ secrets.VERCEL_TOKEN }}"
