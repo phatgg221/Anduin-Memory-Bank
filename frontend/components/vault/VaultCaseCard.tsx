@@ -62,14 +62,19 @@ export function VaultCaseCard({ item, departmentCodes, onOpenArtifact, openingAr
         <h3 className="text-base font-medium text-ink">{item.title}</h3>
         {lead && (
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span aria-hidden className="flex size-6 items-center justify-center bg-navy text-[10px] font-semibold text-white">
+            <span
+              aria-hidden
+              className="flex size-6 items-center justify-center bg-navy text-[10px] font-semibold text-white"
+            >
               {lead.avatar_initials}
             </span>
             <span className="text-ink">{lead.name}</span>
             {lead.job_title && <span className="text-muted-foreground">· {lead.job_title}</span>}
             {!lead.is_active && (
               <AlumniBadge>
-                {lead.departed_at ? `ALUMNI · LEFT ${MONTH.format(new Date(lead.departed_at)).toUpperCase()}` : "ALUMNI"}
+                {lead.departed_at
+                  ? `ALUMNI · LEFT ${MONTH.format(new Date(lead.departed_at)).toUpperCase()}`
+                  : "ALUMNI"}
               </AlumniBadge>
             )}
           </div>

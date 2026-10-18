@@ -17,8 +17,7 @@ export function AuthFrame({ children }: { children: ReactNode }) {
             Stop solving the same problem twice.
           </p>
           <p className="max-w-md text-white/70">
-            Every past fund onboarding, post-mortem, and alumni fix — instantly recalled when a new request
-            lands.
+            Every past fund onboarding, post-mortem, and alumni fix — instantly recalled when a new request lands.
           </p>
         </div>
         <div className="flex items-end justify-between">

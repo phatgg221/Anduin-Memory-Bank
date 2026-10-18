@@ -1,0 +1,7 @@
+.next
+node_modules
+next-env.d.ts
+bun.lock
+components/ui
+AGENTS.md
+CLAUDE.md

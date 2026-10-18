@@ -18,9 +18,13 @@ export function JobProgress({ job, title }: { job: CaseJob; title: string }) {
       </div>
       <ol className="flex flex-col gap-2">
         {job.steps.map((step, index) => {
-          const state = done || index < current ? "done" : index === current && job.status === "PROCESSING" ? "active" : "todo";
+          const state =
+            done || index < current ? "done" : index === current && job.status === "PROCESSING" ? "active" : "todo";
           return (
-            <li key={step} className={cn("flex items-center gap-2 text-sm", state === "todo" ? "text-muted-foreground" : "text-ink")}>
+            <li
+              key={step}
+              className={cn("flex items-center gap-2 text-sm", state === "todo" ? "text-muted-foreground" : "text-ink")}
+            >
               {state === "done" ? (
                 <Check className="size-4 text-reusable" aria-hidden />
               ) : state === "active" ? (

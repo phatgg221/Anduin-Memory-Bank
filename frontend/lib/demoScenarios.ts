@@ -47,7 +47,11 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
         "zero retention by AI sub-processors, and a Swiss client confidentiality addendum for Swiss-booked investors. Due 6 Nov.",
       severity: "MEDIUM",
       due_date: "2026-11-06",
-      context_tags: { Regulation: "EU DORA / GDPR", "Data Residency": "Frankfurt (eu-central-1)", "Client Segment": "Private Wealth" },
+      context_tags: {
+        Regulation: "EU DORA / GDPR",
+        "Data Residency": "Frankfurt (eu-central-1)",
+        "Client Segment": "Private Wealth",
+      },
       secondary_department_ids: ["LEGAL_COMPLIANCE", "ENGINEERING_DATA"],
     },
   },

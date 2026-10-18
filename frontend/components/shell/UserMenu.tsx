@@ -28,7 +28,10 @@ export function UserMenu({ name, email, onSignOut, isSigningOut }: UserMenuProps
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="h-9 gap-2 px-2">
-          <span aria-hidden className="flex size-6 items-center justify-center bg-navy text-[10px] font-semibold text-white">
+          <span
+            aria-hidden
+            className="flex size-6 items-center justify-center bg-navy text-[10px] font-semibold text-white"
+          >
             {initials(name)}
           </span>
           <span className="hidden text-sm xl:inline">{name}</span>

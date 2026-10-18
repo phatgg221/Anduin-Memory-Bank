@@ -24,7 +24,12 @@ function Answer({ text, onCaseClick }: { text: string; onCaseClick: (code: strin
     <p className="whitespace-pre-wrap text-sm text-ink">
       {text.split(CITATION).map((part, i) =>
         i % 2 === 1 ? (
-          <button key={i} type="button" onClick={() => onCaseClick(part.slice(1, -1))} className="mx-0.5 border px-1 font-mono text-[11px] text-navy hover:bg-surface-2">
+          <button
+            key={i}
+            type="button"
+            onClick={() => onCaseClick(part.slice(1, -1))}
+            className="mx-0.5 border px-1 font-mono text-[11px] text-navy hover:bg-surface-2"
+          >
             {part.slice(1, -1)}
           </button>
         ) : (
@@ -99,7 +104,12 @@ export function CopilotPanel({ messages, jobs, chips, onAsk, onPost, onCaseClick
                 </div>
               </div>
             ) : (
-              <p className={cn("max-w-[90%] border border-navy/20 bg-surface-3 px-2.5 py-1.5 text-sm text-ink", message.pending && "opacity-60")}>
+              <p
+                className={cn(
+                  "max-w-[90%] border border-navy/20 bg-surface-3 px-2.5 py-1.5 text-sm text-ink",
+                  message.pending && "opacity-60",
+                )}
+              >
                 {message.content}
               </p>
             )}
@@ -118,7 +128,12 @@ export function CopilotPanel({ messages, jobs, chips, onAsk, onPost, onCaseClick
       </div>
       <div className="flex flex-wrap gap-1.5">
         {chips.map((chip) => (
-          <button key={chip} type="button" onClick={() => ask(chip)} className="border bg-background px-2 py-1 text-left text-xs text-ink hover:bg-surface-3">
+          <button
+            key={chip}
+            type="button"
+            onClick={() => ask(chip)}
+            className="border bg-background px-2 py-1 text-left text-xs text-ink hover:bg-surface-3"
+          >
             {chip}
           </button>
         ))}

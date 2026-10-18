@@ -34,7 +34,9 @@ export async function verifyRefreshToken(token: string | undefined): Promise<Ver
     return { userId: payload.sub };
   } catch (error) {
     if (error instanceof errors.JWSSignatureVerificationFailed) {
-      console.warn("[proxy] Refresh cookie has an invalid signature — is JWT_SECRET identical for frontend and backend?");
+      console.warn(
+        "[proxy] Refresh cookie has an invalid signature — is JWT_SECRET identical for frontend and backend?",
+      );
     }
     return null;
   }

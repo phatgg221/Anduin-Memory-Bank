@@ -57,9 +57,7 @@ function lastConfirmedSeq(view: RoomView): number {
 export function mergeMessages<M extends ChatMessage, V extends { messages: M[] }>(view: V, incoming: M[]): V {
   const byId = new Map(view.messages.map((m) => [m.id, m]));
   for (const message of incoming) byId.set(message.id, message);
-  const messages = [...byId.values()].sort(
-    (a, b) => (a.pending ? Infinity : a.seq) - (b.pending ? Infinity : b.seq),
-  );
+  const messages = [...byId.values()].sort((a, b) => (a.pending ? Infinity : a.seq) - (b.pending ? Infinity : b.seq));
   return { ...view, messages };
 }
 
@@ -127,7 +125,8 @@ export function useSendMessage(departmentId: string) {
     },
     onSettled: () => {
       // Posting joins the room; refresh membership and room list counts.
-      if (queryClient.getQueryData<RoomView>(key)?.is_member === false) queryClient.invalidateQueries({ queryKey: key });
+      if (queryClient.getQueryData<RoomView>(key)?.is_member === false)
+        queryClient.invalidateQueries({ queryKey: key });
       queryClient.invalidateQueries({ queryKey: queryKeys.rooms.list });
     },
   });
@@ -167,7 +166,9 @@ export function useChangeMember(departmentId: string) {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<RoomView>(key);
       updateRoom(queryClient, departmentId, (view) => {
-        const others = view.members.filter((m) => m.user.id !== (change.kind === "add" ? change.person.id : change.userId));
+        const others = view.members.filter(
+          (m) => m.user.id !== (change.kind === "add" ? change.person.id : change.userId),
+        );
         const members =
           change.kind === "add"
             ? [...others, { user: change.person, role: "MEMBER" as const, joined_at: new Date().toISOString() }]
@@ -229,7 +230,10 @@ export function useRoomSocket(socketRoomId: string | null, me: Presence | undefi
       onEvent: (event) => {
         if (event.type === "ready" || event.type === "presence") setOnline(event.presence);
         else if (event.type === "typing") {
-          setTyping((current) => ({ ...current, [event.user.id]: { user: event.user, until: Date.now() + TYPING_VISIBLE_MS } }));
+          setTyping((current) => ({
+            ...current,
+            [event.user.id]: { user: event.user, until: Date.now() + TYPING_VISIBLE_MS },
+          }));
         } else if (event.type === "message.created") {
           handlersRef.current.onMessage(event.message);
           const authorId = event.message.author?.id;
@@ -281,7 +285,6 @@ export function useRoomCacheHandlers(departmentId: string | null): SocketHandler
     },
   };
 }
-
 
 export function useRequestRoomAccess(departmentId: string) {
   const queryClient = useQueryClient();

@@ -65,6 +65,29 @@ Then register on the live site, put your email in `SEED_OPERATOR_EMAIL`, and run
 Re-run the step for what changed: `bun run deploy realtime`, `backend` or `frontend` (or connect the GitHub repo
 to the Vercel project with root directory `frontend/` for deploys on push).
 
+## CI/CD (GitHub Actions)
+
+- **`.github/workflows/ci.yml`** runs on every pull request and push to `main`:
+  - backend: ruff lint and format check, migrations applied to a fresh pgvector database plus `alembic check` (no
+    model drift), pytest against real Postgres and MinIO;
+  - frontend: Prettier check, ESLint, TypeScript, `next build`;
+  - realtime and deploy scripts: TypeScript, Worker bundle dry run;
+  - the backend production Docker image builds.
+- **`.github/workflows/deploy.yml`** runs after CI passes on `main` (or by hand from the Actions tab): the realtime
+  Worker and Cloud Run backend in parallel (with a `/api/health` check), then the Vercel frontend. It only ships code;
+  env vars and secrets stay where `bun run deploy …` put them on each platform.
+
+One-time setup, after the first manual deploy:
+
+```bash
+bun run deploy ci-setup
+```
+
+It creates a `github-deployer` service account with keyless Workload Identity Federation (no JSON key; only this
+repo can use it), sets the GitHub variables, then asks you to paste two secrets: a Cloudflare API token ("Edit
+Cloudflare Workers" template) and a Vercel token. `frontend/vercel.json` turns off Vercel's own Git deploys so each
+push deploys once. Fix formatting locally with `bun run format`.
+
 ## Alternative: one VM
 
 `docker-compose.prod.yml` + `Caddyfile` run the whole stack on a single Linux VM behind Caddy (HTTPS on

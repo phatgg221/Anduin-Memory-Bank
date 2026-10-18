@@ -98,7 +98,10 @@ export function useSendThreadMessage(caseId: string) {
       updateThread(queryClient, caseId, (view) => mergeMessages(view, [optimistic]));
     },
     onError: (_error, { input }) => {
-      updateThread(queryClient, caseId, (view) => ({ ...view, messages: view.messages.filter((m) => m.id !== input.id) }));
+      updateThread(queryClient, caseId, (view) => ({
+        ...view,
+        messages: view.messages.filter((m) => m.id !== input.id),
+      }));
     },
     onSuccess: (message) =>
       updateThread(queryClient, caseId, (view) => {
@@ -111,7 +114,10 @@ export function useSendThreadMessage(caseId: string) {
           ? withParticipant
           : {
               ...withParticipant,
-              members: [...view.members, { user: author, role: "MEMBER" as const, joined_at: new Date().toISOString() }],
+              members: [
+                ...view.members,
+                { user: author, role: "MEMBER" as const, joined_at: new Date().toISOString() },
+              ],
             };
       }),
     onSettled: (_message, _error, { input }) => {
@@ -150,7 +156,8 @@ export function useUpdateCase(caseId: string) {
     onError: (_error, _input, snapshot) => {
       if (snapshot?.previous) queryClient.setQueryData(key, snapshot.previous);
     },
-    onSuccess: (view) => queryClient.setQueryData<ThreadView>(key, (old) => ({ ...view, messages: old?.messages ?? view.messages })),
+    onSuccess: (view) =>
+      queryClient.setQueryData<ThreadView>(key, (old) => ({ ...view, messages: old?.messages ?? view.messages })),
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all }),
   });
 }
@@ -196,7 +203,9 @@ export function useChangeCaseMember(caseId: string) {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<ThreadView>(key);
       updateThread(queryClient, caseId, (view) => {
-        const others = view.members.filter((m) => m.user.id !== (change.kind === "add" ? change.person.id : change.userId));
+        const others = view.members.filter(
+          (m) => m.user.id !== (change.kind === "add" ? change.person.id : change.userId),
+        );
         const members =
           change.kind === "add"
             ? [...others, { user: change.person, role: "MEMBER" as const, joined_at: new Date().toISOString() }]
@@ -213,7 +222,6 @@ export function useChangeCaseMember(caseId: string) {
     },
   });
 }
-
 
 /** Non-member → "Ask to join". Optimistic: the pending request shows at once. */
 export function useRequestCaseAccess(caseId: string) {

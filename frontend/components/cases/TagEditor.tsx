@@ -5,7 +5,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const SUGGESTED = ["Jurisdiction", "Fund Structure", "Workflow", "Regulation", "Investor Type", "Tax Form", "Integration"];
+const SUGGESTED = [
+  "Jurisdiction",
+  "Fund Structure",
+  "Workflow",
+  "Regulation",
+  "Investor Type",
+  "Tax Form",
+  "Integration",
+];
 const MAX_TAGS = 8;
 
 interface TagEditorProps {
@@ -41,7 +49,14 @@ export function TagEditor({ value, onChange }: TagEditorProps) {
             aria-label={`Tag ${index + 1} value`}
             onChange={(e) => emit(rows.map((r, i) => (i === index ? [r[0], e.target.value] : r)))}
           />
-          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={`Remove tag ${index + 1}`} onClick={() => emit(rows.filter((_, i) => i !== index))}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            aria-label={`Remove tag ${index + 1}`}
+            onClick={() => emit(rows.filter((_, i) => i !== index))}
+          >
             <X className="size-4" />
           </Button>
         </div>
@@ -58,7 +73,13 @@ export function TagEditor({ value, onChange }: TagEditorProps) {
               + {key}
             </button>
           ))}
-          <Button type="button" variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-xs" onClick={() => emit([...rows, ["", ""]])}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-1.5 text-xs"
+            onClick={() => emit([...rows, ["", ""]])}
+          >
             <Plus className="size-3" /> Custom
           </Button>
         </div>

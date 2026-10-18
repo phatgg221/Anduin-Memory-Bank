@@ -3,7 +3,6 @@ export const AUTH_PAGES = ["/login", "/register"];
 
 const PROBE_ORIGIN = "http://dejavu.invalid";
 
-
 export function safeNextPath(raw: string | null | undefined, fallback = DEFAULT_SIGNED_IN_PATH): string {
   if (!raw || !raw.startsWith("/")) return fallback;
   let url: URL;

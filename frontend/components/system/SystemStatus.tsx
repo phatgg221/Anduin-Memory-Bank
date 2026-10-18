@@ -18,8 +18,7 @@ interface SystemStatusProps {
 
 /** Slim status bar: `■ SYSTEM   ■ API   ■ POSTGRES + PGVECTOR v0.8.7   ■ STORAGE` */
 export function SystemStatus({ health, isLoading, isError }: SystemStatusProps) {
-  const state = (ok: boolean | undefined): CheckState =>
-    isLoading ? "checking" : isError || !ok ? "down" : "up";
+  const state = (ok: boolean | undefined): CheckState => (isLoading ? "checking" : isError || !ok ? "down" : "up");
 
   const checks = [
     { label: "API", state: state(!isError) },

@@ -48,8 +48,8 @@ export function PrecedentDelta({
     return (
       <div className="flex flex-col items-start gap-3 p-6">
         <p className="text-sm text-muted-foreground">
-          No precedents matched yet. Dejavu compares this request with every case in the Memory Bank and shows the top 3,
-          how they went and what&apos;s different this time.
+          No precedents matched yet. Dejavu compares this request with every case in the Memory Bank and shows the top
+          3, how they went and what&apos;s different this time.
         </p>
         {onRunAnalysis && (
           <Button onClick={onRunAnalysis} disabled={isStarting}>
@@ -119,7 +119,8 @@ export function PrecedentDelta({
         )}
         {current.duration_days !== null && (
           <p className="micro-label text-white/70">
-            Took {current.duration_days} days{current.resolved_at && ` · resolved ${MONTH.format(new Date(current.resolved_at))}`}
+            Took {current.duration_days} days
+            {current.resolved_at && ` · resolved ${MONTH.format(new Date(current.resolved_at))}`}
           </p>
         )}
         <p className="text-sm leading-relaxed text-white/90">“{current.how_past_case_went}”</p>
@@ -134,7 +135,11 @@ export function PrecedentDelta({
           </ul>
         )}
         <div className="flex flex-wrap gap-2 pt-1">
-          <button type="button" onClick={onOpenVault} className="micro-label flex items-center gap-1 border border-white/40 px-2 py-1 hover:bg-white/10">
+          <button
+            type="button"
+            onClick={onOpenVault}
+            className="micro-label flex items-center gap-1 border border-white/40 px-2 py-1 hover:bg-white/10"
+          >
             View in Knowledge Vault <ArrowUpRight className="size-3" />
           </button>
           {firstFile && (
@@ -143,10 +148,15 @@ export function PrecedentDelta({
               onClick={() => onOpenFile(firstFile.id)}
               className="micro-label flex items-center gap-1 border border-white/40 px-2 py-1 hover:bg-white/10"
             >
-              Inspect {firstFile.file_name.length > 28 ? `${firstFile.file_name.slice(0, 27)}…` : firstFile.file_name} <ArrowUpRight className="size-3" />
+              Inspect {firstFile.file_name.length > 28 ? `${firstFile.file_name.slice(0, 27)}…` : firstFile.file_name}{" "}
+              <ArrowUpRight className="size-3" />
             </button>
           )}
-          <button type="button" onClick={onOpenChannel} className="micro-label flex items-center gap-1 border border-white/40 px-2 py-1 hover:bg-white/10">
+          <button
+            type="button"
+            onClick={onOpenChannel}
+            className="micro-label flex items-center gap-1 border border-white/40 px-2 py-1 hover:bg-white/10"
+          >
             <MessagesSquare className="size-3" /> Discuss in case channel
           </button>
         </div>
@@ -161,11 +171,13 @@ export function PrecedentDelta({
             <table className="w-full min-w-[640px] border-collapse text-left text-sm">
               <thead className="bg-surface-2">
                 <tr>
-                  {["Operational dimension", "Past case spec", "Current request spec", "Delta status & action"].map((h) => (
-                    <th key={h} className="micro-label border-b px-3 py-2 font-normal text-muted-foreground">
-                      {h}
-                    </th>
-                  ))}
+                  {["Operational dimension", "Past case spec", "Current request spec", "Delta status & action"].map(
+                    (h) => (
+                      <th key={h} className="micro-label border-b px-3 py-2 font-normal text-muted-foreground">
+                        {h}
+                      </th>
+                    ),
+                  )}
                 </tr>
               </thead>
               <tbody>

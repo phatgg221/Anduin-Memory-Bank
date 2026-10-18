@@ -73,7 +73,12 @@ export function ReusableKit({ precedents, ownFiles, usedFileIds, canUse, onPrevi
                 {author && !author.is_active && <AlumniBadge>ALUMNI</AlumniBadge>}
               </span>
               <div className="flex gap-1.5">
-                <Button variant="outline" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => onPreview(file.id)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  onClick={() => onPreview(file.id)}
+                >
                   <Eye className="size-3.5" /> Preview
                 </Button>
                 {canUse && (
@@ -98,7 +103,11 @@ export function ReusableKit({ precedents, ownFiles, usedFileIds, canUse, onPrevi
           <ul className="flex flex-col divide-y border bg-background">
             {ownFiles.map((file) => (
               <li key={file.id}>
-                <button type="button" onClick={() => onPreview(file.id)} className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-surface-2">
+                <button
+                  type="button"
+                  onClick={() => onPreview(file.id)}
+                  className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-surface-2"
+                >
                   <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                   <span className="truncate font-mono text-xs text-ink">{file.file_name}</span>
                 </button>

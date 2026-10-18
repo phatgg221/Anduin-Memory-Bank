@@ -1,6 +1,6 @@
 /**
  * Split production deploy (docs/DEPLOY.md), driven by deploy/prod.env:
- *   bun run deploy init | realtime | backend | seed | frontend
+ *   bun run deploy init | realtime | backend | seed | frontend | ci-setup
  */
 import { randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -167,6 +167,79 @@ async function frontend(env: Record<string, string>): Promise<void> {
   await must(["vercel", "deploy", "--prod"], { cwd });
 }
 
+async function quietly(cmd: string[]): Promise<boolean> {
+  return (await run(cmd, { quiet: true })) === 0;
+}
+
+async function ciSetup(env: Record<string, string>): Promise<void> {
+  requireKeys(env, ["GCP_PROJECT", "GCP_REGION", "CLOUDFLARE_ACCOUNT_ID"]);
+  const vercelLink = join(ROOT, "frontend", ".vercel", "project.json");
+  if (!existsSync(vercelLink)) throw new Error("Run `bun run deploy frontend` once first, so the Vercel project is linked.");
+  const { orgId, projectId } = JSON.parse(readFileSync(vercelLink, "utf8"));
+  const repo = (await Bun.$`gh repo view --json nameWithOwner -q .nameWithOwner`.cwd(ROOT).text()).trim();
+  const project = env.GCP_PROJECT;
+  const number = (await Bun.$`gcloud projects describe ${project} --format=${"value(projectNumber)"}`.text()).trim();
+  const account = `github-deployer@${project}.iam.gserviceaccount.com`;
+  const p = ["--project", project, "--quiet"];
+
+  console.log(`Keyless GitHub → Google Cloud auth for ${repo} in ${project}…`);
+  await must(["gcloud", "services", "enable", "iamcredentials.googleapis.com", "sts.googleapis.com", ...p]);
+  if (!(await quietly(["gcloud", "iam", "service-accounts", "describe", account, ...p]))) {
+    await must(["gcloud", "iam", "service-accounts", "create", "github-deployer", "--display-name", "GitHub Actions deploy", ...p]);
+  }
+  for (const role of [
+    "roles/run.admin",
+    "roles/cloudbuild.builds.editor",
+    "roles/artifactregistry.writer",
+    "roles/storage.admin",
+    "roles/iam.serviceAccountUser",
+    "roles/logging.viewer",
+    "roles/serviceusage.serviceUsageConsumer",
+  ]) {
+    await must(["gcloud", "projects", "add-iam-policy-binding", project, "--member", `serviceAccount:${account}`, "--role", role, "--condition", "None", "--quiet"]);
+  }
+  const pool = ["--workload-identity-pool", "github", "--location", "global"];
+  if (!(await quietly(["gcloud", "iam", "workload-identity-pools", "describe", "github", "--location", "global", ...p]))) {
+    await must(["gcloud", "iam", "workload-identity-pools", "create", "github", "--location", "global", "--display-name", "GitHub Actions", ...p]);
+  }
+  if (!(await quietly(["gcloud", "iam", "workload-identity-pools", "providers", "describe", "github-oidc", ...pool, ...p]))) {
+    await must([
+      "gcloud", "iam", "workload-identity-pools", "providers", "create-oidc", "github-oidc", ...pool,
+      "--issuer-uri", "https://token.actions.githubusercontent.com",
+      "--attribute-mapping", "google.subject=assertion.sub,attribute.repository=assertion.repository",
+      "--attribute-condition", `assertion.repository=='${repo}'`,
+      ...p,
+    ]);
+  }
+  await must([
+    "gcloud", "iam", "service-accounts", "add-iam-policy-binding", account,
+    "--role", "roles/iam.workloadIdentityUser",
+    "--member", `principalSet://iam.googleapis.com/projects/${number}/locations/global/workloadIdentityPools/github/attribute.repository/${repo}`,
+    ...p,
+  ]);
+
+  const variables = {
+    GCP_PROJECT: project,
+    GCP_REGION: env.GCP_REGION,
+    GCP_SERVICE_ACCOUNT: account,
+    GCP_WORKLOAD_IDENTITY_PROVIDER: `projects/${number}/locations/global/workloadIdentityPools/github/providers/github-oidc`,
+    CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
+    VERCEL_ORG_ID: orgId,
+    VERCEL_PROJECT_ID: projectId,
+  };
+  for (const [key, value] of Object.entries(variables)) {
+    await must(["gh", "variable", "set", key, "--repo", repo, "--body", value]);
+  }
+  console.log(`\nSet ${Object.keys(variables).length} GitHub variables on ${repo}.`);
+  console.log("\nNow two secrets, pasted when gh asks (input is hidden):");
+  console.log("  CLOUDFLARE_API_TOKEN  dash.cloudflare.com/profile/api-tokens → Create Token → \"Edit Cloudflare Workers\" template");
+  console.log("  VERCEL_TOKEN          vercel.com/account/settings/tokens → Create, scoped to your team\n");
+  for (const name of ["CLOUDFLARE_API_TOKEN", "VERCEL_TOKEN"]) {
+    await must(["gh", "secret", "set", name, "--repo", repo]);
+  }
+  console.log("\nDone. Push to main (or run the Deploy workflow by hand) to deploy through GitHub Actions.");
+}
+
 const [command] = process.argv.slice(2);
 process.on("unhandledRejection", (error) => {
   console.error(error instanceof Error ? error.message : error);
@@ -188,7 +261,10 @@ switch (command) {
   case "frontend":
     await frontend(readProdEnv());
     break;
+  case "ci-setup":
+    await ciSetup(readProdEnv());
+    break;
   default:
-    console.error("usage: bun run deploy init | realtime | backend | seed | frontend");
+    console.error("usage: bun run deploy init | realtime | backend | seed | frontend | ci-setup");
     process.exit(1);
 }

@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_PAGES, DEFAULT_SIGNED_IN_PATH, safeNextPath } from "@/lib/safeRedirect";
 import { REFRESH_COOKIE, verifyRefreshToken } from "@/lib/sessionCookie";
 
-
 export async function proxy(request: NextRequest) {
   const { pathname, search, searchParams } = request.nextUrl;
   const token = request.cookies.get(REFRESH_COOKIE)?.value;

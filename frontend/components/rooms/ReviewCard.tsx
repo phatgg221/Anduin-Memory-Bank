@@ -10,7 +10,13 @@ const VERDICTS: Record<ReviewVerdict, { label: string; className: string }> = {
   MISSING: { label: "Missing", className: "border-modified-border bg-modified-bg text-modified" },
 };
 const ORDER: ReviewVerdict[] = ["CONFLICTS", "MISSING", "NO_PRECEDENT", "SUPPORTED"];
-const WHEN = new Intl.DateTimeFormat("en", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+const WHEN = new Intl.DateTimeFormat("en", {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
 const when = (value: string) => (Number.isNaN(Date.parse(value)) ? value : WHEN.format(new Date(value)));
 
 export function Citation({ citation, onOpen }: { citation: ReviewCitation; onOpen: (c: ReviewCitation) => void }) {

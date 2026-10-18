@@ -213,8 +213,13 @@ export function TriageReportPanel({
           )}
         </Block>
 
-        <Block title={`Team to engage · ${report.team.length}`} icon={<UserPlus className="size-3.5 text-navy" aria-hidden />}>
-          {report.team.length === 0 && <p className="text-sm text-muted-foreground">Nobody found for these precedents.</p>}
+        <Block
+          title={`Team to engage · ${report.team.length}`}
+          icon={<UserPlus className="size-3.5 text-navy" aria-hidden />}
+        >
+          {report.team.length === 0 && (
+            <p className="text-sm text-muted-foreground">Nobody found for these precedents.</p>
+          )}
           <ul className="flex flex-col gap-3">
             {report.team.map((person) => {
               const inCase = memberIds.has(person.user_id);
@@ -262,7 +267,9 @@ export function TriageReportPanel({
         </Block>
 
         <Block
-          title={report.missing_info.length ? `Ask the client first · ${report.missing_info.length}` : "Ask the client first"}
+          title={
+            report.missing_info.length ? `Ask the client first · ${report.missing_info.length}` : "Ask the client first"
+          }
           icon={<CircleHelp className="size-3.5 text-navy" aria-hidden />}
         >
           {report.missing_info.length === 0 ? (

@@ -7,12 +7,8 @@ export function BrandMark({ inverse = false, className }: { inverse?: boolean; c
       <span aria-hidden className="text-sm text-brand-cyan">
         ▲
       </span>
-      <span className={cn("text-base font-semibold tracking-tight", inverse ? "text-white" : "text-ink")}>
-        Dejavu
-      </span>
-      <span className={cn("micro-label", inverse ? "text-white/60" : "text-muted-foreground")}>
-        {"// by Anduin"}
-      </span>
+      <span className={cn("text-base font-semibold tracking-tight", inverse ? "text-white" : "text-ink")}>Dejavu</span>
+      <span className={cn("micro-label", inverse ? "text-white/60" : "text-muted-foreground")}>{"// by Anduin"}</span>
     </span>
   );
 }

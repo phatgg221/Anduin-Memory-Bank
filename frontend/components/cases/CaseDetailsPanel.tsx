@@ -80,7 +80,12 @@ export function CaseDetailsPanel({
         className="flex flex-col gap-5 p-6"
         onSubmit={(event) => {
           event.preventDefault();
-          if (editing.client_name.trim().length < 2 || editing.title.trim().length < 3 || editing.initial_request_brief.trim().length < 10) return;
+          if (
+            editing.client_name.trim().length < 2 ||
+            editing.title.trim().length < 3 ||
+            editing.initial_request_brief.trim().length < 10
+          )
+            return;
           onSave(editing);
           setEditing(null);
         }}
@@ -128,7 +133,12 @@ export function CaseDetailsPanel({
         <div className="flex flex-wrap items-center gap-2">
           <span className="micro-label text-navy">{thread.case_code}</span>
           <SeverityBadge severity={thread.severity} />
-          <span className={cn("micro-label border px-1.5 py-0.5", open ? "text-ink" : "border-reusable-border bg-reusable-bg text-reusable")}>
+          <span
+            className={cn(
+              "micro-label border px-1.5 py-0.5",
+              open ? "text-ink" : "border-reusable-border bg-reusable-bg text-reusable",
+            )}
+          >
             {open ? "Open" : "In memory"}
           </span>
         </div>
@@ -139,7 +149,9 @@ export function CaseDetailsPanel({
         <Row label="Customer">{thread.client_name ?? <span className="text-muted-foreground">Not recorded</span>}</Row>
         <Row label="Project">{thread.fund_name ?? <span className="text-muted-foreground">Not recorded</span>}</Row>
         <Row label="Source">
-          {SOURCE_TYPES.find((s) => s.id === thread.source_type)?.label ?? <span className="text-muted-foreground">Not recorded</span>}
+          {SOURCE_TYPES.find((s) => s.id === thread.source_type)?.label ?? (
+            <span className="text-muted-foreground">Not recorded</span>
+          )}
         </Row>
         <Row label="Deadline">
           {thread.due_date ? (
@@ -147,7 +159,9 @@ export function CaseDetailsPanel({
               <CalendarClock className="size-3.5 text-muted-foreground" aria-hidden />
               {DATE.format(new Date(`${thread.due_date}T00:00:00`))}
               {open && deadline && (
-                <span className={cn("text-xs", deadline.overdue ? "text-destructive" : "text-muted-foreground")}>· {deadline.text}</span>
+                <span className={cn("text-xs", deadline.overdue ? "text-destructive" : "text-muted-foreground")}>
+                  · {deadline.text}
+                </span>
               )}
             </span>
           ) : (
@@ -171,7 +185,10 @@ export function CaseDetailsPanel({
               <span
                 key={id}
                 title={names[id]?.name}
-                className={cn("micro-label px-1.5 py-0.5", index === 0 ? "bg-navy text-white" : "border text-muted-foreground")}
+                className={cn(
+                  "micro-label px-1.5 py-0.5",
+                  index === 0 ? "bg-navy text-white" : "border text-muted-foreground",
+                )}
               >
                 {names[id]?.code ?? id}
               </span>
@@ -183,7 +200,8 @@ export function CaseDetailsPanel({
           {thread.created_by && <span className="text-muted-foreground"> by {thread.created_by.name}</span>}
         </Row>
         <Row label="Activity">
-          {thread.messages.length} message{thread.messages.length === 1 ? "" : "s"} · {thread.participants.length} participant
+          {thread.messages.length} message{thread.messages.length === 1 ? "" : "s"} · {thread.participants.length}{" "}
+          participant
           {thread.participants.length === 1 ? "" : "s"}
         </Row>
       </dl>
@@ -228,7 +246,10 @@ export function CaseDetailsPanel({
                       <LoaderCircle className="size-3 animate-spin" aria-hidden /> Reading…
                     </span>
                   ) : file.text_status === "UNREADABLE" ? (
-                    <span className="micro-label ml-auto shrink-0 text-modified" title="Stored, but no text could be read">
+                    <span
+                      className="micro-label ml-auto shrink-0 text-modified"
+                      title="Stored, but no text could be read"
+                    >
                       No text
                     </span>
                   ) : (
@@ -252,7 +273,10 @@ export function CaseDetailsPanel({
                         </span>
                       )}
                       {"source_case_code" in file && (
-                        <span className="micro-label border px-1 text-[10px] text-muted-foreground" title="Reused from a past case">
+                        <span
+                          className="micro-label border px-1 text-[10px] text-muted-foreground"
+                          title="Reused from a past case"
+                        >
                           From {file.source_case_code}
                         </span>
                       )}

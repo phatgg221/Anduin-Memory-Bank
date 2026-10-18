@@ -23,7 +23,8 @@ export function AccessRequests({ requests, departmentCodes, onDecide }: AccessRe
               <span className="truncate text-ink">{request.user.name}</span>
               <span className="truncate text-xs text-muted-foreground">
                 {request.user.job_title ?? "Colleague"}
-                {request.user.primary_department_id && ` · ${departmentCodes[request.user.primary_department_id] ?? ""}`}
+                {request.user.primary_department_id &&
+                  ` · ${departmentCodes[request.user.primary_department_id] ?? ""}`}
               </span>
             </span>
             <Button size="sm" className="gap-1" onClick={() => onDecide(request.id, true)}>

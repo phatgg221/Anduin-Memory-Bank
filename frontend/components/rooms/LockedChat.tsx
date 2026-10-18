@@ -13,7 +13,15 @@ interface LockedChatProps {
   error?: string;
 }
 
-export function LockedChat({ title, description, members, requested, onRequest, isRequesting, error }: LockedChatProps) {
+export function LockedChat({
+  title,
+  description,
+  members,
+  requested,
+  onRequest,
+  isRequesting,
+  error,
+}: LockedChatProps) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center p-6">
       <div className="flex w-full max-w-md flex-col items-center gap-4 border p-6 text-center">

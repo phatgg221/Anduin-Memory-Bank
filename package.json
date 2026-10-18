@@ -12,6 +12,7 @@
     "reindex": "bun scripts/docker.ts reindex",
     "test": "bun scripts/docker.ts test",
     "lint": "bun scripts/docker.ts lint",
+    "format": "bun scripts/docker.ts format",
     "reset": "bun scripts/docker.ts reset",
     "deploy": "bun scripts/deploy.ts",
     "db:revision": "bun scripts/db.ts revision",

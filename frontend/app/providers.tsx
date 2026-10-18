@@ -22,10 +22,7 @@ export function Providers({ children }: { children: ReactNode }) {
   );
 
   // A rejected token refresh (in the axios interceptor) ends the session everywhere in the UI.
-  useEffect(
-    () => accessTokenStore.onExpired(() => client.setQueryData(queryKeys.auth.session, null)),
-    [client],
-  );
+  useEffect(() => accessTokenStore.onExpired(() => client.setQueryData(queryKeys.auth.session, null)), [client]);
 
   return (
     <QueryClientProvider client={client}>

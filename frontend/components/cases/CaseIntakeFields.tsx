@@ -27,7 +27,15 @@ function FieldError({ message }: { message?: string }) {
 }
 
 /** The case intake fields, shared by "New case thread" and "Edit details". */
-export function CaseIntakeFields({ value, onChange, people, departments, ownerDepartmentId, fieldErrors = {}, idPrefix }: CaseIntakeFieldsProps) {
+export function CaseIntakeFields({
+  value,
+  onChange,
+  people,
+  departments,
+  ownerDepartmentId,
+  fieldErrors = {},
+  idPrefix,
+}: CaseIntakeFieldsProps) {
   const set = <K extends keyof CaseIntake>(key: K, v: CaseIntake[K]) => onChange({ ...value, [key]: v });
   const id = (name: string) => `${idPrefix}-${name}`;
 
@@ -82,7 +90,9 @@ export function CaseIntakeFields({ value, onChange, people, departments, ownerDe
                 onClick={() => set("source_type", value.source_type === source.id ? null : source.id)}
                 className={cn(
                   "micro-label border px-2 py-1",
-                  value.source_type === source.id ? "border-navy bg-navy text-white" : "text-muted-foreground hover:bg-surface-2",
+                  value.source_type === source.id
+                    ? "border-navy bg-navy text-white"
+                    : "text-muted-foreground hover:bg-surface-2",
                 )}
               >
                 {source.label}
@@ -95,7 +105,8 @@ export function CaseIntakeFields({ value, onChange, people, departments, ownerDe
       <div className="flex flex-col gap-2">
         <Label htmlFor={id("problem")}>Problem &amp; context</Label>
         <p className="text-xs text-muted-foreground">
-          What arrived, what&apos;s broken or required, what&apos;s at stake (dates, money, investors) and any constraints.
+          What arrived, what&apos;s broken or required, what&apos;s at stake (dates, money, investors) and any
+          constraints.
         </p>
         <Textarea
           id={id("problem")}
@@ -138,7 +149,12 @@ export function CaseIntakeFields({ value, onChange, people, departments, ownerDe
       <div className="grid gap-4 @xl:grid-cols-2">
         <div className="flex flex-col gap-2">
           <Label htmlFor={id("due")}>Deadline</Label>
-          <Input id={id("due")} type="date" value={value.due_date ?? ""} onChange={(e) => set("due_date", e.target.value || null)} />
+          <Input
+            id={id("due")}
+            type="date"
+            value={value.due_date ?? ""}
+            onChange={(e) => set("due_date", e.target.value || null)}
+          />
           <p className="text-xs text-muted-foreground">The client date this works against (close, go-live, RFP due).</p>
         </div>
         <div className="flex flex-col gap-2">
@@ -156,7 +172,9 @@ export function CaseIntakeFields({ value, onChange, people, departments, ownerDe
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">Accountable for resolving the case and committing it to memory.</p>
+          <p className="text-xs text-muted-foreground">
+            Accountable for resolving the case and committing it to memory.
+          </p>
         </div>
       </div>
 

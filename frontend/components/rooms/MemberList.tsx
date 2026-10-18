@@ -73,7 +73,9 @@ export function MemberList({
               </span>
             </span>
             {role === "LEAD" ? (
-              <span className="micro-label border border-navy px-1.5 py-0.5 text-navy">{noun === "case" ? "Owner" : "Lead"}</span>
+              <span className="micro-label border border-navy px-1.5 py-0.5 text-navy">
+                {noun === "case" ? "Owner" : "Lead"}
+              </span>
             ) : readOnly ? null : (
               <Button
                 variant="ghost"

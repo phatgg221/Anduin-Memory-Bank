@@ -18,7 +18,9 @@ export const SEVERITY_HELP: Record<Severity, string> = {
 /** `[■ CRITICAL]` — always a label, never colour alone. */
 export function SeverityBadge({ severity, className }: { severity: Severity; className?: string }) {
   return (
-    <span className={cn("micro-label inline-flex items-center gap-1.5 border px-1.5 py-0.5", STYLES[severity], className)}>
+    <span
+      className={cn("micro-label inline-flex items-center gap-1.5 border px-1.5 py-0.5", STYLES[severity], className)}
+    >
       <span aria-hidden className="size-1.5 bg-current" />
       {severity}
     </span>

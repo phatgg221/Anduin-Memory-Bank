@@ -83,8 +83,12 @@ export function IntakePanel({
   const selected = memberIds.map((id) => people.find((p) => p.id === id)).filter((p): p is RoomPerson => Boolean(p));
   const candidates = people.filter((p) => p.is_active && p.id !== currentUserId && !memberIds.includes(p.id));
 
-  const set = <K extends keyof typeof intake>(key: K, value: (typeof intake)[K]) => setIntake((i) => ({ ...i, [key]: value }));
-  const describe = <K extends "client_name" | "fund_name" | "initial_request_brief">(key: K, value: (typeof intake)[K]) => {
+  const set = <K extends keyof typeof intake>(key: K, value: (typeof intake)[K]) =>
+    setIntake((i) => ({ ...i, [key]: value }));
+  const describe = <K extends "client_name" | "fund_name" | "initial_request_brief">(
+    key: K,
+    value: (typeof intake)[K],
+  ) => {
     setIntake((i) => ({ ...i, [key]: value, title: "", context_tags: {} }));
     setScenarioDepartment(null);
   };
@@ -142,11 +146,21 @@ export function IntakePanel({
 
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="intake-client" className="micro-label text-muted-foreground">Customer</Label>
-          <Input id="intake-client" className="h-8 bg-background text-xs" value={intake.client_name} placeholder="Apollo Global" onChange={(e) => describe("client_name", e.target.value)} />
+          <Label htmlFor="intake-client" className="micro-label text-muted-foreground">
+            Customer
+          </Label>
+          <Input
+            id="intake-client"
+            className="h-8 bg-background text-xs"
+            value={intake.client_name}
+            placeholder="Apollo Global"
+            onChange={(e) => describe("client_name", e.target.value)}
+          />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="intake-fund" className="micro-label text-muted-foreground">Project / fund</Label>
+          <Label htmlFor="intake-fund" className="micro-label text-muted-foreground">
+            Project / fund
+          </Label>
           <Input
             id="intake-fund"
             list="intake-fund-options"
@@ -174,10 +188,15 @@ export function IntakePanel({
               onClick={() => set("source_type", intake.source_type === source.id ? null : (source.id as SourceType))}
               className={cn(
                 "micro-label flex items-center gap-1.5 border px-2 py-1.5 text-left",
-                intake.source_type === source.id ? "border-navy bg-navy text-white" : "bg-background text-muted-foreground hover:text-ink",
+                intake.source_type === source.id
+                  ? "border-navy bg-navy text-white"
+                  : "bg-background text-muted-foreground hover:text-ink",
               )}
             >
-              <span aria-hidden className={cn("size-1.5", intake.source_type === source.id ? "bg-white" : "bg-hairline")} />
+              <span
+                aria-hidden
+                className={cn("size-1.5", intake.source_type === source.id ? "bg-white" : "bg-hairline")}
+              />
               {source.label}
             </button>
           ))}
@@ -185,7 +204,9 @@ export function IntakePanel({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="intake-brief" className="micro-label text-muted-foreground">Problem / request details</Label>
+        <Label htmlFor="intake-brief" className="micro-label text-muted-foreground">
+          Problem / request details
+        </Label>
         <Textarea
           id="intake-brief"
           rows={6}
@@ -204,22 +225,41 @@ export function IntakePanel({
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={cn("flex flex-col gap-1.5 border border-dashed p-2", dragging ? "border-navy bg-background" : "border-hairline")}
+        className={cn(
+          "flex flex-col gap-1.5 border border-dashed p-2",
+          dragging ? "border-navy bg-background" : "border-hairline",
+        )}
       >
         {files.map((file) => (
           <span key={file.name} className="flex items-center gap-1.5 border bg-background px-2 py-1 text-xs">
             <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-hidden />
             <span className="truncate font-mono">{file.name}</span>
-            <button type="button" className="ml-auto text-muted-foreground hover:text-ink" aria-label={`Remove ${file.name}`} onClick={() => setFiles((f) => f.filter((x) => x !== file))}>
+            <button
+              type="button"
+              className="ml-auto text-muted-foreground hover:text-ink"
+              aria-label={`Remove ${file.name}`}
+              onClick={() => setFiles((f) => f.filter((x) => x !== file))}
+            >
               <X className="size-3" />
             </button>
           </span>
         ))}
-        <button type="button" onClick={() => fileInput.current?.click()} className="text-left text-xs text-muted-foreground hover:text-ink">
+        <button
+          type="button"
+          onClick={() => fileInput.current?.click()}
+          className="text-left text-xs text-muted-foreground hover:text-ink"
+        >
           <Paperclip className="mr-1 inline size-3" aria-hidden />
           Drop the client&apos;s PDF, scan, photo or CSV here, or browse
         </button>
-        <input ref={fileInput} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => addFiles(e.target.files)} />
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          accept={ACCEPT}
+          className="hidden"
+          onChange={(e) => addFiles(e.target.files)}
+        />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -234,7 +274,9 @@ export function IntakePanel({
               onClick={() => set("severity", severity)}
               className={cn(
                 "micro-label border px-1 py-1 text-[10px]",
-                intake.severity === severity ? "border-navy bg-background text-navy" : "text-muted-foreground hover:bg-background",
+                intake.severity === severity
+                  ? "border-navy bg-background text-navy"
+                  : "text-muted-foreground hover:bg-background",
               )}
             >
               {severity}
@@ -242,7 +284,6 @@ export function IntakePanel({
           ))}
         </div>
       </div>
-
 
       <div className="flex flex-col gap-1.5">
         <span className="micro-label text-muted-foreground">People to resolve it</span>
@@ -283,11 +324,17 @@ export function IntakePanel({
             <DropdownMenuContent align="start" className="w-64">
               <DropdownMenuLabel className="micro-label text-muted-foreground">Engage to resolve</DropdownMenuLabel>
               {candidates.map((person) => (
-                <DropdownMenuItem key={person.id} onSelect={() => setMemberIds((ids) => [...ids, person.id])} className="gap-2">
+                <DropdownMenuItem
+                  key={person.id}
+                  onSelect={() => setMemberIds((ids) => [...ids, person.id])}
+                  className="gap-2"
+                >
                   <Avatar initials={person.avatar_initials} className="size-6" />
                   <span className="flex-1">{person.name}</span>
                   {person.primary_department_id && (
-                    <span className="micro-label text-muted-foreground">{departmentCodes[person.primary_department_id]}</span>
+                    <span className="micro-label text-muted-foreground">
+                      {departmentCodes[person.primary_department_id]}
+                    </span>
                   )}
                 </DropdownMenuItem>
               ))}

@@ -49,10 +49,7 @@ function tokenPattern(names: string[]): RegExp {
     .sort((a, b) => b.length - a.length)
     .map(escape)
     .join("|");
-  return new RegExp(
-    `(#CASE-\\d{4}-\\d{3}\\b|\\[CASE-\\d{4}-\\d{3}\\]|@(?:${mentions})\\b)`,
-    "g",
-  );
+  return new RegExp(`(#CASE-\\d{4}-\\d{3}\\b|\\[CASE-\\d{4}-\\d{3}\\]|@(?:${mentions})\\b)`, "g");
 }
 
 function Content({
@@ -73,13 +70,7 @@ function Content({
         if (part.startsWith("@")) {
           const isMe = part.slice(1) === me;
           return (
-            <span
-              key={index}
-              className={cn(
-                "px-0.5 font-medium text-navy",
-                isMe ? "bg-modified-bg" : "bg-surface-3",
-              )}
-            >
+            <span key={index} className={cn("px-0.5 font-medium text-navy", isMe ? "bg-modified-bg" : "bg-surface-3")}>
               {part}
             </span>
           );
@@ -118,10 +109,7 @@ export function MessageThread({
 }: MessageThreadProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const namesKey = mentionNames.join("|");
-  const pattern = useMemo(
-    () => tokenPattern(namesKey ? namesKey.split("|") : []),
-    [namesKey],
-  );
+  const pattern = useMemo(() => tokenPattern(namesKey ? namesKey.split("|") : []), [namesKey]);
   const lastId = messages.at(-1)?.id;
 
   useEffect(() => {
@@ -130,17 +118,14 @@ export function MessageThread({
 
   const selecting = Boolean(onSelect) && selectedIds.length > 0;
 
-  const firstUnread = messages.find(
-    (m) => !m.pending && m.seq > lastReadSeq && m.author?.id !== currentUserId,
-  )?.id;
+  const firstUnread = messages.find((m) => !m.pending && m.seq > lastReadSeq && m.author?.id !== currentUserId)?.id;
 
   return (
     <ol className="flex flex-col gap-4 px-6 py-5">
       {messages.map((message, index) => {
         const day = DAY.format(new Date(message.created_at));
         const previous = messages[index - 1];
-        const showDay =
-          !previous || DAY.format(new Date(previous.created_at)) !== day;
+        const showDay = !previous || DAY.format(new Date(previous.created_at)) !== day;
         const mine = message.author?.id === currentUserId;
         const agent = Boolean(message.is_agent);
         const review = message.agent_payload?.kind === "review" ? message.agent_payload : null;
@@ -178,49 +163,20 @@ export function MessageThread({
               }}
             >
               {agent ? (
-                <span
-                  className="flex size-7 shrink-0 items-center justify-center bg-navy text-white"
-                  aria-hidden
-                >
+                <span className="flex size-7 shrink-0 items-center justify-center bg-navy text-white" aria-hidden>
                   <Bot className="size-3.5" />
                 </span>
               ) : (
-                <Avatar
-                  initials={message.author?.avatar_initials ?? "?"}
-                  muted={!message.author?.is_active}
-                />
+                <Avatar initials={message.author?.avatar_initials ?? "?"} muted={!message.author?.is_active} />
               )}
-              <div
-                className={cn(
-                  "flex min-w-0 flex-1 flex-col gap-1",
-                  mine && "items-end",
-                )}
-              >
-                <header
-                  className={cn(
-                    "flex items-baseline gap-2",
-                    mine && "flex-row-reverse",
-                  )}
-                >
+              <div className={cn("flex min-w-0 flex-1 flex-col gap-1", mine && "items-end")}>
+                <header className={cn("flex items-baseline gap-2", mine && "flex-row-reverse")}>
                   <span className="text-sm font-medium text-ink">
-                    {mine
-                      ? "You"
-                      : agent
-                        ? "Dejavu"
-                        : (message.author?.name ?? "Former member")}
+                    {mine ? "You" : agent ? "Dejavu" : (message.author?.name ?? "Former member")}
                   </span>
-                  {agent && (
-                    <span className="micro-label text-muted-foreground">
-                      AI copilot
-                    </span>
-                  )}
-                  <time
-                    className="text-xs text-muted-foreground"
-                    dateTime={message.created_at}
-                  >
-                    {message.pending
-                      ? "Sending…"
-                      : TIME.format(new Date(message.created_at))}
+                  {agent && <span className="micro-label text-muted-foreground">AI copilot</span>}
+                  <time className="text-xs text-muted-foreground" dateTime={message.created_at}>
+                    {message.pending ? "Sending…" : TIME.format(new Date(message.created_at))}
                   </time>
                   {message.is_milestone && (
                     <span className="micro-label flex items-center gap-1 text-navy">
@@ -237,7 +193,9 @@ export function MessageThread({
                         onClick={(event) => onSelect!(message.id, event.shiftKey)}
                         className={cn(
                           "flex size-4 items-center justify-center self-center border",
-                          selected ? "border-navy bg-navy text-white" : "border-hairline bg-background hover:border-navy",
+                          selected
+                            ? "border-navy bg-navy text-white"
+                            : "border-hairline bg-background hover:border-navy",
                         )}
                       >
                         {selected && <Check className="size-3" aria-hidden />}
@@ -255,10 +213,8 @@ export function MessageThread({
                 </header>
                 <div
                   className={cn(
-                    mine &&
-                      "max-w-[80%] border border-navy/20 bg-surface-2 px-3 py-2",
-                    agent &&
-                      "max-w-[85%] border-l-2 border-navy bg-surface-2 px-3 py-2",
+                    mine && "max-w-[80%] border border-navy/20 bg-surface-2 px-3 py-2",
+                    agent && "max-w-[85%] border-l-2 border-navy bg-surface-2 px-3 py-2",
                     (review || reuse) && "w-full max-w-[min(100%,48rem)]",
                   )}
                 >
@@ -272,12 +228,7 @@ export function MessageThread({
                       onCaseClick={onCaseClick}
                     />
                   ) : (
-                    <Content
-                      text={message.content}
-                      pattern={pattern}
-                      me={currentUserName}
-                      onCaseClick={onCaseClick}
-                    />
+                    <Content text={message.content} pattern={pattern} me={currentUserName} onCaseClick={onCaseClick} />
                   )}
                 </div>
                 {agentStatus[message.id] && (
@@ -303,21 +254,12 @@ export function MessageThread({
                 {message.attached_artifact && (
                   <button
                     type="button"
-                    onClick={() =>
-                      onOpenArtifact(message.attached_artifact!.id)
-                    }
+                    onClick={() => onOpenArtifact(message.attached_artifact!.id)}
                     className="flex w-fit max-w-full items-center gap-2 border px-2 py-1.5 text-left hover:bg-surface-2"
                   >
-                    <FileText
-                      className="size-4 shrink-0 text-muted-foreground"
-                      aria-hidden
-                    />
-                    <span className="truncate font-mono text-xs text-ink">
-                      {message.attached_artifact.file_name}
-                    </span>
-                    <span className="micro-label text-muted-foreground">
-                      {message.attached_artifact.file_type}
-                    </span>
+                    <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="truncate font-mono text-xs text-ink">{message.attached_artifact.file_name}</span>
+                    <span className="micro-label text-muted-foreground">{message.attached_artifact.file_type}</span>
                   </button>
                 )}
               </div>

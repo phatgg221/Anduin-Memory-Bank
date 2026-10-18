@@ -1,31 +1,17 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  Suspense,
-  use,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { Suspense, use, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SectionLabel } from "@/components/brand/SectionLabel";
 import { CaseDetailsPanel } from "@/components/cases/CaseDetailsPanel";
 import { JobProgress } from "@/components/memory/JobProgress";
 import { MemoryBanner } from "@/components/memory/MemoryBanner";
 import { MemoryReviewForm } from "@/components/memory/MemoryReviewForm";
-import {
-  OutcomeForm,
-  type OutcomeUpload,
-} from "@/components/memory/OutcomeForm";
+import { OutcomeForm, type OutcomeUpload } from "@/components/memory/OutcomeForm";
 import { AccessRequests } from "@/components/rooms/AccessRequests";
 import { Composer, type Mentionable } from "@/components/rooms/Composer";
 import { LockedChat } from "@/components/rooms/LockedChat";
-import {
-  MessageThread,
-  type AgentStatus,
-} from "@/components/rooms/MessageThread";
+import { MessageThread, type AgentStatus } from "@/components/rooms/MessageThread";
 import { MemberList } from "@/components/rooms/MemberList";
 import { ReviewBar } from "@/components/rooms/ReviewBar";
 import { Button } from "@/components/ui/button";
@@ -40,14 +26,7 @@ import { TabBar } from "@/components/workspace/TabBar";
 import { TriageReportPanel } from "@/components/workspace/TriageReportPanel";
 import { usePanels } from "@/lib/usePanels";
 import { useSession } from "@/store/auth";
-import {
-  useAnalyze,
-  useAskCopilot,
-  useCaseJobs,
-  useCommitMemory,
-  useCopilot,
-  useResolve,
-} from "@/store/memory";
+import { useAnalyze, useAskCopilot, useCaseJobs, useCommitMemory, useCopilot, useResolve } from "@/store/memory";
 import { useDepartments } from "@/store/org";
 import { usePeople, useRoomSocket } from "@/store/rooms";
 import {
@@ -69,11 +48,7 @@ import type { ReviewCitation, RoomPerson } from "@/types/rooms";
 type Tab = "channel" | "delta" | "copilot" | "people";
 const TABS: Tab[] = ["channel", "delta", "copilot", "people"];
 
-export default function CasePage({
-  params,
-}: {
-  params: Promise<{ caseId: string }>;
-}) {
+export default function CasePage({ params }: { params: Promise<{ caseId: string }> }) {
   const { caseId } = use(params);
   return (
     <Suspense fallback={<Skeleton className="m-6 h-[60dvh] flex-1" />}>
@@ -121,8 +96,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   const panels = usePanels();
 
   const departmentCodes = useMemo(
-    () =>
-      Object.fromEntries((departments.data ?? []).map((d) => [d.id, d.code])),
+    () => Object.fromEntries((departments.data ?? []).map((d) => [d.id, d.code])),
     [departments.data],
   );
   const me: RoomPerson | undefined = useMemo(
@@ -141,11 +115,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
 
   const handlers = useThreadCacheHandlers(caseId);
   const socket = useRoomSocket(member ? `case-${caseId}` : null, me, handlers);
-  useThreadPolling(
-    caseId,
-    thread.isSuccess && member,
-    socket.status === "live",
-  );
+  useThreadPolling(caseId, thread.isSuccess && member, socket.status === "live");
 
   // When an analysis finishes, reload the case so the new matches and delta appear.
   const analysisJob = jobs.data?.analyze ?? null;
@@ -161,11 +131,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   }, [dejavuReplying, refetchThread]);
   useEffect(() => {
     const status = analysisJob?.status;
-    if (
-      previousStatus.current &&
-      previousStatus.current !== "COMPLETED" &&
-      status === "COMPLETED"
-    )
+    if (previousStatus.current && previousStatus.current !== "COMPLETED" && status === "COMPLETED")
       void refetchThread();
     previousStatus.current = status;
   }, [analysisJob?.status, refetchThread]);
@@ -255,11 +221,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     `Draft a reply to ${t.client_name ?? "the client"} with our plan`,
     top && `What's different from ${top.case_code}, and what's net-new?`,
   ].filter((c): c is string => Boolean(c));
-  const usedFileIds = new Set(
-    t.messages
-      .map((m) => m.attached_artifact?.id)
-      .filter((id): id is string => Boolean(id)),
-  );
+  const usedFileIds = new Set(t.messages.map((m) => m.attached_artifact?.id).filter((id): id is string => Boolean(id)));
   const summarizeJob = jobs.data?.summarize ?? null;
   const lastOutcome: OutcomeInput | null = summarizeJob?.result?.outcome
     ? {
@@ -268,10 +230,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
         deliverable_file_ids: summarizeJob.result.deliverable_file_ids ?? [],
       }
     : null;
-  const startDraft = async (
-    input: OutcomeInput,
-    uploads: OutcomeUpload[] = [],
-  ) => {
+  const startDraft = async (input: OutcomeInput, uploads: OutcomeUpload[] = []) => {
     let uploaded: { id: string }[] = [];
     try {
       if (uploads.length)
@@ -287,23 +246,13 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
       {
         job_id: crypto.randomUUID(),
         ...input,
-        deliverable_file_ids: [
-          ...new Set([
-            ...input.deliverable_file_ids,
-            ...uploaded.map((f) => f.id),
-          ]),
-        ],
+        deliverable_file_ids: [...new Set([...input.deliverable_file_ids, ...uploaded.map((f) => f.id)])],
       },
       { onSuccess: () => setAskOutcome(false) },
     );
   };
   const openReview = () => router.push(`${base}?tab=${tab}&review=1`);
-  const newMessage = (
-    content: string,
-    isMilestone: boolean,
-    attached?: string,
-    mentioned: string[] = [],
-  ) => ({
+  const newMessage = (content: string, isMilestone: boolean, attached?: string, mentioned: string[] = []) => ({
     input: {
       id: crypto.randomUUID(),
       content,
@@ -313,11 +262,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     },
     author: me!,
   });
-  const sendToChannel = (
-    content: string,
-    isMilestone: boolean,
-    mentioned: string[],
-  ) => {
+  const sendToChannel = (content: string, isMilestone: boolean, mentioned: string[]) => {
     if (!me) return;
     const message = newMessage(content, isMilestone, undefined, mentioned);
     sendThread.mutate(message, {
@@ -382,14 +327,9 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
   const waiting = channelJobs.filter((j) => j.status === "QUEUED");
   const agentStatus: Record<string, AgentStatus> = Object.fromEntries(
-    Object.entries(refused).map(([id, note]) => [
-      id,
-      { state: "limited", note },
-    ]),
+    Object.entries(refused).map(([id, note]) => [id, { state: "limited", note }]),
   );
-  const running = (copilot.data?.jobs ?? []).filter(
-    (j) => j.status === "PROCESSING",
-  ).length;
+  const running = (copilot.data?.jobs ?? []).filter((j) => j.status === "PROCESSING").length;
   for (const job of channelJobs) {
     const ahead = running + waiting.indexOf(job);
     agentStatus[job.asked_message_id!] =
@@ -457,24 +397,17 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
 
   let body: ReactNode;
   if (reviewing) {
-    const draft =
-      summarizeJob?.status === "COMPLETED" ? summarizeJob.result : null;
+    const draft = summarizeJob?.status === "COMPLETED" ? summarizeJob.result : null;
     body = (
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-6">
         <div className="flex items-center justify-between gap-2">
           <SectionLabel>Complete &amp; save to memory</SectionLabel>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push(`${base}?tab=${tab}`)}
-          >
+          <Button variant="ghost" size="sm" onClick={() => router.push(`${base}?tab=${tab}`)}>
             Back to case
           </Button>
         </div>
         {!isOpenCase ? (
-          <p className="text-sm text-muted-foreground">
-            This case is already committed to the Knowledge Base.
-          </p>
+          <p className="text-sm text-muted-foreground">This case is already committed to the Knowledge Base.</p>
         ) : !summarizeJob || askOutcome ? (
           <div className="@container">
             <OutcomeForm
@@ -483,9 +416,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
               initial={lastOutcome ?? undefined}
               onSubmit={(input, uploads) => void startDraft(input, uploads)}
               isSubmitting={resolve.isPending || uploadFiles.isPending}
-              submitLabel={
-                uploadFiles.isPending ? "Uploading files…" : undefined
-              }
+              submitLabel={uploadFiles.isPending ? "Uploading files…" : undefined}
             />
           </div>
         ) : draft?.record ? (
@@ -501,9 +432,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
             onCaseClick={handleCaseClick}
             isCommitting={commitMemory.isPending}
             error={commitMemory.error?.message}
-            onRegenerate={() =>
-              lastOutcome ? startDraft(lastOutcome) : setAskOutcome(true)
-            }
+            onRegenerate={() => (lastOutcome ? startDraft(lastOutcome) : setAskOutcome(true))}
             onChangeOutcome={() => setAskOutcome(true)}
             onCommit={(input) =>
               commitMemory.mutate(input, {
@@ -514,34 +443,26 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
         ) : (
           <div className="flex flex-col items-start gap-3">
             <p className="text-sm text-muted-foreground">
-              Dejavu is reading the case chat, the department mentions and the
-              files with your outcome, drafting the memory record, then picking
-              reusable files and checking the lessons against older cases.
+              Dejavu is reading the case chat, the department mentions and the files with your outcome, drafting the
+              memory record, then picking reusable files and checking the lessons against older cases.
             </p>
             <JobProgress job={summarizeJob} title="Memory curator" />
             {summarizeJob.status === "FAILED" && (
-              <Button
-                onClick={() => setAskOutcome(true)}
-                disabled={resolve.isPending}
-              >
+              <Button onClick={() => setAskOutcome(true)} disabled={resolve.isPending}>
                 Try again
               </Button>
             )}
           </div>
         )}
         {(resolve.error ?? uploadFiles.error) && (
-          <p className="text-sm text-destructive">
-            {(resolve.error ?? uploadFiles.error)?.message}
-          </p>
+          <p className="text-sm text-destructive">{(resolve.error ?? uploadFiles.error)?.message}</p>
         )}
       </div>
     );
   } else {
     const copilotMessages = copilot.data?.messages ?? [];
     const copilotJobs = (copilot.data?.jobs ?? []).filter((j) => !j.in_channel);
-    const copilotThinking = copilotJobs.some(
-      (j) => j.status === "QUEUED" || j.status === "PROCESSING",
-    );
+    const copilotThinking = copilotJobs.some((j) => j.status === "QUEUED" || j.status === "PROCESSING");
     body = (
       <>
         <TabBar
@@ -575,13 +496,9 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
             {top && (
               <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-surface-2 px-6 py-2 text-xs text-muted-foreground">
                 <span className="micro-label text-navy">Dejavu</span>
-                Closest precedent:{" "}
-                <span className="font-medium text-ink">{top.case_code}</span> (
-                {top.similarity_score}
+                Closest precedent: <span className="font-medium text-ink">{top.case_code}</span> ({top.similarity_score}
                 %)
-                {top.lead_is_alumni &&
-                  top.lead_name &&
-                  ` · led by ${top.lead_name} (alumni)`}
+                {top.lead_is_alumni && top.lead_name && ` · led by ${top.lead_name} (alumni)`}
               </div>
             )}
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -608,26 +525,24 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
               )}
             </div>
             {isOpenCase && pickedMessages.length > 0 && (
-              <ReviewBar count={pickedMessages.length} span={pickedSpan} onSubmit={requestReview} onCancel={clearPicked} />
+              <ReviewBar
+                count={pickedMessages.length}
+                span={pickedSpan}
+                onSubmit={requestReview}
+                onCancel={clearPicked}
+              />
             )}
             {isOpenCase ? (
               <Composer
                 roomName={t.channel_slug}
                 onSend={sendToChannel}
                 onTyping={socket.notifyTyping}
-                typingNames={[
-                  ...(dejavuReplying ? ["Dejavu"] : []),
-                  ...socket.typing.map((p) => p.name),
-                ]}
+                typingNames={[...(dejavuReplying ? ["Dejavu"] : []), ...socket.typing.map((p) => p.name)]}
                 mentionables={mentionables}
                 error={sendThread.error?.message}
               />
             ) : (
-              <MemoryBanner
-                summary={t.summary}
-                resolvedAt={t.resolved_at}
-                indexJob={jobs.data?.index ?? null}
-              />
+              <MemoryBanner summary={t.summary} resolvedAt={t.resolved_at} indexJob={jobs.data?.index ?? null} />
             )}
           </>
         )}
@@ -682,9 +597,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
                 <AccessRequests
                   requests={pendingRequests}
                   departmentCodes={departmentCodes}
-                  onDecide={(requestId, approve) =>
-                    decideAccess.mutate({ requestId, approve })
-                  }
+                  onDecide={(requestId, approve) => decideAccess.mutate({ requestId, approve })}
                 />
               )}
               {!isMember && (
@@ -705,9 +618,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
                 departmentCodes={departmentCodes}
                 onlineIds={new Set(socket.online.map((p) => p.id))}
                 onAdd={(person) => changeMember.mutate({ kind: "add", person })}
-                onRemove={(userId) =>
-                  changeMember.mutate({ kind: "remove", userId })
-                }
+                onRemove={(userId) => changeMember.mutate({ kind: "remove", userId })}
               />
               {changeMember.error && (
                 <p role="alert" className="mt-3 text-xs text-destructive">

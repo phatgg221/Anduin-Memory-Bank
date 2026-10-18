@@ -26,7 +26,12 @@ interface PaneLayoutProps {
 }
 
 function SplitHandle() {
-  return <ResizableHandle withHandle className="transition-colors hover:bg-brand-cyan data-[separator=active]:bg-brand-cyan" />;
+  return (
+    <ResizableHandle
+      withHandle
+      className="transition-colors hover:bg-brand-cyan data-[separator=active]:bg-brand-cyan"
+    />
+  );
 }
 
 export function PaneLayout({ id, panels, left, right, children }: PaneLayoutProps) {

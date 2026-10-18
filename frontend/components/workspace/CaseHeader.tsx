@@ -17,16 +17,33 @@ interface CaseHeaderProps {
   onToggleRight: () => void;
 }
 
-const DOT: Record<SocketStatus, string> = { live: "bg-reusable-dot", connecting: "bg-modified-dot", offline: "bg-net-new-dot" };
+const DOT: Record<SocketStatus, string> = {
+  live: "bg-reusable-dot",
+  connecting: "bg-modified-dot",
+  offline: "bg-net-new-dot",
+};
 
-export function CaseHeader({ thread, status, onComplete, onBack, leftOpen, onToggleLeft, rightOpen, onToggleRight }: CaseHeaderProps) {
+export function CaseHeader({
+  thread,
+  status,
+  onComplete,
+  onBack,
+  leftOpen,
+  onToggleLeft,
+  rightOpen,
+  onToggleRight,
+}: CaseHeaderProps) {
   const source = SOURCE_TYPES.find((s) => s.id === thread.source_type)?.label;
   return (
     <div className="flex items-start gap-3 border-b px-4 py-3 sm:px-6">
       <PanelToggle label="Back to all cases" pressed={false} onClick={onBack}>
         <ArrowLeft className="size-4" />
       </PanelToggle>
-      <PanelToggle label={leftOpen ? "Hide case details" : "Show case details"} pressed={leftOpen} onClick={onToggleLeft}>
+      <PanelToggle
+        label={leftOpen ? "Hide case details" : "Show case details"}
+        pressed={leftOpen}
+        onClick={onToggleLeft}
+      >
         <PanelLeft className="size-4" />
       </PanelToggle>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -63,7 +80,11 @@ export function CaseHeader({ thread, status, onComplete, onBack, leftOpen, onTog
           In Knowledge Base
         </span>
       ) : null}
-      <PanelToggle label={rightOpen ? "Hide reusable kit" : "Show reusable kit"} pressed={rightOpen} onClick={onToggleRight}>
+      <PanelToggle
+        label={rightOpen ? "Hide reusable kit" : "Show reusable kit"}
+        pressed={rightOpen}
+        onClick={onToggleRight}
+      >
         <PanelRight className="size-4" />
       </PanelToggle>
     </div>

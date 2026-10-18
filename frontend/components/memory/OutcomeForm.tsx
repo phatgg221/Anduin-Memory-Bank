@@ -73,7 +73,8 @@ export function OutcomeForm({ clientName, files, initial, onSubmit, isSubmitting
     onSubmit(
       {
         outcome,
-        final_output: text.length >= 10 ? text : `Final output and client approval in the attached file(s): ${attached}`,
+        final_output:
+          text.length >= 10 ? text : `Final output and client approval in the attached file(s): ${attached}`,
         deliverable_file_ids: deliverables,
       },
       uploads,
@@ -162,9 +163,7 @@ export function OutcomeForm({ clientName, files, initial, onSubmit, isSubmitting
                     type="button"
                     role="radio"
                     aria-checked={upload.kind === kind.id}
-                    onClick={() =>
-                      setUploads((all) => all.map((u) => (u === upload ? { ...u, kind: kind.id } : u)))
-                    }
+                    onClick={() => setUploads((all) => all.map((u) => (u === upload ? { ...u, kind: kind.id } : u)))}
                     className={cn(
                       "micro-label border px-1.5 py-0.5 text-[10px]",
                       upload.kind === kind.id ? "border-navy bg-navy text-white" : "text-muted-foreground",
@@ -191,8 +190,7 @@ export function OutcomeForm({ clientName, files, initial, onSubmit, isSubmitting
           >
             <Paperclip className="size-3.5" aria-hidden />
             Drop the client&apos;s approval email, signed PDF or a photo of it, or the delivered file — or browse. Scans
-            are read by OCR. Dejavu reads it
-            for the memory record.
+            are read by OCR. Dejavu reads it for the memory record.
           </button>
           <input
             ref={picker}
@@ -210,7 +208,9 @@ export function OutcomeForm({ clientName, files, initial, onSubmit, isSubmitting
 
       {files.length > 0 && (
         <fieldset className="flex flex-col gap-2">
-          <legend className="micro-label mb-2 text-muted-foreground">Already on the case — which were final deliverables?</legend>
+          <legend className="micro-label mb-2 text-muted-foreground">
+            Already on the case — which were final deliverables?
+          </legend>
           <ul className="flex flex-col divide-y border">
             {files.map((file) => {
               const checked = deliverables.includes(file.id);

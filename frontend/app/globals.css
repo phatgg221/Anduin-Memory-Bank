@@ -191,10 +191,20 @@
 }
 
 @keyframes dejavu-scan {
-  0% { transform: translateY(-10%); opacity: 0; }
-  15% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { transform: translateY(110%); opacity: 0; }
+  0% {
+    transform: translateY(-10%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110%);
+    opacity: 0;
+  }
 }
 @utility animate-dejavu-scan {
   animation: dejavu-scan 2.6s ease-in-out infinite;

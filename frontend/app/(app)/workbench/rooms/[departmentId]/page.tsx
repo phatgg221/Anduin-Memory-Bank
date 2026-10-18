@@ -31,11 +31,7 @@ import { useOpenCases } from "@/store/threads";
 import { useOpenArtifact } from "@/store/vault";
 import type { RoomPerson } from "@/types/rooms";
 
-export default function DepartmentRoomPage({
-  params,
-}: {
-  params: Promise<{ departmentId: string }>;
-}) {
+export default function DepartmentRoomPage({ params }: { params: Promise<{ departmentId: string }> }) {
   const { departmentId } = use(params);
   const router = useRouter();
   const user = useSession().data?.user;
@@ -54,8 +50,7 @@ export default function DepartmentRoomPage({
   const panels = usePanels();
 
   const departmentCodes = useMemo(
-    () =>
-      Object.fromEntries((departments.data ?? []).map((d) => [d.id, d.code])),
+    () => Object.fromEntries((departments.data ?? []).map((d) => [d.id, d.code])),
     [departments.data],
   );
   const me: RoomPerson | undefined = useMemo(
@@ -75,23 +70,14 @@ export default function DepartmentRoomPage({
   const handlers = useRoomCacheHandlers(departmentId);
   const member = room.data?.is_member === true;
   const socket = useRoomSocket(member ? departmentId : null, me, handlers);
-  useRoomPolling(
-    departmentId,
-    room.isSuccess && member,
-    socket.status === "live",
-  );
+  useRoomPolling(departmentId, room.isSuccess && member, socket.status === "live");
 
   // Reading the room moves its read marker.
   const view = room.data;
-  const newestSeq =
-    view?.messages.reduce(
-      (max, m) => (m.pending ? max : Math.max(max, m.seq)),
-      0,
-    ) ?? 0;
+  const newestSeq = view?.messages.reduce((max, m) => (m.pending ? max : Math.max(max, m.seq)), 0) ?? 0;
   const { mutate: markReadUpTo } = markRead;
   useEffect(() => {
-    if (view?.is_member && newestSeq > view.last_read_seq)
-      markReadUpTo(newestSeq);
+    if (view?.is_member && newestSeq > view.last_read_seq) markReadUpTo(newestSeq);
   }, [view, newestSeq, markReadUpTo]);
 
   const handleOpenArtifact = (artifactId: string) => {
@@ -141,9 +127,7 @@ export default function DepartmentRoomPage({
               <AccessRequests
                 requests={view.access_requests ?? []}
                 departmentCodes={departmentCodes}
-                onDecide={(requestId, approve) =>
-                  decideAccess.mutate({ requestId, approve })
-                }
+                onDecide={(requestId, approve) => decideAccess.mutate({ requestId, approve })}
               />
             )}
             <MemberList
@@ -155,29 +139,19 @@ export default function DepartmentRoomPage({
               departmentCodes={departmentCodes}
               onlineIds={new Set(socket.online.map((p) => p.id))}
               onAdd={(person) => changeMember.mutate({ kind: "add", person })}
-              onRemove={(userId) =>
-                changeMember.mutate({ kind: "remove", userId })
-              }
+              onRemove={(userId) => changeMember.mutate({ kind: "remove", userId })}
             />
           </div>
         ),
       }}
     >
       <div className="flex items-center gap-3 border-b px-4 py-3 sm:px-6">
-        <PanelToggle
-          label="Back to all channels"
-          pressed={false}
-          onClick={() => router.push("/workbench")}
-        >
+        <PanelToggle label="Back to all channels" pressed={false} onClick={() => router.push("/workbench")}>
           <ArrowLeft className="size-4" />
         </PanelToggle>
         <div className="flex min-w-0 flex-1 flex-col">
-          <span className="micro-label text-navy">
-            # {view.code.toLowerCase()} · department channel
-          </span>
-          <span className="truncate text-sm text-ink">
-            {view.name}: general discussion and triage
-          </span>
+          <span className="micro-label text-navy"># {view.code.toLowerCase()} · department channel</span>
+          <span className="truncate text-sm text-ink">{view.name}: general discussion and triage</span>
         </div>
         <PanelToggle
           label={panels.isOpen("right") ? "Hide members" : "Show members"}

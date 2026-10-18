@@ -17,11 +17,7 @@ export interface Mentionable {
 
 interface ComposerProps {
   roomName: string;
-  onSend: (
-    content: string,
-    isMilestone: boolean,
-    mentionedIds: string[],
-  ) => void;
+  onSend: (content: string, isMilestone: boolean, mentionedIds: string[]) => void;
   onTyping?: () => void;
   /** Names of other people typing right now. */
   typingNames?: string[];
@@ -39,14 +35,7 @@ function typingLabel(names: string[]): string {
 }
 
 /** Message box: Enter sends, Shift+Enter adds a line, `@` mentions, #CASE-2026-047 tags a case. */
-export function Composer({
-  roomName,
-  onSend,
-  onTyping,
-  typingNames = [],
-  error,
-  mentionables = [],
-}: ComposerProps) {
+export function Composer({ roomName, onSend, onTyping, typingNames = [], error, mentionables = [] }: ComposerProps) {
   const [text, setText] = useState("");
   const [milestone, setMilestone] = useState(false);
   const [query, setQuery] = useState<{
@@ -58,21 +47,13 @@ export function Composer({
   const box = useRef<HTMLTextAreaElement>(null);
 
   const matches = query
-    ? mentionables
-        .filter((m) => m.name.toLowerCase().includes(query.text.toLowerCase()))
-        .slice(0, 8)
+    ? mentionables.filter((m) => m.name.toLowerCase().includes(query.text.toLowerCase())).slice(0, 8)
     : [];
   const open = matches.length > 0;
 
   const detect = (value: string, caret: number) => {
-    const found = mentionables.length
-      ? MENTION_QUERY.exec(value.slice(0, caret))
-      : null;
-    setQuery(
-      found
-        ? { text: found[1], start: caret - found[1].length - 1, end: caret }
-        : null,
-    );
+    const found = mentionables.length ? MENTION_QUERY.exec(value.slice(0, caret)) : null;
+    setQuery(found ? { text: found[1], start: caret - found[1].length - 1, end: caret } : null);
     setActive(0);
   };
 
@@ -93,9 +74,7 @@ export function Composer({
     event?.preventDefault();
     const content = text.trim();
     if (!content) return;
-    const mentioned = mentionables
-      .filter((m) => !m.agent && content.includes(`@${m.name}`))
-      .map((m) => m.id);
+    const mentioned = mentionables.filter((m) => !m.agent && content.includes(`@${m.name}`)).map((m) => m.id);
     onSend(content, milestone, mentioned);
     setText("");
     setMilestone(false);
@@ -110,10 +89,7 @@ export function Composer({
         setActive((i) => (i + step + matches.length) % matches.length);
         return;
       }
-      if (
-        (event.key === "Enter" || event.key === "Tab") &&
-        !event.nativeEvent.isComposing
-      ) {
+      if ((event.key === "Enter" || event.key === "Tab") && !event.nativeEvent.isComposing) {
         event.preventDefault();
         pick(matches[Math.min(active, matches.length - 1)]);
         return;
@@ -124,19 +100,11 @@ export function Composer({
         return;
       }
     }
-    if (
-      event.key === "Enter" &&
-      !event.shiftKey &&
-      !event.nativeEvent.isComposing
-    )
-      submit(event);
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) submit(event);
   };
 
   return (
-    <form
-      onSubmit={submit}
-      className="flex flex-col gap-2 border-t bg-background px-6 py-4"
-    >
+    <form onSubmit={submit} className="flex flex-col gap-2 border-t bg-background px-6 py-4">
       <p className="h-4 text-xs text-muted-foreground" aria-live="polite">
         {typingNames.length > 0 && typingLabel(typingNames)}
       </p>
@@ -157,10 +125,7 @@ export function Composer({
                   pick(mention);
                 }}
                 onMouseEnter={() => setActive(index)}
-                className={cn(
-                  "flex cursor-pointer items-center gap-2 px-2 py-1.5",
-                  index === active && "bg-surface-2",
-                )}
+                className={cn("flex cursor-pointer items-center gap-2 px-2 py-1.5", index === active && "bg-surface-2")}
               >
                 {mention.agent ? (
                   <span className="flex size-6 shrink-0 items-center justify-center bg-navy text-white">
@@ -170,14 +135,8 @@ export function Composer({
                   <Avatar initials={mention.initials} className="size-6" />
                 )}
                 <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-sm text-ink">
-                    {mention.name}
-                  </span>
-                  {mention.hint && (
-                    <span className="truncate text-[11px] text-muted-foreground">
-                      {mention.hint}
-                    </span>
-                  )}
+                  <span className="truncate text-sm text-ink">{mention.name}</span>
+                  {mention.hint && <span className="truncate text-[11px] text-muted-foreground">{mention.hint}</span>}
                 </span>
               </li>
             ))}
@@ -212,19 +171,13 @@ export function Composer({
           aria-pressed={milestone}
           className={cn(
             "micro-label flex items-center gap-1.5 border px-2 py-1",
-            milestone
-              ? "border-navy text-navy"
-              : "text-muted-foreground hover:bg-surface-2",
+            milestone ? "border-navy text-navy" : "text-muted-foreground hover:bg-surface-2",
           )}
         >
           <Star className="size-3" aria-hidden /> Milestone
         </button>
         {error && <span className="text-xs text-destructive">{error}</span>}
-        <ActionButton
-          type="submit"
-          className="ml-auto w-36"
-          disabled={!text.trim()}
-        >
+        <ActionButton type="submit" className="ml-auto w-36" disabled={!text.trim()}>
           Send
         </ActionButton>
       </div>

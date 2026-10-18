@@ -80,7 +80,9 @@ function FeedRow({ event, startedAt, latest }: { event: TraceEvent; startedAt: n
       <span
         className={cn(
           "flex size-7 shrink-0 items-center justify-center",
-          event.tool === "fallback" || event.tool === "injection" ? "bg-modified-bg text-modified" : "bg-navy text-white",
+          event.tool === "fallback" || event.tool === "injection"
+            ? "bg-modified-bg text-modified"
+            : "bg-navy text-white",
         )}
       >
         <Icon className="size-3.5" aria-hidden />
@@ -124,9 +126,15 @@ export function InvestigationScreen({ job, onRetry, isRetrying }: InvestigationS
       <div className="flex flex-wrap items-center gap-3 bg-navy px-5 py-3 text-white">
         <Bot className="size-4" aria-hidden />
         <span className="micro-label flex-1">
-          {failed ? "Investigation stopped" : job.status === "QUEUED" ? "Dejavu agent · queued" : "Dejavu agent · investigating"}
+          {failed
+            ? "Investigation stopped"
+            : job.status === "QUEUED"
+              ? "Dejavu agent · queued"
+              : "Dejavu agent · investigating"}
         </span>
-        <span className="micro-label tabular-nums">{elapsedLabel((running ? now : new Date(job.updated_at).getTime()) - startedAt)}</span>
+        <span className="micro-label tabular-nums">
+          {elapsedLabel((running ? now : new Date(job.updated_at).getTime()) - startedAt)}
+        </span>
       </div>
 
       <div className="grid grid-cols-1 border border-t-0 @3xl:grid-cols-[260px_minmax(0,1fr)]">
@@ -134,11 +142,19 @@ export function InvestigationScreen({ job, onRetry, isRetrying }: InvestigationS
           <ScanningStack active={Math.max(0, 2 - Math.max(current, 0))} />
           <ol className="flex flex-col gap-2">
             {job.steps.map((step, index) => {
-              const state = index < current || job.status === "COMPLETED" ? "done" : index === current && running ? "active" : "todo";
+              const state =
+                index < current || job.status === "COMPLETED"
+                  ? "done"
+                  : index === current && running
+                    ? "active"
+                    : "todo";
               return (
                 <li
                   key={step}
-                  className={cn("flex items-center gap-2 text-sm", state === "todo" ? "text-muted-foreground" : "text-ink")}
+                  className={cn(
+                    "flex items-center gap-2 text-sm",
+                    state === "todo" ? "text-muted-foreground" : "text-ink",
+                  )}
                 >
                   {state === "done" ? (
                     <Check className="size-4 text-reusable" aria-hidden />
@@ -173,7 +189,12 @@ export function InvestigationScreen({ job, onRetry, isRetrying }: InvestigationS
           </div>
           <ol className="flex flex-col">
             {trace.map((event, index) => (
-              <FeedRow key={event.id} event={event} startedAt={startedAt} latest={running && index === trace.length - 1} />
+              <FeedRow
+                key={event.id}
+                event={event}
+                startedAt={startedAt}
+                latest={running && index === trace.length - 1}
+              />
             ))}
             {running && (
               <li className="flex items-center gap-3 px-4 py-3 text-sm text-muted-foreground">

@@ -54,7 +54,7 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
 
 ## Commands
 
-`bun run setup` · `bun run dev` · `bun run dev --refresh-db` · `bun run stop` · `bun run logs` · `bun run seed` · `bun run reindex [--missing]` · `bun run test` · `bun run lint` · `bun run reset` (destroys volumes — confirm with the user first)
+`bun run setup` · `bun run dev` · `bun run dev --refresh-db` · `bun run stop` · `bun run logs` · `bun run seed` · `bun run reindex [--missing]` · `bun run test` · `bun run lint` · `bun run format` · `bun run reset` (destroys volumes — confirm with the user first)
 
 Migrations: `bun run db:revision "msg" [--empty]` · `db:migrate` · `db:downgrade` · `db:current` · `db:history` · `db:check` · `db:reset` (wipes dev data — confirm first)
 

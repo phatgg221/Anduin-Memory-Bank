@@ -61,19 +61,28 @@ export function MemoryReviewForm({
   const [confirming, setConfirming] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const set = <K extends keyof MemoryRecord>(key: K, value: MemoryRecord[K]) => setRecord((r) => ({ ...r, [key]: value }));
+  const set = <K extends keyof MemoryRecord>(key: K, value: MemoryRecord[K]) =>
+    setRecord((r) => ({ ...r, [key]: value }));
   const setStep = (index: number, value: string) =>
-    set("resolution_steps", record.resolution_steps.map((s, i) => (i === index ? value : s)));
+    set(
+      "resolution_steps",
+      record.resolution_steps.map((s, i) => (i === index ? value : s)),
+    );
   const setPitfall = (index: number, patch: Partial<MemoryPitfall>) =>
-    set("pitfalls", record.pitfalls.map((p, i) => (i === index ? { ...p, ...patch } : p)));
+    set(
+      "pitfalls",
+      record.pitfalls.map((p, i) => (i === index ? { ...p, ...patch } : p)),
+    );
 
   const commit = () => {
     const steps = record.resolution_steps.map((s) => s.trim()).filter(Boolean);
     if (record.summary.trim().length < 20) return setLocalError("The summary needs at least 20 characters.");
     if (record.how_it_went.trim().length < 20) return setLocalError("“How it went” needs at least 20 characters.");
     if (steps.length === 0) return setLocalError("Add at least one resolution step.");
-    if (record.pitfalls.some((p) => p.warning.trim().length < 10)) return setLocalError("Each pitfall needs at least 10 characters.");
-    if (ending.finalOutput.trim().length < 10) return setLocalError("Describe the final output in at least a sentence.");
+    if (record.pitfalls.some((p) => p.warning.trim().length < 10))
+      return setLocalError("Each pitfall needs at least 10 characters.");
+    if (ending.finalOutput.trim().length < 10)
+      return setLocalError("Describe the final output in at least a sentence.");
     setLocalError(null);
     if (!confirming) return setConfirming(true);
     onCommit({
@@ -119,7 +128,9 @@ export function MemoryReviewForm({
               onClick={() => setEnding((e) => ({ ...e, outcome: option.id }))}
               className={cn(
                 "micro-label border px-2 py-1",
-                ending.outcome === option.id ? "border-navy bg-navy text-white" : "text-muted-foreground hover:bg-surface-2",
+                ending.outcome === option.id
+                  ? "border-navy bg-navy text-white"
+                  : "text-muted-foreground hover:bg-surface-2",
               )}
             >
               {option.label}
@@ -139,12 +150,22 @@ export function MemoryReviewForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="memory-summary">Summary</Label>
-        <Textarea id="memory-summary" rows={3} value={record.summary} onChange={(e) => set("summary", e.target.value)} />
+        <Textarea
+          id="memory-summary"
+          rows={3}
+          value={record.summary}
+          onChange={(e) => set("summary", e.target.value)}
+        />
       </div>
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="memory-how">How it went</Label>
-        <Textarea id="memory-how" rows={5} value={record.how_it_went} onChange={(e) => set("how_it_went", e.target.value)} />
+        <Textarea
+          id="memory-how"
+          rows={5}
+          value={record.how_it_went}
+          onChange={(e) => set("how_it_went", e.target.value)}
+        />
       </div>
 
       <section className="flex flex-col gap-2">
@@ -152,19 +173,35 @@ export function MemoryReviewForm({
         {record.resolution_steps.map((step, index) => (
           <div key={index} className="flex items-start gap-2">
             <span className="micro-label mt-2.5 w-6 text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
-            <Textarea rows={2} value={step} onChange={(e) => setStep(index, e.target.value)} aria-label={`Step ${index + 1}`} />
+            <Textarea
+              rows={2}
+              value={step}
+              onChange={(e) => setStep(index, e.target.value)}
+              aria-label={`Step ${index + 1}`}
+            />
             <Button
               type="button"
               variant="ghost"
               size="icon"
               aria-label={`Remove step ${index + 1}`}
-              onClick={() => set("resolution_steps", record.resolution_steps.filter((_, i) => i !== index))}
+              onClick={() =>
+                set(
+                  "resolution_steps",
+                  record.resolution_steps.filter((_, i) => i !== index),
+                )
+              }
             >
               <Trash2 className="size-4" />
             </Button>
           </div>
         ))}
-        <Button type="button" variant="ghost" size="sm" className="w-fit gap-1.5" onClick={() => set("resolution_steps", [...record.resolution_steps, ""])}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-fit gap-1.5"
+          onClick={() => set("resolution_steps", [...record.resolution_steps, ""])}
+        >
           <Plus className="size-4" /> Add step
         </Button>
       </section>
@@ -174,9 +211,17 @@ export function MemoryReviewForm({
         {record.pitfalls.length === 0 && <p className="text-sm text-muted-foreground">No pitfalls drafted.</p>}
         {record.pitfalls.map((pitfall, index) => (
           <div key={index} className="flex flex-col gap-2 border p-3">
-            <Textarea rows={2} value={pitfall.warning} onChange={(e) => setPitfall(index, { warning: e.target.value })} aria-label={`Pitfall ${index + 1}`} />
+            <Textarea
+              rows={2}
+              value={pitfall.warning}
+              onChange={(e) => setPitfall(index, { warning: e.target.value })}
+              aria-label={`Pitfall ${index + 1}`}
+            />
             <div className="flex flex-wrap items-center gap-2">
-              <Select value={pitfall.severity} onValueChange={(value) => setPitfall(index, { severity: value as Severity })}>
+              <Select
+                value={pitfall.severity}
+                onValueChange={(value) => setPitfall(index, { severity: value as Severity })}
+              >
                 <SelectTrigger className="h-8 w-32" aria-label="Severity">
                   <SelectValue />
                 </SelectTrigger>
@@ -201,7 +246,12 @@ export function MemoryReviewForm({
                 size="icon"
                 className="ml-auto"
                 aria-label={`Remove pitfall ${index + 1}`}
-                onClick={() => set("pitfalls", record.pitfalls.filter((_, i) => i !== index))}
+                onClick={() =>
+                  set(
+                    "pitfalls",
+                    record.pitfalls.filter((_, i) => i !== index),
+                  )
+                }
               >
                 <Trash2 className="size-4" />
               </Button>
@@ -231,7 +281,12 @@ export function MemoryReviewForm({
                   type="button"
                   aria-label={`Remove tag ${label}`}
                   className="px-1 text-muted-foreground hover:text-ink"
-                  onClick={() => set("context_tags", Object.fromEntries(Object.entries(record.context_tags).filter(([k]) => k !== label)))}
+                  onClick={() =>
+                    set(
+                      "context_tags",
+                      Object.fromEntries(Object.entries(record.context_tags).filter(([k]) => k !== label)),
+                    )
+                  }
                 >
                   ×
                 </button>
@@ -260,7 +315,9 @@ export function MemoryReviewForm({
                     role="checkbox"
                     aria-checked={checked}
                     onClick={() =>
-                      setReusable((ids) => (ids.includes(file.id) ? ids.filter((x) => x !== file.id) : [...ids, file.id]))
+                      setReusable((ids) =>
+                        ids.includes(file.id) ? ids.filter((x) => x !== file.id) : [...ids, file.id],
+                      )
                     }
                     className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-surface-2"
                   >
@@ -308,10 +365,17 @@ export function MemoryReviewForm({
         ) : (
           <ul className="flex flex-col gap-2">
             {curator.contradictions.map((c) => (
-              <li key={c.case_code + c.existing} className="flex flex-col gap-1 border-l-2 border-modified bg-modified-bg px-3 py-2">
+              <li
+                key={c.case_code + c.existing}
+                className="flex flex-col gap-1 border-l-2 border-modified bg-modified-bg px-3 py-2"
+              >
                 <span className="flex items-center gap-2">
                   <GitCompareArrows className="size-3.5 text-modified" aria-hidden />
-                  <button type="button" onClick={() => onCaseClick(c.case_code)} className="micro-label text-navy hover:underline">
+                  <button
+                    type="button"
+                    onClick={() => onCaseClick(c.case_code)}
+                    className="micro-label text-navy hover:underline"
+                  >
                     {c.case_code}
                   </button>
                 </span>
