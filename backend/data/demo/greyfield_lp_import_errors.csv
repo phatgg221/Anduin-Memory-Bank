@@ -1,0 +1,10 @@
+row,investor_name,investor_type,trustee_or_signer,commitment_usd,import_error
+14,Whitcombe Family Trust,TRUST,Anna Whitcombe,5000000,DUPLICATE_INVESTOR
+15,Whitcombe Family Trust,TRUST,James Whitcombe,5000000,DUPLICATE_INVESTOR
+37,Okafor-Reid Family Trust,TRUST,Daniel Okafor,2500000,DUPLICATE_INVESTOR
+38,Okafor-Reid Family Trust,TRUST,Mara Reid,2500000,DUPLICATE_INVESTOR
+39,Okafor-Reid Family Trust,TRUST,Linh Okafor,2500000,DUPLICATE_INVESTOR
+52,Ashgrove Irrevocable Trust,TRUST,"Ruth Ashgrove; Peter Ashgrove",4000000,TRUSTEES_IN_ONE_CELL
+88,Ridge Operating Engineers Pension,PENSION,,12000000,PENSION_CAP_NOT_CHECKED
+89,Valley Building Trades Pension,PENSION,,9500000,PENSION_CAP_NOT_CHECKED
+90,Sakuragawa Teachers' Pension Fund,PENSION,,7000000,PENSION_CAP_NOT_CHECKED

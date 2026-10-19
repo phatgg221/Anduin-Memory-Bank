@@ -11,7 +11,7 @@ Hackathon project for Anduin's "Agent in the Shell" challenge (track: KNOWLEDGE 
 - [CONTEXT.md](CONTEXT.md) — domain, problem, product thesis, persona, glossary, open product questions.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — services, network rules, module layout, job lifecycle, pipeline, decisions, gotchas.
 - [DESIGN.md](DESIGN.md) — Dejavu brand, Anduin tokens, signature components, view sketches, implied capabilities.
-- [docs/RAG.md](docs/RAG.md) — how memory works: chunking, embeddings, retrieval and ranking, grounding and guards. [docs/DEPLOY.md](docs/DEPLOY.md) — production deploy and CI/CD.
+- [docs/RAG.md](docs/RAG.md) — how memory works: chunking, embeddings, retrieval and ranking, grounding and guards. [docs/DEPLOY.md](docs/DEPLOY.md) — production deploy and CI/CD. [docs/SAMPLE_CASES.md](docs/SAMPLE_CASES.md) — ready-to-paste demo requests per department.
 - Skill **`anduin-memory-bank`** (`.claude/skills/anduin-memory-bank/`) — coding rules, design system, code templates, LLM contracts, seed data. Load it before writing any frontend/backend code, UI, prompts, or seed data.
 - `frontend/AGENTS.md` — Next.js 16.4 is newer than your training data; read `frontend/node_modules/next/dist/docs/` before using unfamiliar APIs.
 
