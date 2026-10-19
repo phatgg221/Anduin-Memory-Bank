@@ -12,6 +12,8 @@ Built for the Anduin "Agent in the Shell" challenge (KNOWLEDGE — The Memory Ba
 - Product & domain: [CONTEXT.md](CONTEXT.md)
 - System design: [ARCHITECTURE.md](ARCHITECTURE.md)
 - Brand & UI: [DESIGN.md](DESIGN.md)
+- RAG (indexing, retrieval, grounding): [docs/RAG.md](docs/RAG.md)
+- Deploying: [docs/DEPLOY.md](docs/DEPLOY.md)
 
 ## Prerequisites
 
