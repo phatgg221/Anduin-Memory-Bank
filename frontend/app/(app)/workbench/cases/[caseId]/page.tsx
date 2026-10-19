@@ -340,7 +340,7 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
               ? `Dejavu is reviewing · ${job.step ?? "starting"}…`
               : job.is_reuse
                 ? `Dejavu is writing a reuse brief · ${job.step ?? "starting"}…`
-                : "Dejavu is answering…",
+                : `Dejavu is investigating · ${job.trace?.at(-1)?.label ?? job.step ?? "starting"}…`,
           }
         : job.status === "QUEUED"
           ? {

@@ -221,6 +221,8 @@ class CopilotMessage(Base):
     # Set by code from the retrieved context, never by the LLM.
     cited_case_ids: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     cited_artifact_ids: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    # The tool calls the copilot agent made for this answer (label + detail), shown under it.
+    steps: Mapped[list[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

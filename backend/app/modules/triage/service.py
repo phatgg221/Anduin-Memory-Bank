@@ -700,7 +700,15 @@ async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
         return await _review(job_id, case_id, job_input["review"])
     if job_input.get("reuse"):
         return await _reuse(job_id, case_id, job_input["reuse"])
+    async with SessionLocal.begin() as session:
+        await session.execute(update(CaseJob).where(CaseJob.id == job_id).values(trace=[]))
     await heartbeat(job_id, copilot.COPILOT_STEPS[0])
+    steps: list[dict[str, Any]] = []
+
+    async def trace(event: dict[str, Any]) -> None:
+        steps.append({"tool": event["tool"], "label": event["label"], "detail": event["detail"]})
+        await append_trace(job_id, event)
+
     async with SessionLocal() as session:
         job = await session.get_one(CaseJob, job_id)
         question = (job.input or {}).get("question", "")
@@ -710,6 +718,8 @@ async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
             [] if in_channel else [(m.role, m.content) for m in await cases.copilot_messages(session, case_id)][:-1]
         )
         context = copilot.CopilotContext(
+            case=case,
+            incoming=_incoming(case, {}),
             channel=build_transcript(thread).text if thread.messages else "",
             case_block=(
                 f"{case.case_code} · {case.title}\nCustomer: {case.client_name} · Fund: {case.fund_name}\n"
@@ -718,7 +728,7 @@ async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
             precedents=await cases.precedents_for(session, case),
             history=history,
         )
-        result = await copilot.answer(session, context, question, lambda step: heartbeat(job_id, step))
+        result = await copilot.answer(session, context, question, lambda step: heartbeat(job_id, step), trace)
         if in_channel:
             posted = await cases.post_agent_message(session, case_id, job_id, result["answer"])
             out = ThreadMessageOut.model_validate(posted).model_dump(mode="json")
@@ -726,6 +736,7 @@ async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
             return {
                 "channel_message_id": str(posted.id),
                 "uncited_case_codes": result["uncited_case_codes"],
+                "investigation": result["investigation"],
                 "provider": llm_client.provider_label(),
             }
         message = await cases.add_copilot_message(
@@ -735,10 +746,12 @@ async def _copilot(job_id: uuid.UUID, case_id: uuid.UUID) -> dict[str, Any]:
             result["answer"],
             cited_case_ids=result["cited_case_ids"],
             cited_artifact_ids=result["cited_artifact_ids"],
+            steps=steps,
         )
     return {
         "message_id": str(message.id),
         "uncited_case_codes": result["uncited_case_codes"],
+        "investigation": result["investigation"],
         "provider": llm_client.provider_label(),
     }
 

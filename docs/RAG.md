@@ -70,7 +70,7 @@ Similarity everywhere is `1 − cosine distance`, shown in %.
 | Precedent ranking (Top 3) | Title, customer, fund, tags, request and file text | 60 nearest chunks from resolved cases → best chunk per case → hybrid score → top 3 | `analyzer.rank_precedents` |
 | Agent: `search_knowledge_vault` | A query the agent writes | 40 nearest chunks → up to 5 cases with 2 excerpts each | `triage_agent.py` |
 | Agent: `check_active_duplicates` | The request | Nearest **open** cases by their intake chunks; ≥ 55% or same client = overlap | `cases.nearest_open_cases` |
-| Copilot and `@Dejavu` | Question + this case's details | 8 nearest memory chunks | `copilot.py` |
+| Copilot and `@Dejavu` | Queries the agent writes (tool calls) | Top 5 cases per vault search; 6 chunks per case-file search | `copilot.py` |
 | Solution review | One query per claim in the selected messages | 4 past chunks + 2 of this case's own chunks per claim | `reviewer.py` |
 | Reuse brief | This case, and the reused file | 4 pages of the file nearest this case + 3 of this case's chunks nearest the file | `reuse_brief.py` |
 | Curator consistency check | The draft memory record | The 10 nearest older cases, for contradictions | `curator.py` |

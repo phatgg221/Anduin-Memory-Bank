@@ -110,6 +110,7 @@ export interface CopilotMessage {
   user_id: string | null;
   cited_case_ids: string[];
   cited_artifact_ids: string[];
+  steps?: Pick<TraceEvent, "tool" | "label" | "detail">[];
   created_at: string;
   /** Client-only: asked optimistically. */
   pending?: boolean;

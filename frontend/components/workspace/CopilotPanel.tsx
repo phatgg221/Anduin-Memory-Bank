@@ -1,11 +1,11 @@
 "use client";
 
-import { Bot, Check, Copy, LoaderCircle, MessageSquarePlus, SendHorizontal } from "lucide-react";
+import { Bot, Check, ChevronRight, Copy, LoaderCircle, MessageSquarePlus, SendHorizontal } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { CaseJob, CopilotMessage } from "@/types/memory";
+import type { CaseJob, CopilotMessage, TraceEvent } from "@/types/memory";
 
 interface CopilotPanelProps {
   messages: CopilotMessage[];
@@ -40,6 +40,38 @@ function Answer({ text, onCaseClick }: { text: string; onCaseClick: (code: strin
   );
 }
 
+type Step = Pick<TraceEvent, "tool" | "label" | "detail">;
+
+function StepList({ steps }: { steps: Step[] }) {
+  return (
+    <ol className="flex flex-col gap-1 border-l pl-2.5">
+      {steps.map((step, i) => (
+        <li key={i} className="text-xs">
+          <span className="text-ink">{step.label}</span>
+          <span className="block truncate font-mono text-[11px] text-muted-foreground" title={step.detail}>
+            {step.detail}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Investigation({ steps }: { steps: Step[] }) {
+  if (steps.length === 0) return null;
+  return (
+    <details className="group">
+      <summary className="micro-label flex cursor-pointer list-none items-center gap-1 text-muted-foreground hover:text-ink">
+        <ChevronRight className="size-3 transition-transform group-open:rotate-90" aria-hidden />
+        Investigated · {steps.length} tool call{steps.length === 1 ? "" : "s"}
+      </summary>
+      <div className="pt-1.5">
+        <StepList steps={steps} />
+      </div>
+    </details>
+  );
+}
+
 /** `■ 03B / DEJAVU AI MEMORY COPILOT` — grounded Q&A over this case and the Memory Bank. */
 export function CopilotPanel({ messages, jobs, chips, onAsk, onPost, onCaseClick, error }: CopilotPanelProps) {
   const [question, setQuestion] = useState("");
@@ -52,7 +84,7 @@ export function CopilotPanel({ messages, jobs, chips, onAsk, onPost, onCaseClick
   useEffect(() => {
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight;
-  }, [messages.length, thinking?.step]);
+  }, [messages.length, thinking?.step, thinking?.trace?.length]);
 
   const ask = (text: string, event?: FormEvent) => {
     event?.preventDefault();
@@ -67,8 +99,8 @@ export function CopilotPanel({ messages, jobs, chips, onAsk, onPost, onCaseClick
       <div ref={listRef} className="flex min-h-32 flex-1 flex-col gap-3 overflow-y-auto">
         {messages.length === 0 && !thinking && (
           <p className="text-xs text-muted-foreground">
-            Ask about this case: answers come only from the case, its matched precedents and the Memory Bank, with
-            citations.
+            Ask about this case: Dejavu investigates the Memory Bank with its tools, then answers only from what it
+            found, with citations.
           </p>
         )}
         {messages.map((message) => (
@@ -78,6 +110,7 @@ export function CopilotPanel({ messages, jobs, chips, onAsk, onPost, onCaseClick
                 <span className="micro-label flex items-center gap-1 text-navy">
                   <Bot className="size-3" aria-hidden /> Dejavu copilot
                 </span>
+                <Investigation steps={message.steps ?? []} />
                 <Answer text={message.content} onCaseClick={onCaseClick} />
                 <div className="flex gap-1.5 pt-1">
                   <Button
@@ -116,9 +149,12 @@ export function CopilotPanel({ messages, jobs, chips, onAsk, onPost, onCaseClick
           </div>
         ))}
         {thinking && (
-          <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
-            <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> {thinking.step ?? "Queued"}…
-          </p>
+          <div className="flex flex-col gap-1.5" role="status">
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> {thinking.step ?? "Queued"}…
+            </p>
+            {(thinking.trace?.length ?? 0) > 0 && <StepList steps={thinking.trace!} />}
+          </div>
         )}
         {failed.map((job) => (
           <p key={job.id} className="text-xs text-destructive">

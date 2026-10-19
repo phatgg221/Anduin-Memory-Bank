@@ -163,6 +163,45 @@ def test_copilot_answers_with_checked_citations(client, sql):
     assert "[CASE-2025-052]" in answer["content"] and answer["cited_case_ids"] == [SOVEREIGN]
 
 
+def test_copilot_agent_picks_tools_and_code_checks_its_citations(client, sql, monkeypatch):
+    from app.core.config import settings
+    from app.modules.intelligence import llm_client
+    from app.modules.intelligence.schemas import CopilotAnswerDraft
+    from tests.test_memory import fetchval
+
+    elena, _ = signed_in(client, sql)
+    with_indexed_precedent(client, sql, elena)
+    turns = []
+
+    async def scripted(messages, tools):
+        turns.append(messages)
+        if len(turns) == 1:
+            call = {"name": "get_case_details", "arguments": '{"case_code": "case-2025-052"}'}
+            return {"content": "", "tool_calls": [{"id": "c1", "type": "function", "function": call}]}
+        return {"content": "The sovereign case took four redline rounds."}
+
+    async def write(system, user, schema, **_):
+        assert "Four redline rounds" in user and "<agent_notes>" in user
+        return CopilotAnswerDraft(answer="See [CASE-2025-052] and [CASE-1999-999].", cited_case_codes=[])
+
+    monkeypatch.setattr(settings, "llm_provider", "openrouter")
+    monkeypatch.setattr(llm_client, "complete_with_tools", scripted)
+    monkeypatch.setattr(llm_client, "complete_json", write)
+
+    job_id = str(uuid.uuid4())
+    body = {"message_id": str(uuid.uuid4()), "job_id": job_id, "question": "Why did the sovereign case drag on?"}
+    client.post(f"/api/cases/{AURELIAN}/copilot", json=body, headers=elena)
+    run_job(client, job_id)
+
+    assert turns[1][-1]["role"] == "tool" and "CASE-2025-052" in turns[1][-1]["content"]
+    answer = client.get(f"/api/cases/{AURELIAN}/copilot", headers=elena).json()["messages"][-1]
+    assert answer["cited_case_ids"] == [SOVEREIGN]
+    assert [s["label"] for s in answer["steps"]][:1] == ["Opened a past case"]
+    assert len(answer["steps"]) == 1  # the agent investigated, so code adds no fallback search
+    result = fetchval(f"SELECT result::text FROM case_jobs WHERE id = '{job_id}'")
+    assert "CASE-1999-999" in result and '"agent": true' in result
+
+
 def test_use_a_precedent_file_in_the_case_thread(client, sql):
     elena, _ = signed_in(client, sql)
     with_indexed_precedent(client, sql, elena)

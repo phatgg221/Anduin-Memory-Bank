@@ -93,6 +93,7 @@ class CopilotMessageOut(BaseModel):
     user_id: uuid.UUID | None
     cited_case_ids: list[str]
     cited_artifact_ids: list[str]
+    steps: list[dict[str, Any]] = []
     created_at: datetime
 
 

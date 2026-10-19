@@ -779,6 +779,7 @@ async def add_copilot_message(
     user_id: uuid.UUID | None = None,
     cited_case_ids: list[str] | None = None,
     cited_artifact_ids: list[str] | None = None,
+    steps: list[dict] | None = None,
 ) -> CopilotMessage:
     message = CopilotMessage(
         id=message_id or uuid.uuid4(),
@@ -788,6 +789,7 @@ async def add_copilot_message(
         content=content,
         cited_case_ids=cited_case_ids or [],
         cited_artifact_ids=cited_artifact_ids or [],
+        steps=steps or [],
     )
     session.add(message)
     await session.commit()

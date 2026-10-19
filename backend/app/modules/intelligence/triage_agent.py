@@ -4,6 +4,7 @@ The model chooses what to look at; code runs every lookup, computes every score,
 in the final report that no tool returned. Read-only: the triage worker persists the result.
 """
 
+import inspect
 import json
 import re
 import statistics
@@ -41,6 +42,7 @@ TRIAGE_STEPS = (
     "Checking sources and scores",
 )
 MAX_TOOL_CALLS = 8
+WEAK_MATCH = 60  # % top similarity below which a vault search tells the agent to try again
 DUPLICATE_THRESHOLD = 55  # % similarity for an unrelated-client open case to count as overlapping
 CASE_CODE = re.compile(r"CASE-\d{4}-\d{3}")
 RISK_ORDER = ("LOW", "MEDIUM", "HIGH", "CRITICAL")
@@ -148,23 +150,20 @@ def _person(user) -> dict:
 
 
 class Toolbox:
+    labels = LABELS
+
     def __init__(self, session: AsyncSession, case, incoming: IncomingRequest, evidence: Evidence, on_trace: OnTrace):
         self.session = session
         self.case = case
         self.incoming = incoming
         self.evidence = evidence
         self.on_trace = on_trace
+        self.results: list[dict] = []
         self._request_vector: list[float] | None = None
         self._cache: dict[tuple, dict] = {}
 
     async def run(self, name: str, args: dict, *, auto: bool = False) -> dict:
-        handler = {
-            "search_knowledge_vault": self.search_knowledge_vault,
-            "check_active_duplicates": self.check_active_duplicates,
-            "get_case_details": self.get_case_details,
-            "find_people": self.find_people,
-            "estimate_effort": self.estimate_effort,
-        }.get(name)
+        handler = getattr(self, name) if name in self.labels else None
         if handler is None:
             return {"error": f"Unknown tool {name}"}
         key = cache_key(name, args)
@@ -176,13 +175,15 @@ class Toolbox:
                 "or stop and summarise.",
             }
         try:
-            result, detail = await handler(**args)
+            inspect.signature(handler).bind(**args)
         except TypeError:
             return {"error": f"Bad arguments for {name}"}
+        result, detail = await handler(**args)
         self._cache[key] = result
+        self.results.append({"tool": name, "args": args, "result": result})
         self.evidence.tool_calls += 1
         self.evidence.called.add(name)
-        await self.on_trace({"tool": name, "label": LABELS[name], "detail": detail, "auto": auto})
+        await self.on_trace({"tool": name, "label": self.labels[name], "detail": detail, "auto": auto})
         return result
 
     async def _vector(self) -> list[float]:
@@ -215,12 +216,15 @@ class Toolbox:
         top = sorted(found.values(), key=lambda e: e["similarity"], reverse=True)[:5]
         for entry in top:
             known = self.evidence.vault.get(entry["case_code"])
-            if not known or entry["similarity"] > known["similarity"]:
+            if not known or known["similarity"] is None or entry["similarity"] > known["similarity"]:
                 self.evidence.vault[entry["case_code"]] = {k: v for k, v in entry.items() if k != "excerpts"}
         detail = f'"{query[:70]}" → ' + (
             ", ".join(f"{e['case_code']} ({e['similarity']}%)" for e in top[:3]) or "no matches"
         )
-        return {"results": top}, detail
+        result: dict = {"results": top}
+        if not top or top[0]["similarity"] < WEAK_MATCH:
+            result["note"] = "Weak matches. Rephrase, search one sub-part at a time, or say this looks net-new."
+        return result, detail
 
     async def check_active_duplicates(self) -> tuple[dict, str]:
         near = await cases.nearest_open_cases(self.session, await self._vector(), self.case.id, 5)
@@ -343,6 +347,48 @@ class Toolbox:
         return effort, f"Similar cases took {took}{deadline}"
 
 
+async def tool_loop(system: str, user: str, schemas: list[dict], tools: Toolbox, budget: int) -> None:
+    """The model calls tools until it replies in plain text (its notes) or the budget runs out."""
+    evidence = tools.evidence
+    messages: list[dict] = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    try:
+        for _ in range(budget + 2):
+            reply = await llm_client.complete_with_tools(messages, schemas)
+            calls = reply.get("tool_calls") or []
+            if not calls:
+                evidence.notes = (reply.get("content") or "")[:2000]
+                break
+            messages.append({"role": "assistant", "content": reply.get("content") or "", "tool_calls": calls})
+            for call in calls:
+                name = call.get("function", {}).get("name", "")
+                try:
+                    args = json.loads(call.get("function", {}).get("arguments") or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                if evidence.tool_calls >= budget:
+                    result: dict = {"error": "Tool budget used up. Stop calling tools and summarise."}
+                else:
+                    result = await tools.run(name, args if isinstance(args, dict) else {})
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.get("id", ""),
+                        "name": name,
+                        "content": json.dumps(result, default=str)[:6000],
+                    }
+                )
+        evidence.agent_ran = True
+    except llm_client.LLMError as error:
+        await tools.on_trace(
+            {
+                "tool": "fallback",
+                "label": "Agent unavailable, continuing with the standard checks",
+                "detail": str(error)[:160],
+                "auto": True,
+            }
+        )
+
+
 async def investigate(
     session: AsyncSession, case, incoming: IncomingRequest, precedents: list[PrecedentContext], on_trace: OnTrace
 ) -> Evidence:
@@ -362,49 +408,10 @@ async def investigate(
         ]
         for name, args in script:
             await tools.run(name, args)
-        evidence.agent_ran = True
         evidence.notes = "Scripted investigation (fake provider)."
     else:
-        messages: list[dict] = [
-            {"role": "system", "content": TRIAGE_AGENT_SYSTEM},
-            {"role": "user", "content": triage_agent_user(_request_block(incoming, precedents))},
-        ]
-        try:
-            for _ in range(MAX_TOOL_CALLS + 2):
-                reply = await llm_client.complete_with_tools(messages, TOOLS)
-                calls = reply.get("tool_calls") or []
-                if not calls:
-                    evidence.notes = (reply.get("content") or "")[:2000]
-                    break
-                messages.append({"role": "assistant", "content": reply.get("content") or "", "tool_calls": calls})
-                for call in calls:
-                    name = call.get("function", {}).get("name", "")
-                    try:
-                        args = json.loads(call.get("function", {}).get("arguments") or "{}")
-                    except json.JSONDecodeError:
-                        args = {}
-                    if evidence.tool_calls >= MAX_TOOL_CALLS:
-                        result: dict = {"error": "Tool budget used up. Stop calling tools and summarise."}
-                    else:
-                        result = await tools.run(name, args if isinstance(args, dict) else {})
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": call.get("id", ""),
-                            "name": name,
-                            "content": json.dumps(result, default=str)[:6000],
-                        }
-                    )
-            evidence.agent_ran = True
-        except llm_client.LLMError as error:
-            await on_trace(
-                {
-                    "tool": "fallback",
-                    "label": "Agent unavailable, continuing with the standard checks",
-                    "detail": str(error)[:160],
-                    "auto": True,
-                }
-            )
+        user = triage_agent_user(_request_block(incoming, precedents))
+        await tool_loop(TRIAGE_AGENT_SYSTEM, user, TOOLS, tools, MAX_TOOL_CALLS)
 
     # Every report has duplicates, people and effort, whatever the agent chose to look at.
     if "search_knowledge_vault" not in evidence.called:
