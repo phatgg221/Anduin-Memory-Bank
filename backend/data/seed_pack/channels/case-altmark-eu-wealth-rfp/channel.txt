@@ -1,0 +1,17 @@
+# Channel export · #case-altmark-eu-wealth-rfp
+# Case CASE-2026-048 · Altmark Global Investors — European Private Wealth Feeder Security & Scoping RFP
+# Times in ICT (UTC+7)
+
+[2026-10-13 16:20] @ryan.miller
+Altmark Global Investors sent a 160-question security and scoping RFP for their European private wealth feeder platform: about €450k ARR, 1,800 HNW investors managed by roughly 40 wealth managers, monthly closings. Due 6 Nov. Extract of the questions that matter attached.
+[attached] altmark_rfp_questionnaire_extract.csv
+
+[2026-10-13 16:45] @ryan.miller
+Most of the security tab maps onto the Valmont DORA master bank, and the wealth-manager questions onto Brookhaven. Three blockers have no precedent at all: AGI-CH-131/132, a Swiss client confidentiality addendum with a banking secrecy waiver for Swiss-booked investors.
+
+[2026-10-14 09:10] @elena.rostova
+Careful with the Valmont bank: David wrote it and the last_verified dates are a year old. Every answer gets re-verified before it goes out, especially AI-07 and DORA-31.
+On the Swiss addendum: client confidentiality for Swiss-booked clients comes from Article 47 of the Swiss Banking Act and the bank's own client agreements, so the waiver is the client's consent to disclosure, not something we grant. I'll draft it with Altmark's Swiss counsel; nothing in our library covers it.
+
+[2026-10-14 10:30] @marcus.vance
+I'll re-export the EU tenant egress allow-list and inference routing this week, so AI-07 and DORA-31 rest on current evidence. Switzerland isn't in the EEA, so AGI-SEC-063 needs the transfer answer extended for Swiss data protection law as well.

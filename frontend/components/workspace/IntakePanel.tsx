@@ -153,7 +153,7 @@ export function IntakePanel({
             id="intake-client"
             className="h-8 bg-background text-xs"
             value={intake.client_name}
-            placeholder="Apollo Global"
+            placeholder="Aurelian Global"
             onChange={(e) => describe("client_name", e.target.value)}
           />
         </div>

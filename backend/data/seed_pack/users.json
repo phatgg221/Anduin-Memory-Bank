@@ -10,7 +10,7 @@
   {
     "handle": "chloe.nguyen",
     "name": "Chloe Nguyen",
-    "email": "chloe.nguyen@anduin.tech",
+    "email": "chloe.nguyen@corvane.tech",
     "primary_department_id": "CUSTOMER_SUCCESS",
     "role": "CUSTOMER_SUCCESS_LEAD",
     "job_title": "Customer Success Lead",
@@ -22,7 +22,7 @@
   {
     "handle": "elena.rostova",
     "name": "Elena Rostova",
-    "email": "elena.rostova@anduin.tech",
+    "email": "elena.rostova@corvane.tech",
     "primary_department_id": "LEGAL_COMPLIANCE",
     "role": "LEGAL_COUNSEL",
     "job_title": "Legal Counsel",
@@ -34,7 +34,7 @@
   {
     "handle": "ryan.miller",
     "name": "Ryan Miller",
-    "email": "ryan.miller@anduin.tech",
+    "email": "ryan.miller@corvane.tech",
     "primary_department_id": "SALES_SOLUTIONS",
     "role": "SOLUTIONS_ARCHITECT",
     "job_title": "Solutions Architect",
@@ -46,7 +46,7 @@
   {
     "handle": "sarah.tran",
     "name": "Sarah Tran",
-    "email": "sarah.tran@anduin.tech",
+    "email": "sarah.tran@corvane.tech",
     "primary_department_id": "ENGINEERING_DATA",
     "role": "SOLUTIONS_ENGINEER",
     "job_title": "Senior Solutions Engineer",
@@ -58,7 +58,7 @@
   {
     "handle": "marcus.vance",
     "name": "Marcus Vance",
-    "email": "marcus.vance@anduin.tech",
+    "email": "marcus.vance@corvane.tech",
     "primary_department_id": "ENGINEERING_DATA",
     "role": "SRE_ENGINEER",
     "job_title": "Site Reliability Engineer",
@@ -70,7 +70,7 @@
   {
     "handle": "minh.nguyen",
     "name": "Minh Nguyen",
-    "email": "minh.nguyen@anduin.tech",
+    "email": "minh.nguyen@corvane.tech",
     "primary_department_id": "CLIENT_OPERATIONS",
     "role": "PRINCIPAL_OPS_ARCHITECT",
     "job_title": "Principal Operations Architect",
@@ -82,7 +82,7 @@
   {
     "handle": "david.le",
     "name": "David Le",
-    "email": "david.le@anduin.tech",
+    "email": "david.le@corvane.tech",
     "primary_department_id": "LEGAL_COMPLIANCE",
     "role": "COMPLIANCE_SOLUTIONS_LEAD",
     "job_title": "Compliance Solutions Lead",

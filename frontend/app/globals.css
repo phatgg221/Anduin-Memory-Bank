@@ -9,7 +9,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Anduin palette */
+  /* Corvane palette */
   --white: #ffffff;
   --cool-grey: #eceff3; /* background secondary */
   --steel: #cbd2dc; /* background tertiary: wells, hover, skeletons */

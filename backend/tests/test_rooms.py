@@ -6,16 +6,16 @@ SETUP = """
 INSERT INTO departments (id, code, name) VALUES
   ('LEGAL_COMPLIANCE', 'LEGAL', 'Legal & Compliance'),
   ('SALES_SOLUTIONS', 'SALES', 'Sales & Solutions Architecture');
-UPDATE departments SET lead_user_id = (SELECT id FROM users WHERE email = 'elena@anduin.example')
+UPDATE departments SET lead_user_id = (SELECT id FROM users WHERE email = 'elena@corvane.example')
   WHERE id = 'LEGAL_COMPLIANCE';
 INSERT INTO users (id, email, name, password_hash, avatar_initials, is_active)
-  VALUES ('00000000-0000-0000-0000-0000000000d1', 'david@anduin.example', 'David Le', '!', 'DL', false);
+  VALUES ('00000000-0000-0000-0000-0000000000d1', 'david@corvane.example', 'David Le', '!', 'DL', false);
 INSERT INTO case_records (id, case_code, channel_slug, title, department_id, secondary_department_ids, status,
                           initial_request_brief, resolved_at, comparison_results, lead_resolver_user_id) VALUES
   ('00000000-0000-0000-0000-000000000052', 'CASE-2025-052', 'case-sovereign', 'Sovereign side letter',
    'LEGAL_COMPLIANCE', '[]', 'RESOLVED', 'brief', now(), NULL, '00000000-0000-0000-0000-0000000000d1'),
-  ('00000000-0000-0000-0000-000000000047', 'CASE-2026-047', 'case-apollo', 'Apollo Crossover Feeder II',
-   'CLIENT_OPERATIONS', '["LEGAL_COMPLIANCE"]', 'OPEN', 'Apollo brief', NULL,
+  ('00000000-0000-0000-0000-000000000047', 'CASE-2026-047', 'case-aurelian', 'Aurelian Crossover Feeder II',
+   'CLIENT_OPERATIONS', '["LEGAL_COMPLIANCE"]', 'OPEN', 'Aurelian brief', NULL,
    '[{"caseCode": "CASE-2025-052", "similarityScore": 84, "howPastCaseWent": "Four rounds.",
       "pitfallWarnings": [], "deltaItems": []}]', NULL)
 """
@@ -24,13 +24,13 @@ ROOM = "/api/rooms/LEGAL_COMPLIANCE"
 MEMBERS = """
 INSERT INTO rooms (department_id) VALUES ('LEGAL_COMPLIANCE') ON CONFLICT DO NOTHING;
 INSERT INTO room_members (department_id, user_id, role)
-  SELECT 'LEGAL_COMPLIANCE', id, 'MEMBER' FROM users WHERE email = 'ryan@anduin.example';
+  SELECT 'LEGAL_COMPLIANCE', id, 'MEMBER' FROM users WHERE email = 'ryan@corvane.example';
 """
 
 
 def two_users(client, sql):
-    elena = bearer(register(client, email="elena@anduin.example", name="Elena Rostova").json()["access_token"])
-    ryan = bearer(register(client, email="ryan@anduin.example", name="Ryan Miller").json()["access_token"])
+    elena = bearer(register(client, email="elena@corvane.example", name="Elena Rostova").json()["access_token"])
+    ryan = bearer(register(client, email="ryan@corvane.example", name="Ryan Miller").json()["access_token"])
     sql("INSERT INTO departments (id, code, name) VALUES ('CLIENT_OPERATIONS', 'OPS', 'Client Operations')")
     sql(SETUP)
     sql(MEMBERS)
@@ -157,7 +157,7 @@ def test_writes_are_published_to_the_department_room(client, sql, monkeypatch):
 
 def test_department_channels_are_members_only(client, sql):
     elena, ryan = two_users(client, sql)
-    sarah = bearer(register(client, email="sarah@anduin.example", name="Sarah Tran").json()["access_token"])
+    sarah = bearer(register(client, email="sarah@corvane.example", name="Sarah Tran").json()["access_token"])
     post(client, ryan, "Members-only discussion")
 
     view = client.get(ROOM, headers=sarah).json()
@@ -195,6 +195,6 @@ def test_department_channels_are_members_only(client, sql):
 
 def test_department_colleagues_always_have_their_channel(client, sql):
     elena, ryan = two_users(client, sql)
-    sql("UPDATE users SET primary_department_id = 'LEGAL_COMPLIANCE' WHERE email = 'ryan@anduin.example'")
+    sql("UPDATE users SET primary_department_id = 'LEGAL_COMPLIANCE' WHERE email = 'ryan@corvane.example'")
     ryan_id = client.get("/api/auth/me", headers=ryan).json()["id"]
     assert client.delete(f"{ROOM}/members/{ryan_id}", headers=elena).status_code == 409

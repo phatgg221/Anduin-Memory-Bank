@@ -16,7 +16,7 @@ interface TopNavProps {
   actions?: ReactNode;
 }
 
-/** Persistent top bar: `▲ Dejavu // by Anduin   Workbench   Knowledge Vault   Ingest Archive   [actions]` */
+/** Persistent top bar: `▲ Dejavu // by Corvane   Workbench   Knowledge Vault   Ingest Archive   [actions]` */
 export function TopNav({ items, activeHref, actions }: TopNavProps) {
   const cell = "relative flex items-center border-r px-5 text-sm whitespace-nowrap";
 

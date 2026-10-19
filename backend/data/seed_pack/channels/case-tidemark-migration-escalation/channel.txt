@@ -1,0 +1,16 @@
+# Channel export · #case-tidemark-migration-escalation
+# Case CASE-2026-049 · Tidemark Capital — DealLedger Legacy LP Migration, Multi-Currency Wires & Portal Invite Escalation
+# Times in ICT (UTC+7)
+
+[2026-10-14 09:05] @chloe.nguyen
+Escalation from Tidemark Capital. They're migrating 650 legacy LP entities from DealLedger ahead of the Q1 capital call and tax distributions, and three things are breaking at once: EUR/JPY wire instructions fail validation, Cityline- and Rhone Union-hosted LPs say they never got their portal invites, and the migrated entity list doesn't reconcile.
+
+[2026-10-14 09:40] @sarah.tran
+Entity side first. The DealLedger export has the same trust problem we had on Ardent: trusts imported once per trustee contact (38 LPs, commitments duplicated in the Q1 call preview) and trustees jammed into the legal name (21). Plus 9 IRAs with the custodian recorded as the investor. Exceptions list attached.
+[attached] tidemark_dealledger_migration_exceptions.csv
+
+[2026-10-14 10:15] @marcus.vance
+Invites: no bounces logged for the Cityline and Rhone Union mailboxes, which is the quarantine signature from Blackridge last March. Checking DKIM alignment on Tidemark's sending identity now, and I'll send the bank IT teams the whitelisting guide.
+
+[2026-10-14 11:00] @chloe.nguyen
+The wire failures look like the Carrow FX pattern too: EUR and JPY wires off by 0.02-0.11% of the called amount, and a handful of USD wires short by intermediary fees. Minh and David have both left, so we're working from their write-ups. Pulling the precedents into one plan for Tidemark's call tomorrow.

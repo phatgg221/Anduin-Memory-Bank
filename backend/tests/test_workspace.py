@@ -1,6 +1,6 @@
 import uuid
 
-from tests.test_case_threads import APOLLO, SOVEREIGN, new_case, post, signed_in
+from tests.test_case_threads import AURELIAN, SOVEREIGN, new_case, post, signed_in
 from tests.test_memory import run_job
 
 SOVEREIGN_FILE = "00000000-0000-0000-0000-0000000000f1"
@@ -36,8 +36,8 @@ async def _enqueue_index(service):
 def test_open_cases_list_shows_top_match(client, sql):
     elena, _ = signed_in(client, sql)
     rooms = client.get("/api/cases", headers=elena).json()
-    apollo = next(r for r in rooms if r["case_code"] == "CASE-2026-047")
-    assert (apollo["top_match_code"], apollo["top_match_score"]) == ("CASE-2025-052", 84)
+    aurelian = next(r for r in rooms if r["case_code"] == "CASE-2026-047")
+    assert (aurelian["top_match_code"], aurelian["top_match_score"]) == ("CASE-2025-052", 84)
     assert all(r["status"] == "OPEN" for r in rooms)
     legal = client.get("/api/cases", params={"department_id": "SALES_SOLUTIONS"}, headers=elena).json()
     assert legal == []
@@ -149,15 +149,15 @@ def test_copilot_answers_with_checked_citations(client, sql):
     elena, _ = signed_in(client, sql)
     message_id, job_id = str(uuid.uuid4()), str(uuid.uuid4())
     body = {"message_id": message_id, "job_id": job_id, "question": "Why did the sovereign case take three weeks?"}
-    asked = client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=elena)
+    asked = client.post(f"/api/cases/{AURELIAN}/copilot", json=body, headers=elena)
     assert asked.status_code == 202 and asked.json()["kind"] == "COPILOT"
-    assert client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=elena).json()["id"] == job_id  # retry
+    assert client.post(f"/api/cases/{AURELIAN}/copilot", json=body, headers=elena).json()["id"] == job_id  # retry
 
-    pending = client.get(f"/api/cases/{APOLLO}/copilot", headers=elena).json()
+    pending = client.get(f"/api/cases/{AURELIAN}/copilot", headers=elena).json()
     assert [m["role"] for m in pending["messages"]] == ["user"] and len(pending["jobs"]) == 1
 
     run_job(client, job_id)
-    view = client.get(f"/api/cases/{APOLLO}/copilot", headers=elena).json()
+    view = client.get(f"/api/cases/{AURELIAN}/copilot", headers=elena).json()
     assert [m["role"] for m in view["messages"]] == ["user", "assistant"] and view["jobs"] == []
     answer = view["messages"][1]
     assert "[CASE-2025-052]" in answer["content"] and answer["cited_case_ids"] == [SOVEREIGN]
@@ -167,50 +167,52 @@ def test_use_a_precedent_file_in_the_case_thread(client, sql):
     elena, _ = signed_in(client, sql)
     with_indexed_precedent(client, sql, elena)
     body = {"id": str(uuid.uuid4()), "content": "Reusing David's MFN matrix", "attached_artifact_id": SOVEREIGN_FILE}
-    posted = client.post(f"/api/cases/{APOLLO}/thread/messages", json=body, headers=elena)
+    posted = client.post(f"/api/cases/{AURELIAN}/thread/messages", json=body, headers=elena)
     assert posted.status_code == 200
     assert posted.json()["attached_artifact"]["file_name"] == "mfn_tier_eligibility_matrix.csv"
     missing = {**body, "id": str(uuid.uuid4()), "attached_artifact_id": str(uuid.uuid4())}
-    assert client.post(f"/api/cases/{APOLLO}/thread/messages", json=missing, headers=elena).status_code == 404
+    assert client.post(f"/api/cases/{AURELIAN}/thread/messages", json=missing, headers=elena).status_code == 404
 
 
 def test_upload_a_client_file(client, sql):
     elena, _ = signed_in(client, sql)
-    files = {"file": ("apollo request.txt", b"Joint signers locked at Step 4 W-8BEN-E", "text/plain")}
-    uploaded = client.post(f"/api/cases/{APOLLO}/files", files=files, headers=elena)
+    files = {"file": ("aurelian request.txt", b"Joint signers locked at Step 4 W-8BEN-E", "text/plain")}
+    uploaded = client.post(f"/api/cases/{AURELIAN}/files", files=files, headers=elena)
     assert uploaded.status_code == 201
-    assert uploaded.json()["file_name"] == "apollo_request.txt" and uploaded.json()["file_type"] == "CLIENT_BRIEF"
-    again = client.post(f"/api/cases/{APOLLO}/files", files=files, headers=elena)  # same name: replaced, not duplicated
+    assert uploaded.json()["file_name"] == "aurelian_request.txt" and uploaded.json()["file_type"] == "CLIENT_BRIEF"
+    again = client.post(
+        f"/api/cases/{AURELIAN}/files", files=files, headers=elena
+    )  # same name: replaced, not duplicated
     assert again.json()["id"] == uploaded.json()["id"]
 
-    view = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()
-    assert [a["file_name"] for a in view["artifacts"]] == ["apollo_request.txt"]
+    view = client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()
+    assert [a["file_name"] for a in view["artifacts"]] == ["aurelian_request.txt"]
     bad = {"file": ("payload.exe", b"MZ", "application/octet-stream")}
-    assert client.post(f"/api/cases/{APOLLO}/files", files=bad, headers=elena).status_code == 422
+    assert client.post(f"/api/cases/{AURELIAN}/files", files=bad, headers=elena).status_code == 422
     assert client.post(f"/api/cases/{SOVEREIGN}/files", files=files, headers=elena).status_code == 409
-    assert post(client, elena, APOLLO, "uploaded").status_code == 200
+    assert post(client, elena, AURELIAN, "uploaded").status_code == 200
 
 
 def test_uploads_return_at_once_and_are_converted_in_the_background(client, sql):
     from tests.test_memory import fetchval
 
     elena, _ = signed_in(client, sql)
-    files = {"file": ("lp_register.csv", b"lp,commitment\nApollo SPV 1,25000000\n", "text/csv")}
-    uploaded = client.post(f"/api/cases/{APOLLO}/files", files=files, headers=elena).json()
+    files = {"file": ("lp_register.csv", b"lp,commitment\nAurelian SPV 1,25000000\n", "text/csv")}
+    uploaded = client.post(f"/api/cases/{AURELIAN}/files", files=files, headers=elena).json()
     assert uploaded["text_status"] == "PENDING"
 
-    job_id = fetchval(f"SELECT id::text FROM case_jobs WHERE case_id = '{APOLLO}' AND kind = 'EXTRACT'")
+    job_id = fetchval(f"SELECT id::text FROM case_jobs WHERE case_id = '{AURELIAN}' AND kind = 'EXTRACT'")
     assert job_id is not None
     run_job(client, job_id)
-    [artifact] = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["artifacts"]
+    [artifact] = client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()["artifacts"]
     assert artifact["text_status"] == "READY"
     text = fetchval(f"SELECT preview_text FROM case_artifacts WHERE id = '{uploaded['id']}'")
     assert "| lp | commitment |" in text  # MarkItDown: the CSV became a Markdown table
 
     # A second upload while nothing is live queues a new EXTRACT; analysis would also convert it before starting.
     other = {"file": ("notes.txt", b"plain notes about the joint signers", "text/plain")}
-    client.post(f"/api/cases/{APOLLO}/files", files=other, headers=elena)
-    assert fetchval(f"SELECT count(*) FROM case_jobs WHERE case_id = '{APOLLO}' AND kind = 'EXTRACT'") == 2
+    client.post(f"/api/cases/{AURELIAN}/files", files=other, headers=elena)
+    assert fetchval(f"SELECT count(*) FROM case_jobs WHERE case_id = '{AURELIAN}' AND kind = 'EXTRACT'") == 2
 
 
 def test_long_threads_are_condensed_by_segment(monkeypatch):
@@ -249,21 +251,21 @@ def test_ask_dejavu_in_the_case_channel(client, sql):
         "content": "@Ryan Miller can you check the W-8 flow? @Dejavu why did the sovereign case take three weeks?",
         "mentioned_user_ids": [ryan_id, "00000000-0000-0000-0000-0000000000d1"],  # alumni mentions are dropped
     }
-    posted = client.post(f"/api/cases/{APOLLO}/thread/messages", json=message, headers=elena).json()
+    posted = client.post(f"/api/cases/{AURELIAN}/thread/messages", json=message, headers=elena).json()
     assert posted["mentioned_user_ids"] == [ryan_id] and posted["is_agent"] is False
-    members = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["members"]
+    members = client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()["members"]
     assert {m["user"]["name"] for m in members} >= {"Elena Rostova", "Ryan Miller"}
 
     job_id = str(uuid.uuid4())
     body = {"message_id": message["id"], "job_id": job_id, "question": message["content"], "reply_in_channel": True}
-    asked = client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=elena).json()
+    asked = client.post(f"/api/cases/{AURELIAN}/copilot", json=body, headers=elena).json()
     assert asked["in_channel"] is True
-    view = client.get(f"/api/cases/{APOLLO}/copilot", headers=elena).json()
+    view = client.get(f"/api/cases/{AURELIAN}/copilot", headers=elena).json()
     assert view["messages"] == [] and view["jobs"][0]["in_channel"] is True  # nothing in the copilot tab
 
     run_job(client, job_id)
     run_job(client, job_id)  # a retried job posts once
-    thread = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["messages"]
+    thread = client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()["messages"]
     reply = thread[-1]
     assert [m["id"] for m in thread].count(job_id) == 1
     assert reply["id"] == job_id and reply["is_agent"] is True and reply["author"] is None
@@ -308,7 +310,7 @@ def test_scan_detection():
 
     text_pdf = _text_pdf("Designated Tax Signatory edits Part I")
     assert not documents.needs_ocr("pack.pdf", text_pdf, documents.extract_text("pack.pdf", text_pdf))
-    scan = _scanned_pdf("APPROVED - Apollo Global, 14 Oct 2026")
+    scan = _scanned_pdf("APPROVED - Aurelian Global, 14 Oct 2026")
     assert documents.needs_ocr("signoff.pdf", scan, documents.extract_text("signoff.pdf", scan))
     assert documents.needs_ocr("signoff_photo.jpg", b"...", None)
     assert not documents.needs_ocr("register.csv", b"a,b", "a,b")
@@ -322,17 +324,17 @@ def test_scanned_uploads_are_read_by_ocr(client, sql, monkeypatch):
 
     async def fake_transcribe(system, prompt, data, mime, file_name):
         seen[file_name] = mime
-        return "<!-- page 1 -->\n# Approval\n\nAPPROVED - Apollo Global, 14 Oct 2026\n\n[Signature: J. Tan]"
+        return "<!-- page 1 -->\n# Approval\n\nAPPROVED - Aurelian Global, 14 Oct 2026\n\n[Signature: J. Tan]"
 
     monkeypatch.setattr(llm_client, "transcribe", fake_transcribe)
     elena, _ = signed_in(client, sql)
-    files = {"file": ("apollo_signoff.pdf", _scanned_pdf("APPROVED"), "application/pdf")}
-    uploaded = client.post(f"/api/cases/{APOLLO}/files", files=files, headers=elena).json()
-    run_job(client, fetchval(f"SELECT id::text FROM case_jobs WHERE case_id = '{APOLLO}' AND kind = 'EXTRACT'"))
+    files = {"file": ("aurelian_signoff.pdf", _scanned_pdf("APPROVED"), "application/pdf")}
+    uploaded = client.post(f"/api/cases/{AURELIAN}/files", files=files, headers=elena).json()
+    run_job(client, fetchval(f"SELECT id::text FROM case_jobs WHERE case_id = '{AURELIAN}' AND kind = 'EXTRACT'"))
 
-    [artifact] = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["artifacts"]
+    [artifact] = client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()["artifacts"]
     assert artifact["text_status"] == "READY" and artifact["text_method"] == "OCR"
-    assert seen == {"apollo_signoff.pdf": "application/pdf"}
+    assert seen == {"aurelian_signoff.pdf": "application/pdf"}
     assert "[Signature: J. Tan]" in fetchval(f"SELECT preview_text FROM case_artifacts WHERE id = '{uploaded['id']}'")
 
 
@@ -340,14 +342,14 @@ def test_scans_without_an_ocr_model_are_marked_unreadable(client, sql):
     from tests.test_memory import fetchval
 
     elena, _ = signed_in(client, sql)  # fake provider: OCR unavailable, the job still finishes
-    files = {"file": ("apollo_signoff.pdf", _scanned_pdf("APPROVED"), "application/pdf")}
-    client.post(f"/api/cases/{APOLLO}/files", files=files, headers=elena)
-    run_job(client, fetchval(f"SELECT id::text FROM case_jobs WHERE case_id = '{APOLLO}' AND kind = 'EXTRACT'"))
-    [artifact] = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["artifacts"]
+    files = {"file": ("aurelian_signoff.pdf", _scanned_pdf("APPROVED"), "application/pdf")}
+    client.post(f"/api/cases/{AURELIAN}/files", files=files, headers=elena)
+    run_job(client, fetchval(f"SELECT id::text FROM case_jobs WHERE case_id = '{AURELIAN}' AND kind = 'EXTRACT'"))
+    [artifact] = client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()["artifacts"]
     assert artifact["text_status"] == "UNREADABLE" and artifact["text_method"] is None
 
 
-def _ask_in_channel(client, headers, case_id=APOLLO):
+def _ask_in_channel(client, headers, case_id=AURELIAN):
     body = {
         "message_id": str(uuid.uuid4()),
         "job_id": str(uuid.uuid4()),
@@ -385,7 +387,7 @@ def test_channel_answers_run_one_at_a_time_per_case(client, sql, monkeypatch):
 
     claim = lambda: client.portal.call(service.claim_next)  # noqa: E731
     assert str(claim()) == a
-    assert str(claim()) == other_case  # b waits: the Apollo channel already has an answer in progress
+    assert str(claim()) == other_case  # b waits: the Aurelian channel already has an answer in progress
     assert claim() is None
     client.portal.call(service.complete, uuid.UUID(a), {})
     assert str(claim()) == b
@@ -423,7 +425,7 @@ def test_repeated_agent_calls_are_answered_from_the_cache(client, sql, monkeypat
         [
             {"content": "", "tool_calls": [call(1, "sovereign MFN side letter")]},
             {"content": "", "tool_calls": [call(2, "Sovereign  MFN side-letter!")]},  # the same search again
-            {"content": "Found the GIC precedent.", "tool_calls": []},
+            {"content": "Found the Orchid precedent.", "tool_calls": []},
         ]
     )
     replies = []

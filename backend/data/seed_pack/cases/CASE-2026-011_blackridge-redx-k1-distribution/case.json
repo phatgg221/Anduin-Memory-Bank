@@ -1,0 +1,81 @@
+{
+  "caseCode": "CASE-2026-011",
+  "channelSlug": "case-blackridge-redx-k1",
+  "title": "Blackridge Real Estate Debt X — Tax Season K-1 Bulk Distribution & Bank Firewall Runbook",
+  "client": "Blackridge",
+  "fund": "Blackridge Real Estate Debt X",
+  "sourceType": "CS_ESCALATION",
+  "severity": "HIGH",
+  "dueDate": "2026-03-15",
+  "departmentId": "CUSTOMER_SUCCESS",
+  "secondaryDepartmentIds": [
+    "ENGINEERING_DATA"
+  ],
+  "status": "RESOLVED",
+  "createdBy": "chloe.nguyen",
+  "leadResolver": "chloe.nguyen",
+  "initialRequestBrief": "Blackridge Real Estate Debt X published Schedule K-1 packages to 3,200 limited partners at 08:00 on 13 March 2026. Within an hour, IT teams at several institutional LPs reported that the portal notification had been quarantined by their email gateway, and the GP's investor relations team flagged a 41% open rate against 78% the previous year. LPs who had not signed in for a year were also starting to report multi-factor authentication lockouts, and the support queue was growing fast during the GP's busiest week.",
+  "contextTags": {
+    "Workflow": "K-1 Tax Distribution",
+    "Volume": "3,200 LPs",
+    "Issue": "MailShield Email Quarantine & MFA Lockouts",
+    "Fund Structure": "Real Estate Debt Fund",
+    "Channel": "Email Deliverability"
+  },
+  "summary": "Publishing 3,200 K-1 packages at once sent notices through a new email subaccount without aligned DKIM, so DMARC quarantined 1,310 of them at institutional bank gateways, and dormant LPs triggered 412 MFA lockouts. Aligned DKIM, throttled staggered sending, a bank IT whitelisting guide and a 14-day pre-tax-season re-verification runbook fixed it.",
+  "howItWent": "All 3,200 notices went out in about six minutes through an email-provider subaccount created in February that signed DKIM with the provider's domain. With the portal's DMARC policy at p=quarantine, those notices failed alignment, and the burst also tripped bulk heuristics at MailShield-protected bank gateways; 1,310 went unopened. At the same time, dormant LPs received SMS codes at outdated phone numbers, retried and locked themselves out, peaking at 412 lockouts and 240 open tickets. Marcus Vance aligned DKIM and the return-path the same afternoon and resent to the unopened LPs at 200 per minute staggered by domain, lifting the open rate to 74%. Customer Success handled lockouts with call-back identity verification and authenticator-app enrolment. Bank IT teams then asked inconsistently what to whitelist, which led to a standard guide, and the post-season review produced a pre-flight runbook so the next tax season starts with verified contacts and MFA.",
+  "resolutionSteps": [
+    "Create a 14-day pre-tax-season LP contact and MFA re-verification campaign, with authenticator-app enrolment and investor-relations follow-up for dormant LPs.",
+    "Add staggered email batch throttling (200/min, staggered by recipient domain) and seed-inbox tests behind major bank gateways before publishing.",
+    "Sign notices with DKIM aligned to the portal's notice domain and a custom return-path, and block publishing automatically when alignment fails.",
+    "Publish the Institutional Bank IT Whitelisting Guide: allow-list on the authenticated domain only when DMARC passes, never on IPs or the From address alone.",
+    "Handle lockouts by call-back identity verification against the contact in the subscription documents before resetting MFA or changing a phone number."
+  ],
+  "pitfalls": [
+    {
+      "warning": "A new email-provider subaccount silently drops DKIM alignment; with DMARC at p=quarantine, institutional gateways quarantine every notice. Check alignment before any bulk publish.",
+      "author": "marcus.vance",
+      "severity": "HIGH",
+      "reference": "Chat #L12"
+    },
+    {
+      "warning": "Dormant LPs will hit MFA lockouts on tax-document day because their phone numbers are out of date; re-verify contacts two weeks before publishing.",
+      "author": "chloe.nguyen",
+      "severity": "HIGH",
+      "reference": "Chat #L19"
+    },
+    {
+      "warning": "Never change an LP's phone number on an inbound request during a lockout surge; verify identity by call-back first.",
+      "author": "chloe.nguyen",
+      "severity": "MEDIUM",
+      "reference": "Chat #L25"
+    },
+    {
+      "warning": "Don't give bank IT teams an IP list as the primary whitelisting rule; provider IPs change and the rule breaks silently.",
+      "author": "marcus.vance",
+      "severity": "LOW",
+      "reference": "Chat #L32"
+    }
+  ],
+  "durationDays": 35,
+  "createdAt": "2026-03-13T09:00:00+07:00",
+  "resolvedAt": "2026-04-17T18:00:00+07:00",
+  "artifacts": [
+    {
+      "file": "k1_tax_season_preflight_runbook.pdf",
+      "source": "k1_tax_season_preflight_runbook.pdf.md",
+      "fileType": "SOP_PDF",
+      "isReusable": true,
+      "description": "Pre-flight runbook for bulk K-1 publication: T-21 to T+3 timeline, contact and MFA re-verification campaign, deliverability checks, lockout handling and GP metrics.",
+      "uploadedBy": "chloe.nguyen"
+    },
+    {
+      "file": "institutional_bank_email_whitelisting_guide.md",
+      "source": null,
+      "fileType": "RUNBOOK_MD",
+      "isReusable": true,
+      "description": "Guide for bank and wealth-platform IT teams: sending identity, DKIM/DMARC posture, gateway allow-list settings, verification test and seasonal volumes.",
+      "uploadedBy": "marcus.vance"
+    }
+  ]
+}

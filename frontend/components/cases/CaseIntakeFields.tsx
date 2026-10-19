@@ -113,7 +113,7 @@ export function CaseIntakeFields({
           rows={5}
           value={value.initial_request_brief}
           onChange={(e) => set("initial_request_brief", e.target.value)}
-          placeholder="Bain is launching a Delaware parallel fund for its Tech Opportunities V close on 1 Dec. Pension LPs are expected, so the ERISA 25% aggregate cap must be tracked across both vehicles, and LP records come from DealCloud…"
+          placeholder="Bain is launching a Delaware parallel fund for its Tech Opportunities V close on 1 Dec. Pension LPs are expected, so the ERISA 25% aggregate cap must be tracked across both vehicles, and LP records come from DealLedger…"
           maxLength={4000}
           aria-invalid={Boolean(fieldErrors.initial_request_brief)}
         />

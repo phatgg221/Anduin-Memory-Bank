@@ -1,7 +1,7 @@
 import io
 import uuid
 
-from tests.test_case_threads import APOLLO, SOVEREIGN, signed_in
+from tests.test_case_threads import AURELIAN, SOVEREIGN, signed_in
 from tests.test_memory import run_job
 from tests.test_workspace import with_indexed_precedent
 
@@ -72,16 +72,16 @@ def test_review_a_range_of_the_case_channel(client, sql):
     elena, _ = signed_in(client, sql)
     with_indexed_precedent(client, sql, elena)
     said = [
-        "Plan: offer the sovereign LP an MFN tier from $15M, same as the GIC side letter.",
+        "Plan: offer the sovereign LP an MFN tier from $15M, same as the Orchid side letter.",
         "Agreed, and we reuse the MFN tier eligibility matrix from last year.",
         "I'll send the client the redline on Friday.",
     ]
     ids = []
     for content in said:
         body = {"id": str(uuid.uuid4()), "content": content}
-        ids.append(client.post(f"/api/cases/{APOLLO}/thread/messages", json=body, headers=elena).json()["id"])
+        ids.append(client.post(f"/api/cases/{AURELIAN}/thread/messages", json=body, headers=elena).json()["id"])
     ask = {"id": str(uuid.uuid4()), "content": "@Dejavu review these 3 messages"}
-    client.post(f"/api/cases/{APOLLO}/thread/messages", json=ask, headers=elena)
+    client.post(f"/api/cases/{AURELIAN}/thread/messages", json=ask, headers=elena)
 
     job_id = str(uuid.uuid4())
     body = {
@@ -91,11 +91,11 @@ def test_review_a_range_of_the_case_channel(client, sql):
         "reply_in_channel": True,
         "review": {"message_ids": [ids[2], ids[0]], "focus": "Is the MFN tier right?"},
     }
-    job = client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=elena).json()
+    job = client.post(f"/api/cases/{AURELIAN}/copilot", json=body, headers=elena).json()
     assert job["is_review"] and job["steps"][0] == "Reading the selected messages" and job["in_channel"]
 
     run_job(client, job_id)
-    reply = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["messages"][-1]
+    reply = client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()["messages"][-1]
     review = reply["agent_payload"]
     assert reply["id"] == job_id and reply["is_agent"] and review["kind"] == "review"
     assert review["range"]["count"] == 2 and review["range"]["message_ids"] == [ids[0], ids[2]]
@@ -111,7 +111,7 @@ def test_review_range_must_be_in_this_channel(client, sql):
     sql(f"""INSERT INTO channel_messages (id, case_id, content) VALUES
             ('00000000-0000-0000-0000-00000000aa01', '{SOVEREIGN}', 'from another case')""")
     mine = {"id": str(uuid.uuid4()), "content": "Our plan for the signer issue"}
-    client.post(f"/api/cases/{APOLLO}/thread/messages", json=mine, headers=elena)
+    client.post(f"/api/cases/{AURELIAN}/thread/messages", json=mine, headers=elena)
     body = {
         "message_id": mine["id"],
         "job_id": str(uuid.uuid4()),
@@ -119,16 +119,16 @@ def test_review_range_must_be_in_this_channel(client, sql):
         "reply_in_channel": True,
         "review": {"message_ids": [mine["id"], "00000000-0000-0000-0000-00000000aa01"]},
     }
-    refused = client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=elena)
+    refused = client.post(f"/api/cases/{AURELIAN}/copilot", json=body, headers=elena)
     assert refused.status_code == 422 and "this case" in refused.json()["detail"]
     body["reply_in_channel"] = False
     body["review"]["message_ids"] = [mine["id"]]
-    assert client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=elena).status_code == 422
+    assert client.post(f"/api/cases/{AURELIAN}/copilot", json=body, headers=elena).status_code == 422
 
 
 def _reuse_ask(client, headers, file_id: str):
     post = {"id": str(uuid.uuid4()), "content": "Reusing the file.", "attached_artifact_id": file_id}
-    client.post(f"/api/cases/{APOLLO}/thread/messages", json=post, headers=headers)
+    client.post(f"/api/cases/{AURELIAN}/thread/messages", json=post, headers=headers)
     body = {
         "message_id": post["id"],
         "job_id": str(uuid.uuid4()),
@@ -136,7 +136,7 @@ def _reuse_ask(client, headers, file_id: str):
         "reply_in_channel": True,
         "reuse": {"artifact_id": file_id},
     }
-    return client.post(f"/api/cases/{APOLLO}/copilot", json=body, headers=headers), body["job_id"]
+    return client.post(f"/api/cases/{AURELIAN}/copilot", json=body, headers=headers), body["job_id"]
 
 
 def test_reusing_a_past_file_posts_a_brief(client, sql):
@@ -152,7 +152,7 @@ def test_reusing_a_past_file_posts_a_brief(client, sql):
 
     run_job(client, job_id)
     reply = next(
-        m for m in client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()["messages"] if m["id"] == job_id
+        m for m in client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()["messages"] if m["id"] == job_id
     )
     brief = reply["agent_payload"]
     assert brief["kind"] == "reuse" and brief["verdict"] in ("READY", "ADAPT", "CAUTION")
@@ -167,7 +167,8 @@ def test_reusing_a_past_file_posts_a_brief(client, sql):
 def test_reuse_brief_needs_a_file_from_another_case(client, sql):
     elena, _ = signed_in(client, sql)
     sql(f"""INSERT INTO case_artifacts (id, case_id, file_name, file_type, content_type, size_bytes, minio_object_key)
-            VALUES ('00000000-0000-0000-0000-0000000000f7', '{APOLLO}', 'own.csv', 'MATRIX_CSV', 'text/csv', 1, 'k')""")
+            VALUES ('00000000-0000-0000-0000-0000000000f7', '{AURELIAN}', 'own.csv', 'MATRIX_CSV', 'text/csv',
+                    1, 'k')""")
     own, _ = _reuse_ask(client, elena, "00000000-0000-0000-0000-0000000000f7")
     missing, _ = _reuse_ask(client, elena, str(uuid.uuid4()))
     assert own.status_code == 422 and missing.status_code == 422

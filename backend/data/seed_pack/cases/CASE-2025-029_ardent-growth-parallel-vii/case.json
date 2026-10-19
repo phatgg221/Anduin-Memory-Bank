@@ -1,0 +1,105 @@
+{
+  "caseCode": "CASE-2025-029",
+  "channelSlug": "case-ardent-growth-vii",
+  "title": "Ardent Growth Parallel VII — 400-LP Legacy Trust Migration & ERISA 25% Cap Guard",
+  "client": "Ardent Horowitz (AGF VII GP)",
+  "fund": "Ardent Growth Fund VII (Delaware Main + Parallel)",
+  "sourceType": "CLIENT_EMAIL",
+  "severity": "HIGH",
+  "dueDate": "2025-08-04",
+  "departmentId": "ENGINEERING_DATA",
+  "secondaryDepartmentIds": [
+    "CLIENT_OPERATIONS",
+    "LEGAL_COMPLIANCE"
+  ],
+  "status": "RESOLVED",
+  "createdBy": "sarah.tran",
+  "leadResolver": "sarah.tran",
+  "initialRequestBrief": "Ardent Growth Fund VII launches as two Delaware limited partnerships investing side by side (Main and Parallel), with UAT sign-off on 28 July and the initial close on 4 August 2025. The GP's investor relations team wants its 400-LP legacy register (an Excel workbook kept since Fund IV) loaded into Relata CRM, and SubFlow subscriptions prefilled from Relata. Addendum C to the subscription booklet carries the ERISA Benefit Plan Investor representations, and Section 6.4 commits the GP to keep benefit plan investors below 25% on an aggregate basis across both vehicles. Several US pension plans are expected to subscribe in the first closing.",
+  "contextTags": {
+    "Jurisdiction": "Delaware",
+    "Fund Structure": "Parallel Fund",
+    "Integration": "Relata CRM",
+    "Rule": "ERISA 25% Aggregate Cap",
+    "Data Source": "Legacy Excel LP Register"
+  },
+  "summary": "Importing a 400-LP legacy Excel register into Relata broke on multi-trustee family trusts, and four concurrent pension subscriptions each read a stale ERISA aggregate and pushed Main + Parallel to 28.40% benefit plan investors. A trust normalization template, BPI-aware Relata mapping and a serialized cross-fund cap guard at GP acceptance fixed both before any countersignature.",
+  "howItWent": "The legacy import failed on 37 of 400 rows because multi-trustee family trusts were either split one row per trustee, each with the full commitment, or had every trustee in one cell. A normalization template keyed on trust name, instrument date and TIN last 4 turned the register into 371 investors, with 8 sent back to IR. During the replay dry run, four US pension plans ($54.75M) were submitted within six minutes; each review packet projected only the approved book plus itself and showed green, but together they took aggregate BPI participation from 17.44% to 28.40%, breaching the Section 6.4 covenant. QA caught it by hand before any GP countersignature. Sarah Tran replaced the per-LP form rule with a server-side guard that locks the fund family, counts pending subscriptions and checks the aggregate and each vehicle, and the Relata mapping now classifies BPIs at prefill and fails closed on unknowns. The GP scaled back and deferred tickets under Section 6.4(d), and the initial close went out on time at 23.83%.",
+  "resolutionSteps": [
+    "Create the Multi-Trustee Entity Normalization CSV Template: one row per trust as the investor, trustees as signatories with their signing authority, and a dedupe key of normalized trust name + instrument date + TIN last 4.",
+    "Map Relata investor types to a provisional BPI class at prefill (Relata Field Map), keep governmental, church and non-US plans out of the numerator, fail closed on unclassified pensions, and let Schedule A override the CRM.",
+    "Implement an automated Cross-Fund ERISA 25% Aggregate Cap Guard before GP countersignature: one advisory lock per fund family, pending subscriptions counted, aggregate and per-vehicle scopes, WARN at 22.50% and HOLD at 25.00%.",
+    "Give the GP the dollar headroom early so reject, scale-back or defer decisions under Section 6.4(d) are made before closing week."
+  ],
+  "pitfalls": [
+    {
+      "warning": "A fund-level cap implemented as a per-LP form validation shows every concurrent subscriber a green number. Check it server-side at GP acceptance across every vehicle the LPA aggregates.",
+      "author": "sarah.tran",
+      "severity": "HIGH",
+      "reference": "Chat #L37"
+    },
+    {
+      "warning": "Legacy registers repeat multi-trustee trusts on one row per trustee with the full commitment; without a dedupe key they double- or triple-count in the ERISA aggregate.",
+      "author": "minh.nguyen",
+      "severity": "HIGH",
+      "reference": "Chat #L10"
+    },
+    {
+      "warning": "A public pension is a governmental plan and not a BPI under ERISA §3(42); a bare \"Pension\" CRM tag can't tell you which, so treat it as unclassified and count it as a full BPI until Schedule A says otherwise.",
+      "author": "sarah.tran",
+      "severity": "MEDIUM",
+      "reference": "Chat #L45"
+    },
+    {
+      "warning": "Under REPEATABLE READ or SERIALIZABLE the snapshot is taken at the lock call, so a waiter wakes up to a stale book; take the family lock first and read at READ COMMITTED.",
+      "author": "sarah.tran",
+      "severity": "MEDIUM",
+      "reference": "erisa_aggregate_cap_guard.ts L38"
+    }
+  ],
+  "durationDays": 25,
+  "createdAt": "2025-07-14T09:00:00+07:00",
+  "resolvedAt": "2025-08-08T18:00:00+07:00",
+  "artifacts": [
+    {
+      "file": "legacy_lp_trust_migration_template.csv",
+      "source": null,
+      "fileType": "TEMPLATE_CSV",
+      "isReusable": true,
+      "description": "Multi-trustee entity normalization template: one row per trust with instrument date, trustees, signing authority, dedupe key, BPI class hint and migration action.",
+      "uploadedBy": "sarah.tran"
+    },
+    {
+      "file": "relata_crm_to_subflow_mapping.json",
+      "source": null,
+      "fileType": "MAPPING_JSON",
+      "isReusable": true,
+      "description": "Relata CRM to SubFlow field map: legal name, entity type, masked TIN, commitment, vehicle and provisional ERISA BPI class, with fail-closed weighting, Schedule A override and TIN scrubbing.",
+      "uploadedBy": "sarah.tran"
+    },
+    {
+      "file": "erisa_25pct_parallel_cap_postmortem.md",
+      "source": null,
+      "fileType": "POSTMORTEM_MD",
+      "isReusable": true,
+      "description": "Post-mortem of the legacy trust migration and the 28.40% aggregate BPI breach in the dry run: timeline, root cause, fix, impact and seven reusable rules.",
+      "uploadedBy": "sarah.tran"
+    },
+    {
+      "file": "erisa_aggregate_cap_guard.ts",
+      "source": null,
+      "fileType": "CODE",
+      "isReusable": true,
+      "description": "Pre-countersignature webhook that serializes per fund family and returns ALLOW, WARN (22.50%) or HOLD (25.00%) on the aggregate and each vehicle.",
+      "uploadedBy": "sarah.tran"
+    },
+    {
+      "file": "ardent_delaware_erisa_addendum.pdf",
+      "source": "ardent_delaware_erisa_addendum.pdf.md",
+      "fileType": "LEGAL_DOC",
+      "isReusable": false,
+      "description": "Addendum C to the subscription booklet: Delaware LP representations, Rule 506(c) verification, ERISA BPI representations, Schedule A and the Section 6.4 parallel-fund aggregation covenant.",
+      "uploadedBy": "chloe.nguyen"
+    }
+  ]
+}

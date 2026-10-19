@@ -48,7 +48,7 @@ def test_convert_seed_pdf():
         / "data"
         / "seed_pack"
         / "cases"
-        / "CASE-2025-067_kkr-european-infrastructure-raif"
+        / "CASE-2025-067_kingsmoor-european-infrastructure-raif"
         / "luxembourg_cssf_10pct_aml_compliance_guide.pdf"
     )
     if not pdf_path.exists():

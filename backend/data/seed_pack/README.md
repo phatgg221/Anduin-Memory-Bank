@@ -62,10 +62,10 @@ bun run seed                         # load into Postgres + MinIO (idempotent)
 ```json
 {
   "caseCode": "CASE-2025-014",
-  "channelSlug": "case-sequoia-cayman-iv",
-  "title": "Sequoia Cayman Feeder IV — Joint Non-US Signer W-8BEN-E Deadlock",
-  "client": "Sequoia Heritage",
-  "fund": "Sequoia Heritage Cayman Feeder IV, L.P. (Cayman master-feeder)",
+  "channelSlug": "case-silverpine-cayman-iv",
+  "title": "Silverpine Cayman Feeder IV — Joint Non-US Signer W-8BEN-E Deadlock",
+  "client": "Silverpine Heritage",
+  "fund": "Silverpine Heritage Cayman Feeder IV, L.P. (Cayman master-feeder)",
   "sourceType": "CLIENT_EMAIL",
   "severity": "HIGH",
   "dueDate": "2025-04-23",
@@ -105,8 +105,8 @@ bun run seed                         # load into Postgres + MinIO (idempotent)
 ## Team channel — `channel.txt`
 
 ```text
-# Channel export · #case-sequoia-cayman-iv
-# Case CASE-2025-014 · Sequoia Cayman Feeder IV — Joint Non-US Signer W-8BEN-E Deadlock
+# Channel export · #case-silverpine-cayman-iv
+# Case CASE-2025-014 · Silverpine Cayman Feeder IV — Joint Non-US Signer W-8BEN-E Deadlock
 # Times in ICT (UTC+7)
 
 [2025-04-14 23:02] @chloe.nguyen
@@ -170,4 +170,4 @@ The renderer supports this Markdown subset only:
 
 - **CSV:** a header row, with the same column count on every row.
 - **Markdown:** runbooks, policies, and post-mortems with real headings.
-- **JSON schemas and mappings:** follow the FundSub style — `$schema`, `schemaId`, `version`, `caseCode`, `author`, `updated`, `_comment`, `parameters`, `fields[]`, `rules[]`. Expressions use dotted paths; author notes go in `_comment` keys.
+- **JSON schemas and mappings:** follow the SubFlow style — `$schema`, `schemaId`, `version`, `caseCode`, `author`, `updated`, `_comment`, `parameters`, `fields[]`, `rules[]`. Expressions use dotted paths; author notes go in `_comment` keys.

@@ -1,8 +1,8 @@
 {
   "caseCode": "CASE-2025-052",
   "channelSlug": "case-sovereign-side-letter-mfn",
-  "title": "GIC & Temasek Sovereign Wealth Side Letter — Sovereign Immunity & MFN Tier Redlines",
-  "client": "Meridian Global Infrastructure GP III (GIC & Temasek side letters)",
+  "title": "Orchid & Straitview Sovereign Wealth Side Letter — Sovereign Immunity & MFN Tier Redlines",
+  "client": "Meridian Global Infrastructure GP III (Orchid & Straitview side letters)",
   "fund": "Meridian Global Infrastructure Partners III, L.P.",
   "sourceType": "LEGAL_REDLINE",
   "severity": "MEDIUM",
@@ -23,7 +23,7 @@
     "Counterparty": "External Counsel"
   },
   "summary": "Two sovereign wealth LPs rejected the standard investor indemnity on statutory-immunity grounds and demanded global MFN fee visibility. Four redline rounds over three weeks produced a pre-approved Sovereign Immunity Reservation Clause, a set-off-and-cap replacement for the indemnity, and MFN fee disclosure split into US$25M and US$50M+ brackets.",
-  "howItWent": "Round 1 from investor counsel struck the indemnity and the submission to jurisdiction and asked to see every fee term granted to any LP; the GP rejected both. Round 2 from GP counsel waived the indemnity in an untagged clause, which would have let every LP above US$25M elect it through the MFN, so it was withdrawn. David Le drafted Round 3 from Anduin's clause library: an immunity reservation that keeps the commercial obligations binding and preserves remedies against the Interest, plus set-off capped at the value of the Interest, both tagged as Excluded Provisions. Investor counsel accepted that in principle, but Sovereign Investor B then asked to see the US$50M+ fee terms. Round 4 split MFN fee disclosure into commitment brackets with affiliate aggregation, and both counsel approved it on 12 September 2025, three weeks after kickoff.",
+  "howItWent": "Round 1 from investor counsel struck the indemnity and the submission to jurisdiction and asked to see every fee term granted to any LP; the GP rejected both. Round 2 from GP counsel waived the indemnity in an untagged clause, which would have let every LP above US$25M elect it through the MFN, so it was withdrawn. David Le drafted Round 3 from Corvane's clause library: an immunity reservation that keeps the commercial obligations binding and preserves remedies against the Interest, plus set-off capped at the value of the Interest, both tagged as Excluded Provisions. Investor counsel accepted that in principle, but Sovereign Investor B then asked to see the US$50M+ fee terms. Round 4 split MFN fee disclosure into commitment brackets with affiliate aggregation, and both counsel approved it on 12 September 2025, three weeks after kickoff.",
   "resolutionSteps": [
     "Adopt the pre-approved Sovereign Immunity Reservation Clause: reserve all immunities while acknowledging that capital contributions, distribution clawbacks and set-off amounts remain binding commercial obligations, and preserve the GP's remedies against the Interest.",
     "Replace the investor indemnity with a set-off right capped at the value of the investor's Interest and recovered only from that Interest.",

@@ -1,0 +1,81 @@
+{
+  "caseCode": "CASE-2026-003",
+  "channelSlug": "case-brookhaven-private-wealth",
+  "title": "Brookhaven Private Wealth — Retail RIA Aggregator & Delegated Advisor Scoping",
+  "client": "Brookhaven",
+  "fund": "Brookhaven private wealth feeder",
+  "sourceType": "CLIENT_EMAIL",
+  "severity": "MEDIUM",
+  "dueDate": "2026-02-23",
+  "departmentId": "SALES_SOLUTIONS",
+  "secondaryDepartmentIds": [
+    "ENGINEERING_DATA",
+    "CUSTOMER_SUCCESS"
+  ],
+  "status": "RESOLVED",
+  "createdBy": "ryan.miller",
+  "leadResolver": "ryan.miller",
+  "initialRequestBrief": "Brookhaven signed a statement of work for its private wealth feeder fund: about 2,500 high-net-worth investors onboarded through wealth advisors at independent RIA firms, with go-live on 23 February 2026 ahead of the fund's first monthly close on 1 March. Sales scoped six weeks using the institutional onboarding template. Brookhaven's home-office team will coordinate the advisors, and account types include individual, joint, IRA and revocable trust accounts.",
+  "contextTags": {
+    "Client Segment": "Private Wealth / RIA",
+    "Volume": "2,500 HNW Investors",
+    "Access Model": "Delegated Wealth Advisor",
+    "Workflow": "Pre-Sales Scoping",
+    "Account Types": "Individual / JTWROS / IRA / Trust"
+  },
+  "summary": "Sales scoping used the institutional template and underestimated delivery by four weeks, because wealth advisors needed 1-to-many delegated preparation across 40+ HNW accounts each, bulk intake and per-account-type signing. A phased delivery saved the first close, and the team produced a private wealth scoping rubric with an effort multiplier and a delegated advisor access matrix.",
+  "howItWent": "The SOW quoted six weeks on the institutional template, which assumes one investor, one signer and one form. Discovery a week later showed about 60 advisors at 9 RIA firms with a median of 42 accounts each, expecting to prepare subscriptions in bulk and send them for client signature, which the investor-owned collaboration model could not do. Rather than slip the first close, Sales agreed a change order: phase 1 (advisor delegation and single-account preparation) on 23 February and phase 2 (bulk intake and IRA custodian routing) on 23 March. Phase 1 surfaced one access bug: an advisor who changed firms still saw his former firm's clients because his rep-code link was not end-dated. Delivery finished four weeks after the original date, and Brookhaven's March close went through with 1,140 advisor-prepared subscriptions.",
+  "resolutionSteps": [
+    "Build the Private Wealth / RIA Pre-Sales Scoping Rubric & Effort Multiplier: ask who prepares subscriptions, how many advisors and accounts per advisor, which account types and whether bulk intake is needed, before quoting.",
+    "Standardize the Delegated Financial Advisor Role-Based Access Matrix: advisor scope from the active rep code, assistants without attestation rights, home-office oversight without edit rights, and no advisor signing for clients.",
+    "Re-evaluate advisor access nightly and on every transfer event so an advisor who changes firms loses the previous firm's clients immediately.",
+    "When the first close is fixed, phase delivery: delegation and single-account preparation first, then bulk intake and custodian routing."
+  ],
+  "pitfalls": [
+    {
+      "warning": "The institutional scoping template asks how many investors there are, never who fills in the forms. Delegated advisor preparation changes the access model and the estimate.",
+      "author": "ryan.miller",
+      "severity": "HIGH",
+      "reference": "Chat #L24"
+    },
+    {
+      "warning": "Advisor access tied to a rep code must be end-dated on transfer; otherwise an advisor who changes firms keeps seeing the old firm's clients.",
+      "author": "sarah.tran",
+      "severity": "HIGH",
+      "reference": "Chat #L34"
+    },
+    {
+      "warning": "Never let an advisor sign on a client's behalf; route powers of attorney to GP review as an exception.",
+      "author": "sarah.tran",
+      "severity": "MEDIUM",
+      "reference": "advisor_delegated_access_matrix.csv"
+    },
+    {
+      "warning": "IRA subscriptions need the custodian's acceptance after the investor signs; leaving custodial routing to the end of the project blocks those accounts at close.",
+      "author": "chloe.nguyen",
+      "severity": "LOW",
+      "reference": "private_wealth_ria_scoping_rubric.pdf §4"
+    }
+  ],
+  "durationDays": 74,
+  "createdAt": "2026-01-12T09:00:00+07:00",
+  "resolvedAt": "2026-03-27T18:00:00+07:00",
+  "artifacts": [
+    {
+      "file": "private_wealth_ria_scoping_rubric.pdf",
+      "source": "private_wealth_ria_scoping_rubric.pdf.md",
+      "fileType": "GUIDE_PDF",
+      "isReusable": true,
+      "description": "Pre-sales scoping rubric for private wealth and RIA deals: discovery questions, effort multiplier on the institutional baseline, access-model defaults, phasing pattern and the Brookhaven worked example.",
+      "uploadedBy": "ryan.miller"
+    },
+    {
+      "file": "advisor_delegated_access_matrix.csv",
+      "source": null,
+      "fileType": "MATRIX_CSV",
+      "isReusable": true,
+      "description": "Role-based access matrix for delegated wealth advisors: home office, advisor, assistant, investor, IRA custodian, GP investor relations and transferred advisor, across 14 permissions.",
+      "uploadedBy": "sarah.tran"
+    }
+  ]
+}

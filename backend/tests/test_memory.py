@@ -5,7 +5,7 @@ import asyncpg
 import pytest
 
 from tests.conftest import TEST_DB, _dsn
-from tests.test_case_threads import APOLLO, post, signed_in
+from tests.test_case_threads import AURELIAN, post, signed_in
 
 
 def run_job(client, job_id):
@@ -15,7 +15,7 @@ def run_job(client, job_id):
 
 
 def jobs(client, headers):
-    return client.get(f"/api/cases/{APOLLO}/jobs", headers=headers).json()
+    return client.get(f"/api/cases/{AURELIAN}/jobs", headers=headers).json()
 
 
 def fetchval(query, *args):
@@ -30,18 +30,23 @@ def fetchval(query, *args):
 
 
 def discussion(client, elena, ryan):
-    post(client, ryan, APOLLO, "Kickoff: Cayman feeder with joint signers and a $15M MFN bracket.")
-    post(client, elena, APOLLO, "Careful: never let both signers edit the Chapter 4 election, it deadlocked Sequoia.")
+    post(client, ryan, AURELIAN, "Kickoff: Cayman feeder with joint signers and a $15M MFN bracket.")
+    post(
+        client,
+        elena,
+        AURELIAN,
+        "Careful: never let both signers edit the Chapter 4 election, it deadlocked Silverpine.",
+    )
     body = {
         "id": str(uuid.uuid4()),
         "content": "Agreed plan: reuse cayman_fatca_v2 and the redlines.",
         "is_milestone": True,
     }
-    client.post(f"/api/cases/{APOLLO}/thread/messages", json=body, headers=ryan)
+    client.post(f"/api/cases/{AURELIAN}/thread/messages", json=body, headers=ryan)
 
 
 def resolve(client, headers, job_id=None):
-    return client.post(f"/api/cases/{APOLLO}/resolve", json={"job_id": job_id or str(uuid.uuid4())}, headers=headers)
+    return client.post(f"/api/cases/{AURELIAN}/resolve", json={"job_id": job_id or str(uuid.uuid4())}, headers=headers)
 
 
 def test_resolve_needs_messages_and_is_idempotent(client, sql):
@@ -84,30 +89,30 @@ def test_commit_resolves_locks_thread_and_indexes(client, sql):
     run_job(client, resolve(client, elena).json()["id"])
     record = jobs(client, elena)["summarize"]["result"]["record"]
 
-    edited = {**record, "summary": "Apollo Cayman feeder: reused the joint-signer schema and sovereign redlines."}
+    edited = {**record, "summary": "Aurelian Cayman feeder: reused the joint-signer schema and sovereign redlines."}
     edited["pitfalls"] = [
         *record["pitfalls"],
         {"warning": "Invented warning with no source at all.", "severity": "LOW", "reference": "Chat #L999"},
     ]
-    committed = client.post(f"/api/cases/{APOLLO}/commit", json=edited, headers=elena)
+    committed = client.post(f"/api/cases/{AURELIAN}/commit", json=edited, headers=elena)
     assert committed.status_code == 200
     body = committed.json()
     assert body["status"] == "RESOLVED" and body["index_job"]["kind"] == "INDEX"
     assert any("Chat #L999" in w for w in body["guard_warnings"])
 
-    thread = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()
+    thread = client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()
     assert thread["status"] == "RESOLVED"
-    assert post(client, ryan, APOLLO, "too late").status_code == 409
-    assert client.post(f"/api/cases/{APOLLO}/commit", json=edited, headers=elena).status_code == 409
+    assert post(client, ryan, AURELIAN, "too late").status_code == 409
+    assert client.post(f"/api/cases/{AURELIAN}/commit", json=edited, headers=elena).status_code == 409
     assert resolve(client, elena).status_code == 409
 
-    stored = fetchval(f"SELECT pitfalls::text FROM case_records WHERE id = '{APOLLO}'")
+    stored = fetchval(f"SELECT pitfalls::text FROM case_records WHERE id = '{AURELIAN}'")
     assert "Chat #L999" not in stored  # the unverifiable reference was dropped before storing
 
     run_job(client, body["index_job"]["id"])
     assert jobs(client, elena)["index"]["status"] == "COMPLETED"
-    chunks = fetchval(f"SELECT count(*) FROM knowledge_chunks WHERE case_id = '{APOLLO}'")
-    dims = fetchval(f"SELECT vector_dims(embedding) FROM knowledge_chunks WHERE case_id = '{APOLLO}' LIMIT 1")
+    chunks = fetchval(f"SELECT count(*) FROM knowledge_chunks WHERE case_id = '{AURELIAN}'")
+    dims = fetchval(f"SELECT vector_dims(embedding) FROM knowledge_chunks WHERE case_id = '{AURELIAN}' LIMIT 1")
     assert chunks >= 3 and dims == 768
 
 
@@ -155,7 +160,7 @@ def test_thread_context_loads_even_when_case_already_in_session(client, sql):
 
     async def go():
         async with SessionLocal() as session:
-            case = await session.scalar(select(CaseRecord).where(CaseRecord.id == uuid.UUID(APOLLO)))
+            case = await session.scalar(select(CaseRecord).where(CaseRecord.id == uuid.UUID(AURELIAN)))
             context, _ = await _thread_context(session, case.id)
             return context
 
@@ -169,13 +174,15 @@ def test_outcome_curator_and_knowledge_base_commit(client, sql):
 
     def upload(name, content):
         files = {"file": (name, content, "application/octet-stream")}
-        return client.post(f"/api/cases/{APOLLO}/files", files=files, headers=elena).json()["id"]
+        return client.post(f"/api/cases/{AURELIAN}/files", files=files, headers=elena).json()["id"]
 
     schema_id = upload("joint_signer_schema.json", b'{"signers": ["designated", "co-signer"]}')
-    export_id = upload("apollo_lp_export.csv", b"lp,commitment\nA,10\n")
-    approval = {"file": ("apollo_signoff.eml", b"Subject: Approved\n\nWe approve the new W-8 flow.", "message/rfc822")}
+    export_id = upload("aurelian_lp_export.csv", b"lp,commitment\nA,10\n")
+    approval = {
+        "file": ("aurelian_signoff.eml", b"Subject: Approved\n\nWe approve the new W-8 flow.", "message/rfc822")
+    }
     approval_id = client.post(
-        f"/api/cases/{APOLLO}/files", files=approval, data={"file_type": "CLIENT_APPROVAL"}, headers=elena
+        f"/api/cases/{AURELIAN}/files", files=approval, data={"file_type": "CLIENT_APPROVAL"}, headers=elena
     ).json()["id"]
 
     body = {
@@ -184,13 +191,13 @@ def test_outcome_curator_and_knowledge_base_commit(client, sql):
         "final_output": "Delivered the Designated Tax Signatory schema; MFN bracket deferred to the next close.",
         "deliverable_file_ids": [schema_id, approval_id],
     }
-    job = client.post(f"/api/cases/{APOLLO}/resolve", json=body, headers=elena).json()
+    job = client.post(f"/api/cases/{AURELIAN}/resolve", json=body, headers=elena).json()
     run_job(client, job["id"])
     result = jobs(client, elena)["summarize"]["result"]
     assert result["outcome"] == "WORKAROUND" and "Delivered" in result["record"]["how_it_went"]
     suggested = {f["file_name"] for f in result["curator"]["reusable_files"]}
-    assert "joint_signer_schema.json" in suggested and "apollo_lp_export.csv" not in suggested
-    assert "apollo_signoff.eml" not in suggested  # a client sign-off is evidence, not reusable knowledge
+    assert "joint_signer_schema.json" in suggested and "aurelian_lp_export.csv" not in suggested
+    assert "aurelian_signoff.eml" not in suggested  # a client sign-off is evidence, not reusable knowledge
     assert sorted(result["deliverable_file_ids"]) == sorted([schema_id, approval_id])
 
     commit = {
@@ -199,14 +206,14 @@ def test_outcome_curator_and_knowledge_base_commit(client, sql):
         "final_output": body["final_output"],
         "reusable_file_ids": [schema_id],
     }
-    assert client.post(f"/api/cases/{APOLLO}/commit", json=commit, headers=elena).status_code == 200
-    thread = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()
+    assert client.post(f"/api/cases/{AURELIAN}/commit", json=commit, headers=elena).status_code == 200
+    thread = client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()
     assert thread["outcome"] == "WORKAROUND" and thread["final_output"].startswith("Delivered")
     reusable = {a["id"]: a["is_reusable"] for a in thread["artifacts"]}
     assert reusable[schema_id] is True and reusable[export_id] is False
 
     bad = {"job_id": str(uuid.uuid4()), "outcome": "DONE"}
-    assert client.post(f"/api/cases/{APOLLO}/resolve", json=bad, headers=elena).status_code == 422
+    assert client.post(f"/api/cases/{AURELIAN}/resolve", json=bad, headers=elena).status_code == 422
 
 
 def test_reused_files_are_linked_and_copied_into_the_knowledge_base(client, sql):
@@ -230,16 +237,16 @@ def test_reused_files_are_linked_and_copied_into_the_knowledge_base(client, sql)
         key,
     )
     body = {"id": str(uuid.uuid4()), "content": "Reusing master_rfp.csv", "attached_artifact_id": reused}
-    assert client.post(f"/api/cases/{APOLLO}/thread/messages", json=body, headers=elena).status_code in (200, 201)
-    thread = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()
+    assert client.post(f"/api/cases/{AURELIAN}/thread/messages", json=body, headers=elena).status_code in (200, 201)
+    thread = client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()
     assert [(a["id"], a["source_case_code"]) for a in thread["linked_artifacts"]] == [(reused, "CASE-2025-052")]
 
     job = resolve(client, elena).json()
     run_job(client, job["id"])
     record = jobs(client, elena)["summarize"]["result"]["record"]
     commit = {**record, "final_output": "Answered the DORA tab from the master bank.", "reusable_file_ids": [reused]}
-    assert client.post(f"/api/cases/{APOLLO}/commit", json=commit, headers=elena).status_code == 200
-    thread = client.get(f"/api/cases/{APOLLO}/thread", headers=elena).json()
+    assert client.post(f"/api/cases/{AURELIAN}/commit", json=commit, headers=elena).status_code == 200
+    thread = client.get(f"/api/cases/{AURELIAN}/thread", headers=elena).json()
     copy = next(a for a in thread["artifacts"] if a["file_name"] == "master_rfp.csv")
     assert copy["id"] != reused and copy["is_reusable"] and copy["description"] == "Reused from CASE-2025-052"
     assert thread["linked_artifacts"] == []

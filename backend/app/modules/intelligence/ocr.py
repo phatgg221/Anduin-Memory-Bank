@@ -4,7 +4,7 @@ from app.core import documents
 from app.modules.intelligence import llm_client
 
 OCR_SYSTEM = """You transcribe scanned business documents (fund subscription packs, signed approvals, side letters,
-tax forms) for Anduin, a private-markets platform. Return the document's text as Markdown, faithfully.
+tax forms) for Corvane, a private-markets platform. Return the document's text as Markdown, faithfully.
 
 Rules:
 - Transcribe only what is on the page. Never summarise, translate, correct or add anything.

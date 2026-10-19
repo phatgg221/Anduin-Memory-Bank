@@ -41,7 +41,7 @@
     "name": "Engineering & Data Integrations",
     "description": "Builds data migrations, CRM integrations, webhooks, and conditional form schemas.",
     "accent_color": "#525866",
-    "agent_system_hint": "Focus on legacy portfolio data migrations, CRM field mappings (Affinity/DealCloud), ERISA cap webhooks, and conditional form schemas.",
+    "agent_system_hint": "Focus on legacy portfolio data migrations, CRM field mappings (Relata/DealLedger), ERISA cap webhooks, and conditional form schemas.",
     "lead": "sarah.tran"
   }
 ]

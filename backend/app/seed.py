@@ -255,7 +255,7 @@ async def seed_rooms(
 ) -> int:
     """Leads, default members (lead + active people of that department + seeded authors), pinned case, messages.
 
-    Seeded messages have fixed ids (uuid5), so re-seeding never duplicates them or touches real ones.
+    Seeded messages have fixed ids (uuid5), so re-seeding refreshes them in place and never touches real ones.
     """
     leads = {row["id"]: handles.get(row["lead"]) for row in load_departments()}
     departments = {d.id: d for d in await session.scalars(select(Department))}
@@ -283,21 +283,24 @@ async def seed_rooms(
             )
         for index, message in enumerate(room_row["messages"]):
             attachment = message["attachment"]
+            seeded = {
+                "user_id": handles[message["author"]],
+                "content": message["content"],
+                "tagged_case_codes": list(dict.fromkeys(CASE_TAG.findall(message["content"]))),
+                "attached_artifact_id": artifact_ids[(attachment["caseCode"], attachment["file"])]
+                if attachment
+                else None,
+                "is_milestone": message["milestone"],
+            }
             await session.execute(
                 insert(RoomMessage)
                 .values(
                     id=uuid.uuid5(ROOM_MESSAGE_NAMESPACE, f"{department_id}:{index}"),
                     department_id=department_id,
-                    user_id=handles[message["author"]],
-                    content=message["content"],
-                    tagged_case_codes=list(dict.fromkeys(CASE_TAG.findall(message["content"]))),
-                    attached_artifact_id=artifact_ids[(attachment["caseCode"], attachment["file"])]
-                    if attachment
-                    else None,
-                    is_milestone=message["milestone"],
                     created_at=parse_timestamp(message["at"]),
+                    **seeded,
                 )
-                .on_conflict_do_nothing()
+                .on_conflict_do_update(index_elements=["id"], set_=seeded)
             )
             count += 1
     await session.flush()

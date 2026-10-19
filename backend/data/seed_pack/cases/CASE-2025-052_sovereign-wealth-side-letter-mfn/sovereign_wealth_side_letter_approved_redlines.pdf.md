@@ -1,5 +1,5 @@
 # Meridian Global Infrastructure Partners III — Sovereign Investor Side Letter: Approved Redlines
-*Clause-library master · Round 4 language approved 12 September 2025 · Anduin Legal & Compliance*
+*Clause-library master · Round 4 language approved 12 September 2025 · Corvane Legal & Compliance*
 
 This extract records the compromise language agreed between Meridian Global Infrastructure GP III, L.P. (the "General Partner"), for Meridian Global Infrastructure Partners III, L.P. (the "Partnership"), and two sovereign wealth fund investors, referred to here as Sovereign Investor A (Commitment US$80,000,000) and Sovereign Investor B (Commitment US$35,000,000) (each, a "Sovereign Investor"). Counsel to the General Partner was Halvorsen Pryce LLP; counsel to both Sovereign Investors was Ashcombe Lim LLP. Capitalized terms not defined here have the meanings given in the Partnership Agreement. Sections 2 and 3 are pre-approved for reuse with any Governmental Investor. Sections 4 to 6 amend the Partnership's MFN policy.
 
@@ -9,8 +9,8 @@ This extract records the compromise language agreed between Meridian Global Infr
 |---|---|---|---|---|
 | 1 | 25 Aug 2025 | Ashcombe Lim LLP | Struck the investor indemnity (Subscription Agreement Section 6.2) and the submission to jurisdiction; asked for MFN visibility of every fee term granted to any LP | Rejected by the General Partner |
 | 2 | 2 Sep 2025 | Halvorsen Pryce LLP | Waived Section 6.2 for the Sovereign Investors in an untagged side-letter clause; global fee visibility left open | Withdrawn: electable by every LP at US$25M or more |
-| 3 | 3 Sep 2025 | GP counsel on Anduin's clause-library draft | Sovereign Immunity Reservation Clause (Section 2); set-off and cap in place of indemnity (Section 3); both excluded from MFN | Accepted in principle on 8 Sep; Sovereign Investor B asked for US$50M+ fee visibility |
-| 4 | 9 Sep 2025 | Anduin Legal, agreed by both counsel | MFN fee disclosure split into US$25M and US$50M+ brackets with affiliate aggregation (Section 4) | Approved 12 Sep 2025 |
+| 3 | 3 Sep 2025 | GP counsel on Corvane's clause-library draft | Sovereign Immunity Reservation Clause (Section 2); set-off and cap in place of indemnity (Section 3); both excluded from MFN | Accepted in principle on 8 Sep; Sovereign Investor B asked for US$50M+ fee visibility |
+| 4 | 9 Sep 2025 | Corvane Legal, agreed by both counsel | MFN fee disclosure split into US$25M and US$50M+ brackets with affiliate aggregation (Section 4) | Approved 12 Sep 2025 |
 
 ## Section 2. Sovereign Immunity Reservation Clause
 

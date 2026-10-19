@@ -1,0 +1,82 @@
+{
+  "caseCode": "CASE-2025-081",
+  "channelSlug": "case-valmont-am-dora-rfp",
+  "title": "Valmont Asset Management — EU DORA & Cloud Data Residency Security RFP",
+  "client": "Valmont Asset Management",
+  "fund": "Valmont AM — European fund platform",
+  "sourceType": "SECURITY_RFP",
+  "severity": "HIGH",
+  "dueDate": "2025-09-29",
+  "departmentId": "SALES_SOLUTIONS",
+  "secondaryDepartmentIds": [
+    "LEGAL_COMPLIANCE",
+    "ENGINEERING_DATA"
+  ],
+  "status": "RESOLVED",
+  "createdBy": "ryan.miller",
+  "leadResolver": "david.le",
+  "initialRequestBrief": "Valmont Asset Management's procurement team sent a 185-question security and vendor-risk questionnaire for a European fund platform deal worth about US$320k ARR, due back in three weeks. It covers ICT third-party risk under the EU Digital Operational Resilience Act (Regulation (EU) 2022/2554), GDPR and data residency, AI sub-processors, and SOC 2. Their security lead has flagged three blockers: proof that LP personal data never leaves AWS eu-central-1 (Frankfurt), including for LLM inference; zero retention and no training by any AI sub-processor; and the locations of processing and storage as DORA Article 30(2)(b) requires.",
+  "contextTags": {
+    "Workflow": "Security RFP",
+    "Regulation": "EU DORA / GDPR",
+    "Data Residency": "Frankfurt (eu-central-1)",
+    "Deal Size": "$320k ARR",
+    "Client Segment": "Enterprise Asset Manager"
+  },
+  "summary": "Procurement stalled for six weeks over a 185-question EU DORA and AI sub-processor questionnaire demanding proof that LP personal data stays in Frankfurt with zero LLM retention. The team fixed two real residency gaps before answering, then produced a verified DORA/GDPR master response bank and a Frankfurt isolation and zero-retention architecture brief.",
+  "howItWent": "About 120 of the 185 questions had been answered in nine earlier RFPs, but inconsistently, so David Le built a single master response bank with regulation references, evidence, owners and last-verified dates. Checking the three blocker questions against the real system showed the EU tenant was sending LLM inference to the AI provider's US endpoint and shipping logs with LP emails to a US observability stack. Instead of writing an unprovable answer, the team committed to a date, moved inference and observability into eu-central-1, added an egress deny policy and amended the AI provider's DPA for zero retention and no training. Valmont's DPO then asked whether support staff in Vietnam could see LP data, which forced an honest answer: remote access is a GDPR transfer, controlled by masked just-in-time access and SCCs. The architecture brief went out two days early and Valmont security signed off six weeks after the questionnaire arrived.",
+  "resolutionSteps": [
+    "Create the verified EU DORA & SOC 2 Type II Master Response Bank: one answer per question pattern with its DORA/GDPR reference, evidence, owner and last-verified date.",
+    "Close the residency gaps before answering: route EU tenant LLM inference to the provider's EU endpoint, move observability into eu-central-1 with PII redaction, and deny all non-allow-listed egress from the EU VPC.",
+    "Amend the AI sub-processor DPA for zero data retention, no training and EU-only processing, and list it with 30-day change notice.",
+    "Publish the Frankfurt Regional Isolation & Zero-Retention AI Architecture Brief, including the DORA Art. 30 contract mapping.",
+    "Disclose remote support access from outside the EEA as a GDPR transfer, controlled by masked just-in-time sessions and the 2021 SCCs."
+  ],
+  "pitfalls": [
+    {
+      "warning": "Never paste an answer from an old RFP without re-verifying it against the current architecture; nine past RFPs gave inconsistent answers to the same question.",
+      "author": "david.le",
+      "severity": "MEDIUM",
+      "reference": "Chat #L10"
+    },
+    {
+      "warning": "Don't answer \"no data leaves the region\" until LLM inference, logs and observability have been checked; the EU tenant was sending both inference and logs to the US.",
+      "author": "marcus.vance",
+      "severity": "HIGH",
+      "reference": "Chat #L17"
+    },
+    {
+      "warning": "Remote access by support staff outside the EEA is a GDPR transfer even when data at rest stays in Frankfurt. Disclose it and control it; don't deny it.",
+      "author": "david.le",
+      "severity": "HIGH",
+      "reference": "Chat #L37"
+    },
+    {
+      "warning": "Whether the service supports a critical or important function is the client's DORA classification, not ours; supply inputs, never the conclusion.",
+      "author": "elena.rostova",
+      "severity": "LOW",
+      "reference": "eu_frankfurt_data_residency_architecture.pdf §6"
+    }
+  ],
+  "durationDays": 46,
+  "createdAt": "2025-09-08T09:30:00+07:00",
+  "resolvedAt": "2025-10-24T18:00:00+07:00",
+  "artifacts": [
+    {
+      "file": "eu_dora_infosec_rfp_master_responses.csv",
+      "source": null,
+      "fileType": "RFP_MATRIX_CSV",
+      "isReusable": true,
+      "description": "Master response bank for EU DORA, GDPR, AI sub-processor and SOC 2 questions: approved answer, regulatory reference, evidence, owner, last-verified date and reuse notes.",
+      "uploadedBy": "david.le"
+    },
+    {
+      "file": "eu_frankfurt_data_residency_architecture.pdf",
+      "source": "eu_frankfurt_data_residency_architecture.pdf.md",
+      "fileType": "ARCHITECTURE_PDF",
+      "isReusable": true,
+      "description": "EU tenant architecture brief: component locations in eu-central-1, encryption and regional keys, zero-retention EU-only AI inference, support access controls and the DORA Art. 30 contract mapping.",
+      "uploadedBy": "david.le"
+    }
+  ]
+}

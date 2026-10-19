@@ -1,0 +1,48 @@
+# Channel export · #case-valmont-am-dora-rfp
+# Case CASE-2025-081 · Valmont Asset Management — EU DORA & Cloud Data Residency Security RFP
+# Times in ICT (UTC+7)
+
+[2025-09-08 10:00] @ryan.miller
+Valmont AM procurement sent the security questionnaire for the European platform deal (US$320k ARR). 185 questions across four tabs: DORA ICT third-party risk (62), GDPR and data residency (48), AI sub-processors (31), SOC 2 / general (44). They want it back in three weeks.
+
+[2025-09-08 11:15] @david.le
+Triage done: about 120 of the 185 we've answered before, scattered across nine past RFPs, and the old answers don't agree with each other. I'm building one master response bank instead: each answer with its regulation reference, evidence, owner and a last-verified date.
+Rule from now on: nobody pastes an answer from an old RFP without re-verifying it.
+
+[2025-09-10 15:40] @ryan.miller
+Their blockers, per the Valmont security lead: AI-07 "Confirm no LP personal data leaves eu-central-1, including for LLM inference". AI-12 "Confirm zero retention and no training by any AI sub-processor". DORA-31 "Locations of data processing and storage per Art. 30(2)(b)".
+
+[2025-09-10 16:05] @marcus.vance
+Infra facts for the EU tenant: prod runs in eu-central-1 across 3 AZs, backups and snapshots stay in-region, KMS keys are regional.
+But two things fail AI-07 today: LLM inference for the EU tenant goes to the provider's US endpoint, and EU logs ship to our US observability stack, with LP emails in them.
+
+[2025-09-10 16:20] @david.le
+Then today the honest answer to AI-07 is "no", and we don't write a "yes" we can't prove. Either we fix the architecture or we answer with a date.
+Ryan, tell Valmont we'll answer AI-07, AI-12 and DORA-31 by 10 Oct with evidence. Everything else goes back on time.
+
+[2025-09-17 14:00] @marcus.vance
+Done for the EU tenant: LLM calls switched to the provider's EU (Frankfurt) endpoint, observability moved to an eu-central-1 stack with PII redaction before ingestion, and the EU VPC now denies all egress except an allow-list of EU endpoints. The allow-list exports monthly as evidence.
+
+[2025-09-24 11:30] @elena.rostova
+Contract side: the AI provider's DPA is amended (zero data retention, no training or model improvement on our data, EU-only processing). It's on our sub-processor list with 30-day change notice. I've also mapped DORA Art. 30 clause by clause into an MSA addendum: locations, incident assistance, audit, exit.
+
+[2025-09-26 18:20] @david.le
+Master response bank v1, re-verified on the new architecture. Every answer carries its DORA/GDPR reference, the evidence document and an owner. AI-07 is now a real "no data leaves eu-central-1", with the egress policy as evidence.
+[attached] eu_dora_infosec_rfp_master_responses.csv
+
+[2025-10-01 10:10] @ryan.miller
+Follow-up from Valmont: "Can your support team in Vietnam see LP personal data?" Their DPO reads remote access as a transfer.
+
+[2025-10-01 10:45] @david.le
+They're right: remote access from outside the EEA is a transfer even if the data at rest never leaves Frankfurt. So we must not claim "data never leaves Frankfurt" in a way that's false.
+Answer: support works in just-in-time sessions with LP data masked by default, unmasking needs a client-approved ticket and is time-boxed, and the transfer is covered by the 2021 SCCs plus a transfer impact assessment. Added as GDPR-19, and GDPR-11 now points to it.
+
+[2025-10-08 17:00] @david.le ★
+The Frankfurt Regional Isolation & Zero-Retention AI Architecture Brief is published: component-by-component locations, encryption and keys, the AI controls, the support access model and the DORA Art. 30 mapping. It went to Valmont with the three blocker answers, two days early.
+[attached] eu_frankfurt_data_residency_architecture.pdf
+
+[2025-10-21 09:30] @ryan.miller ★
+Valmont security has signed off and procurement has moved to contract. Six weeks from questionnaire to sign-off, and nearly all of it was the AI and residency questions.
+
+[2025-10-24 16:00] @ryan.miller
+For the next EU deal: start from the master bank, check every last_verified date, and ask Marcus to re-export the egress allow-list before quoting AI-07 or DORA-31.

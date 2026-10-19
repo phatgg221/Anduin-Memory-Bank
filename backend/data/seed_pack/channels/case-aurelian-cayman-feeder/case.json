@@ -1,0 +1,128 @@
+{
+  "caseCode": "CASE-2026-047",
+  "channelSlug": "case-aurelian-cayman-feeder",
+  "title": "Aurelian Crossover Feeder II — Cayman Master-Feeder Onboarding with Digital Asset Custody Annex",
+  "client": "Aurelian Global Management",
+  "fund": "Aurelian Crossover Feeder II (Cayman master-feeder)",
+  "sourceType": "CLIENT_EMAIL",
+  "severity": "HIGH",
+  "dueDate": "2026-12-15",
+  "departmentId": "CLIENT_OPERATIONS",
+  "secondaryDepartmentIds": [
+    "LEGAL_COMPLIANCE",
+    "ENGINEERING_DATA"
+  ],
+  "status": "OPEN",
+  "createdBy": "chloe.nguyen",
+  "leadResolver": "chloe.nguyen",
+  "initialRequestBrief": "Aurelian Global is onboarding \"Aurelian Crossover Feeder II\" (Cayman Master-Feeder). Requires Joint Non-US Institutional LP Signers (W-8BEN-E), Sovereign Wealth Side Letter MFN tiers ($15M threshold), CIMA 10% AML UBO look-through, and a net-new Digital Asset Hardware Wallet Custody Attestation Annex.",
+  "contextTags": {
+    "Jurisdiction": "Cayman Islands",
+    "Workflow": "LP Onboarding",
+    "Fund Structure": "Master-Feeder",
+    "Tax Form": "W-8BEN-E",
+    "Investor Type": "Sovereign Wealth Fund / Family Office",
+    "UBO Threshold": "10% Look-Through"
+  },
+  "createdAt": "2026-10-12T14:00:00+07:00",
+  "comparisonResults": [
+    {
+      "caseCode": "CASE-2025-014",
+      "similarityScore": 94,
+      "howPastCaseWent": "Joint non-US signers deadlocked at the W-8BEN-E step when a co-signer reviewed Part XXIX while the primary elected Active NFFE; UAT sign-off and the initial close slipped 9 days until the v2 schema gave the elections to one Designated Tax Signatory.",
+      "pitfallWarnings": [
+        "Only the Designated Tax Signatory may edit the Chapter 4 and CRS elections; co-signers attest.",
+        "Run joint-signer UAT with concurrent sessions in both signer orders, not one tester driving each signer."
+      ],
+      "deltaItems": [
+        {
+          "category": "Joint non-US signer W-8BEN-E routing",
+          "pastApproach": "State-isolated Step 4: elections owned by the Annex B Designated Tax Signatory, rules on committed state, one SignVault anchor per recipient.",
+          "currentRequirement": "Brief 2.2: two authorised signatories per non-US institution, only one makes the Chapter 4 and CRS elections, both sign in SignVault.",
+          "status": "REUSABLE",
+          "actionRecommendation": "Reuse cayman_fatca_v2.json unchanged apart from parameters; confirm with Aurelian's counsel which signatory clause and annex define the Designated Tax Signatory.",
+          "sourceArtifact": "cayman_fatca_v2.json"
+        },
+        {
+          "category": "Joint-signer onboarding SOP and UAT script",
+          "pastApproach": "SOP with kickoff role mapping, build rules, concurrent-session UAT and the 16-scenario exception matrix.",
+          "currentRequirement": "Same joint-signer population; UAT window 16 Nov to 4 Dec.",
+          "status": "REUSABLE",
+          "actionRecommendation": "Run the SOP's kickoff checklist on 19 Oct and schedule the exception matrix into UAT week 1.",
+          "sourceArtifact": "cayman_joint_signer_onboarding_sop.pdf"
+        },
+        {
+          "category": "Digital Asset Hardware Wallet Custody Attestation Annex (Annex D)",
+          "pastApproach": "No precedent in the Memory Bank.",
+          "currentRequirement": "Brief 2.5: cold-storage attestation, signed-message proof of wallet control, multisig key holders linked to KYC, chain-analytics sanctions screening and Travel Rule undertakings.",
+          "status": "NET_NEW",
+          "actionRecommendation": "Flag for custom legal and operations scoping before quoting; Legal to draft the annex, Engineering to scope per-chain address validation and signature verification.",
+          "sourceArtifact": null
+        }
+      ]
+    },
+    {
+      "caseCode": "CASE-2025-067",
+      "similarityScore": 89,
+      "howPastCaseWent": "Counsel lowered the UBO threshold to 10% with four-tier look-through 48 hours before go-live; a parameterised recursive schema and an in-place draft migration kept the close on time with no investor restarting.",
+      "pitfallWarnings": [
+        "Keep the comparator with the number: \"10% or more\" is inclusive.",
+        "Never edit a threshold in place on a published schema; version and migrate."
+      ],
+      "deltaItems": [
+        {
+          "category": "10% UBO four-tier look-through tree",
+          "pastApproach": "Recursive four-tier repeater; strict 10% inclusive threshold applied to high-risk exposure and multi-tier investors through a scope toggle.",
+          "currentRequirement": "Brief 2.4: 10% or more for every investing entity, traced up to four tiers, without losing progress if the threshold changes.",
+          "status": "REUSABLE",
+          "actionRecommendation": "Reuse ubo_4tier_lookthrough_schema.json and set strict_lookthrough_applies_to to ALL_INVESTORS with an audit entry citing counsel's 30 September 2026 memo.",
+          "sourceArtifact": "ubo_4tier_lookthrough_schema.json"
+        },
+        {
+          "category": "AML compliance guide and section references",
+          "pastApproach": "Guide written for a Luxembourg RAIF under the AML Law of 12 November 2004 and CSSF rules.",
+          "currentRequirement": "Cayman feeder under the AML Regulations and CIMA guidance, as interpreted by Aurelian's Cayman counsel.",
+          "status": "MODIFIED",
+          "actionRecommendation": "Keep the parameter-to-clause method from Section 8 of the guide but re-map every reference to the Cayman subscription agreement; never cite Luxembourg law for a Cayman fund.",
+          "sourceArtifact": "luxembourg_cssf_10pct_aml_compliance_guide.pdf"
+        }
+      ]
+    },
+    {
+      "caseCode": "CASE-2025-052",
+      "similarityScore": 84,
+      "howPastCaseWent": "Two sovereign LPs rejected the investor indemnity and demanded global fee visibility; four redline rounds over three weeks produced a pre-approved immunity reservation clause and MFN fee disclosure brackets at US$25M and US$50M+.",
+      "pitfallWarnings": [
+        "Tag every status-based sovereign concession as an Excluded Provision, or every LP at the MFN threshold can elect it."
+      ],
+      "deltaItems": [
+        {
+          "category": "Sovereign immunity reservation and indemnity carve-out",
+          "pastApproach": "Pre-approved clause-library text: immunities reserved, commercial obligations binding, set-off capped at the value of the Interest, both excluded from the MFN.",
+          "currentRequirement": "Brief 2.3: two sovereign investors who cannot give the indemnity or submit to jurisdiction.",
+          "status": "REUSABLE",
+          "actionRecommendation": "Open negotiations with the Round 3/4 language from the approved redlines instead of a blank draft.",
+          "sourceArtifact": "sovereign_wealth_side_letter_approved_redlines.pdf"
+        },
+        {
+          "category": "MFN fee disclosure bracket",
+          "pastApproach": "First bracket at US$25M-49.99M aggregate commitment; US$50M+ sees all fee terms.",
+          "currentRequirement": "First bracket starts at US$15M aggregate commitment.",
+          "status": "MODIFIED",
+          "actionRecommendation": "Copy mfn_tier_eligibility_matrix.csv, lower the first bracket from US$25M to US$15M and re-check which fee terms each bracket sees; keep affiliate aggregation.",
+          "sourceArtifact": "mfn_tier_eligibility_matrix.csv"
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "aurelian_crossover_feeder_ii_intake_brief.pdf",
+      "source": "aurelian_crossover_feeder_ii_intake_brief.pdf.md",
+      "fileType": "CLIENT_BRIEF",
+      "isReusable": false,
+      "description": "Aurelian's implementation request: fund overview, scope (joint signers, sovereign MFN at US$15M, 10% look-through, digital asset custody annex), timeline and the GP's questions.",
+      "uploadedBy": "chloe.nguyen"
+    }
+  ]
+}

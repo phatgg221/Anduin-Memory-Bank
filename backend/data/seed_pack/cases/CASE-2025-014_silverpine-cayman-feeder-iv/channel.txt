@@ -1,0 +1,67 @@
+# Channel export · #case-silverpine-cayman-iv
+# Case CASE-2025-014 · Silverpine Cayman Feeder IV — Joint Non-US Signer W-8BEN-E Deadlock
+# Times in ICT (UTC+7)
+
+[2025-04-14 23:02] @sarah.tran
+UAT run 3, joint-signer pack: Step 4 (Tax Certifications) is stuck on "Waiting for other signers" for Kestrel Ridge Holdings Ltd (joint signatories). Generate Envelope is greyed out.
+3/3 repro on joint accounts. Single-signer entities and the W-9 tax-exempt path are fine.
+
+[2025-04-14 23:06] @minh.nguyen
+On it. Sarah, exact click order per signer please. Who opened what, and when.
+And which signer is set as primary on the Kestrel account?
+
+[2025-04-14 23:13] @sarah.tran
+1. Co-signer 2 (Kestrel director B) opens Step 4 first. Prefill from the CRS self-cert says PASSIVE_NFFE, so Part XXIX (Substantial U.S. Owners) shows up and they start reviewing it.
+2. Signer 1 (director A) sets Part I line 5 = Active NFFE, completes Part XXV, hits Save & Continue.
+3. Signer 1 gets "Waiting for other signers". Co-signer 2 still has Part XXIX marked required and can't close it. Nobody can move.
+
+[2025-04-14 23:19] @sarah.tran
+Tried admin force-unlock on Step 4 to get past it. Envelope generation then fails: ENVELOPE_PREFLIGHT_FAILED duplicate anchor \ch4_sig\ (recipients 1, 2).
+Screenshots + HAR are on UAT-212. Director A is primary.
+
+[2025-04-14 23:24] @chloe.nguyen
+UAT sign-off is tomorrow and initial close is 04-23. 14 of the 31 LPs on the initial-close list are non-US institutions with two joint signers, roughly $212M of commitments, all sitting at 98% complete.
+How bad is this? I need to know tonight what I tell the GP and Harbourline.
+
+[2025-04-14 23:27] @minh.nguyen
+Give me 30 min before you send anything. Pulling the rule-evaluation trace for Kestrel from staging.
+Repro is deterministic, so it's the rules, not infra.
+
+[2025-04-14 23:36] @chloe.nguyen
+Fallback idea: hide Part XXIX for joint accounts for this close and fix it after?
+
+[2025-04-14 23:39] @minh.nguyen
+No. A passive NFFE has to tick line 40b or fill Part XXIX, and Section 4.3(b) says only the Designated Tax Signatory makes that call. Hiding it just ships bad W-8BEN-Es to the admin.
+Harbourline would bounce every one of them at review.
+
+[2025-04-14 23:44] @sarah.tran
+Same on the 2nd test LP, Pellion Harbour Investments SA (3 signers). Order matters: if the primary commits before anyone else opens Step 4, it goes through.
+Only fails when a co-signer has Part XXIX open first.
+
+[2025-04-14 23:48] @minh.nguyen ★
+Found the UAT blocker: primary signer = Active NFFE while the co-signer still has Part XXIX (Passive NFFE branch) open creates a circular lock on step 4. Fix is the v2 schema.
+Why: v1 evaluates Part XXIX visible/required against each signer's *draft* ch4_status. Co-signer's draft is still PASSIVE_NFFE, so Part XXIX stays required for them. v1 step4.exclusive_lock won't let the primary commit while any collaborator has a Step 4 section open, and drafts only refresh on commit. Each side waits on the other.
+Second bug behind it: v1 puts \ch4_sig\ on both signers, which is Sarah's duplicate-anchor preflight error.
+Fix = cayman_fatca_v2.json: line 5 editable by PRIMARY_TAX_COLLABORATOR only (v2 L36-37), rules evaluated on committed state (v2 L16), Part XXIX keyed on the committed election (v2 L49), lock replaced by step4.completion (v2 L66), separate anchors \ch4_primary_sig\ / \cosigner_1_attest\ (v2 L73-74). Same split as Section 4.3(b) and Annex B para 3.
+[attached] cayman_fatca_v2.json
+
+[2025-04-14 23:56] @minh.nguyen
+@chloe.nguyen on sign-off: not tomorrow. Patch is tonight, but v2 adds the Designated Tax Signatory pick (v2 L21, Annex B para 2) and changes who sees what, so Harbourline has to redo their joint-signer UAT script, and every v1 test draft has to be reset.
+Plus the full regression matrix. Realistically a week, more with Easter in Cayman. Tell the GP the 04-23 close is at risk.
+
+[2025-04-15 00:14] @minh.nguyen
+v2 on staging. Kestrel test data: director A = Designated Tax Signatory. Sarah, rerun with line 5 status x signer order x 2/3 signers.
+
+[2025-04-15 00:31] @sarah.tran
+Kestrel + Pellion pass in both orders. Envelope generated: \ch4_primary_sig\ on W-8BEN-E Part XXX, \cosigner_1_attest\ on Annex B. Co-signer sees line 5 read-only.
+Full regression (48 cases) tomorrow, not tonight.
+
+[2025-04-24 17:20] @minh.nguyen
+UAT signed off today, 9 days late. Harbourline's re-test and the 48-case regression are both green.
+I turned the regression grid into an exception matrix: every Chapter 4 status x signer count x who-opens-first combination, with expected behaviour and the Harbourline review outcome. Use it as the joint-signer test script on the next Cayman feeder instead of writing one from scratch.
+[attached] w8bene_joint_entity_exception_matrix.csv
+
+[2025-05-06 16:05] @minh.nguyen ★
+Initial close went out 05-02 with all 14 joint-signer LPs on v2 and zero bounced W-8BEN-Es at Harbourline review.
+For whoever runs the next Cayman joint-signer onboarding: the SOP covers kickoff (map the sub agreement's signatory clause to roles before building), the Annex B designation check, concurrent-session UAT and the envelope preflight. Schema, matrix and SOP together are the reusable kit.
+[attached] cayman_joint_signer_onboarding_sop.pdf

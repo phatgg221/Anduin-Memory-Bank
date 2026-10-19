@@ -1,0 +1,10 @@
+exception_id,category,dealledger_record,detail,affected_lps,first_seen,suggested_owner
+EX-01,Entity migration,Entity rows typed Trust with multiple Trustee contacts,Trust imported once per trustee contact; commitments duplicated in the Q1 capital call preview,38,2026-10-13,ENGINEERING_DATA
+EX-02,Entity migration,Trust rows with trustees in one free-text field,Trustee names concatenated into the investor legal name,21,2026-10-13,ENGINEERING_DATA
+EX-03,Entity migration,Custodial IRA rows,Custodian recorded as the investor instead of record owner FBO the beneficiary,9,2026-10-13,ENGINEERING_DATA
+EX-04,Wire validation,EUR-funding LPs,Test wire instructions fail validation: received USD differs from called amount by 0.02%-0.09%,27,2026-10-14,CLIENT_OPERATIONS
+EX-05,Wire validation,JPY-funding LPs,Test wire instructions fail validation: received USD differs from called amount by 0.03%-0.11%,14,2026-10-14,CLIENT_OPERATIONS
+EX-06,Wire validation,USD wires via intermediaries,Shortfalls of USD 20-60 consistent with SHA lifting fees,6,2026-10-14,CLIENT_OPERATIONS
+EX-07,Portal invites,Cityline-hosted LP mailboxes,Portal invite emails not received; no bounces logged,31,2026-10-14,CUSTOMER_SUCCESS
+EX-08,Portal invites,Rhone Union-hosted LP mailboxes,Portal invite emails not received; no bounces logged,24,2026-10-14,CUSTOMER_SUCCESS
+EX-09,Portal invites,Dormant LP users (no sign-in for 12+ months),MFA enrolment pending ahead of Q1 tax distributions,118,2026-10-14,CUSTOMER_SUCCESS

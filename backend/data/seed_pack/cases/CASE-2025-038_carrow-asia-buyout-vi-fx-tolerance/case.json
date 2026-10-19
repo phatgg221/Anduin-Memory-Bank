@@ -1,0 +1,89 @@
+{
+  "caseCode": "CASE-2025-038",
+  "channelSlug": "case-carrow-asia-vi-fx",
+  "title": "Carrow Asia Buyout VI — Multi-Currency JPY/EUR Capital Call Wire FX Tolerance",
+  "client": "The Carrow Group",
+  "fund": "Carrow Asia Buyout Partners VI, L.P.",
+  "sourceType": "CS_ESCALATION",
+  "severity": "MEDIUM",
+  "dueDate": "2025-10-15",
+  "departmentId": "CLIENT_OPERATIONS",
+  "secondaryDepartmentIds": [
+    "CUSTOMER_SUCCESS",
+    "LEGAL_COMPLIANCE"
+  ],
+  "status": "RESOLVED",
+  "createdBy": "chloe.nguyen",
+  "leadResolver": "minh.nguyen",
+  "initialRequestBrief": "Carrow's investor relations team escalated Capital Call #1 for Carrow Asia Buyout Partners VI (15% of commitments, due 25 July 2025). The administrator's reconciliation flagged 23 of 61 limited partners as underfunded and the portal sent them automated \"capital call outstanding\" reminders. Most of the flagged LPs are Japanese and European institutions that wired from JPY or EUR accounts, short by US$150-400 on calls of US$1.2-6M, and at least one has complained to the GP directly. The GP wants the reminders stopped, the genuine shortfalls separated from the noise, and a fix in place before Call #2 in October.",
+  "contextTags": {
+    "Region": "APAC & EU",
+    "Workflow": "Capital Call Notices",
+    "Currencies": "JPY / EUR / USD",
+    "Fund Structure": "USD-denominated LP",
+    "Counterparty": "Fund Administrator"
+  },
+  "summary": "Non-US LPs wiring capital in JPY and EUR were falsely flagged as underfunded because spot FX moved between instruction and SWIFT settlement, and intermediary fees under SHA charges shaved the USD received. A GP-adopted ±0.25% FX settlement tolerance with a true-up ledger, plus a dual-currency notice with intermediary routing and OUR charges, fixed it.",
+  "howItWent": "Reconciliation for Call #1 matched to the cent, so 23 of 61 limited partners were marked UNDERFUNDED and received automated reminders three days after the due date. 22 of them had paid in full in their own currency: 48-hour USD/JPY and EUR/USD moves explained US$150-400 variances, and four USD wires lost US$15-65 to intermediary lifting fees. Hokuto Mutual's treasury head complained to the GP directly, and Customer Success had to pause reminders and apologise personally. Minh Nguyen sized a ±0.25% band from 18 months of call data, and Legal anchored it in the LPA's de minimis clause (Section 3.4(e)) so the GP, not the administrator, adopts it. The policy separated the one genuine 3.0% shortfall, which still got its default notice on time. A new dual-currency notice template then cut routing delays before Call #2.",
+  "resolutionSteps": [
+    "Institute a ±0.25% FX Settlement Tolerance Buffer Policy, adopted by the GP under the LPA's de minimis clause and acknowledged by the fund administrator.",
+    "Post every variance inside the band to a per-LP true-up ledger settled on the next capital call; credit overpayments below USD 1,000 instead of refunding them.",
+    "Change the reconciliation rule to WITHIN_TOLERANCE / OUTSIDE_TOLERANCE on a percentage of the amount called, and suppress automated reminders only for WITHIN_TOLERANCE.",
+    "Standardize dual-currency wire instruction notices: USD amount due, indicative JPY/EUR amount, printed tolerance band, intermediary bank SWIFT routing table and an OUR charges instruction for MT103 field 71A."
+  ],
+  "pitfalls": [
+    {
+      "warning": "Never use a flat dollar threshold for FX noise: the same spot move scales with the call size. Use a percentage of the amount called.",
+      "author": "minh.nguyen",
+      "severity": "MEDIUM",
+      "reference": "Chat #L18"
+    },
+    {
+      "warning": "A tolerance must never hide a genuine shortfall. Keep the band an order of magnitude below the smallest real shortfall and send the LPA default notice for anything outside it.",
+      "author": "minh.nguyen",
+      "severity": "HIGH",
+      "reference": "Chat #L19"
+    },
+    {
+      "warning": "The GP must adopt the tolerance under an LPA clause (here Section 3.4(e)); an administrator has no authority to waive unpaid capital on its own.",
+      "author": "elena.rostova",
+      "severity": "HIGH",
+      "reference": "Chat #L34"
+    },
+    {
+      "warning": "Automated \"capital call outstanding\" reminders to institutional LPs are reputationally expensive; pause them as soon as a reconciliation looks systematically wrong.",
+      "author": "chloe.nguyen",
+      "severity": "LOW",
+      "reference": "Chat #L26"
+    }
+  ],
+  "durationDays": 17,
+  "createdAt": "2025-07-28T10:00:00+07:00",
+  "resolvedAt": "2025-08-14T18:00:00+07:00",
+  "artifacts": [
+    {
+      "file": "apac_multicurrency_wire_notice_template.pdf",
+      "source": "apac_multicurrency_wire_notice_template.pdf.md",
+      "fileType": "TEMPLATE_PDF",
+      "isReusable": true,
+      "description": "Dual-currency capital call notice: USD amount due, indicative JPY/EUR amount, printed ±0.25% band, intermediary routing table by remitting currency and OUR charges instruction.",
+      "uploadedBy": "minh.nguyen"
+    },
+    {
+      "file": "fx_settlement_tolerance_ops_policy.md",
+      "source": null,
+      "fileType": "POLICY_MD",
+      "isReusable": true,
+      "description": "GP-adopted ±0.25% FX settlement tolerance: evidence for the band, true-up ledger, reconciliation rule and reuse checklist.",
+      "uploadedBy": "minh.nguyen"
+    },
+    {
+      "file": "carrow_call1_reconciliation_extract.csv",
+      "source": null,
+      "fileType": "MATRIX_CSV",
+      "isReusable": false,
+      "description": "Call #1 reconciliation extract: 10 non-US LPs with remitting currency, variance, MT103 charges code, v1 status and status under the policy.",
+      "uploadedBy": "chloe.nguyen"
+    }
+  ]
+}

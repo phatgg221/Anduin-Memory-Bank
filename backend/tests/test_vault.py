@@ -9,15 +9,15 @@ INSERT INTO departments (id, code, name) VALUES
 CASES = """
 INSERT INTO case_records (id, case_code, channel_slug, title, department_id, secondary_department_ids, status,
                           initial_request_brief, resolved_at) VALUES
-  ('00000000-0000-0000-0000-000000000014', 'CASE-2025-014', 'case-sequoia', 'Sequoia joint signers',
+  ('00000000-0000-0000-0000-000000000014', 'CASE-2025-014', 'case-silverpine', 'Silverpine joint signers',
    'CLIENT_OPERATIONS', '[]', 'RESOLVED', 'brief', now()),
   ('00000000-0000-0000-0000-000000000052', 'CASE-2025-052', 'case-sovereign', 'Sovereign side letter',
    'LEGAL_COMPLIANCE', '["CLIENT_OPERATIONS"]', 'RESOLVED', 'brief', now() - interval '1 day'),
-  ('00000000-0000-0000-0000-000000000047', 'CASE-2026-047', 'case-apollo', 'Apollo (open)', 'CLIENT_OPERATIONS',
+  ('00000000-0000-0000-0000-000000000047', 'CASE-2026-047', 'case-aurelian', 'Aurelian (open)', 'CLIENT_OPERATIONS',
    '[]', 'OPEN', 'brief', NULL);
 INSERT INTO case_artifacts (id, case_id, file_name, file_type, content_type, size_bytes, is_reusable, minio_object_key)
 VALUES ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-000000000014', 'cayman_fatca_v2.json',
-        'JSON_SCHEMA', 'application/json', 10, true, 'cases/case-sequoia/artifacts/cayman_fatca_v2.json')
+        'JSON_SCHEMA', 'application/json', 10, true, 'cases/case-silverpine/artifacts/cayman_fatca_v2.json')
 """
 
 
@@ -70,7 +70,7 @@ def test_artifact_link_is_presigned_and_404s_for_unknown(client, sql):
     sql(CASES)
     link = client.post("/api/vault/artifacts/00000000-0000-0000-0000-0000000000a1/link", headers=headers)
     assert link.status_code == 200
-    assert "cases/case-sequoia/artifacts/cayman_fatca_v2.json" in link.json()["url"]
+    assert "cases/case-silverpine/artifacts/cayman_fatca_v2.json" in link.json()["url"]
     assert "X-Amz-Signature" in link.json()["url"]
     missing = client.post("/api/vault/artifacts/00000000-0000-0000-0000-0000000000ff/link", headers=headers)
     assert missing.status_code == 404

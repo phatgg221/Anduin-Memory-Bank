@@ -1,0 +1,49 @@
+# Channel export · #case-carrow-asia-vi-fx
+# Case CASE-2025-038 · Carrow Asia Buyout VI — Multi-Currency JPY/EUR Capital Call Wire FX Tolerance
+# Times in ICT (UTC+7)
+
+[2025-07-28 10:12] @chloe.nguyen
+Escalation from Carrow IR. Call #1 (15%, due Fri 25 Jul) reconciliation from Tidewater flagged 23 of 61 LPs as UNDERFUNDED, and the portal auto-sent "capital call outstanding" reminders this morning.
+19 of the 23 wired from JPY or EUR accounts. Shortfalls are $150-$400 on calls of $1.2M-$6M. Hokuto Mutual's treasury head has already called the GP. Extract attached.
+[attached] carrow_call1_reconciliation_extract.csv
+
+[2025-07-28 10:31] @minh.nguyen
+These aren't shortfalls, it's FX. The notice says "remit USD 6,000,000.00". Hokuto's bank converted JPY at the 23 Jul spot and the SWIFT wire settled on the 25th at a different rate. Our recon matches to the cent, so anything short is UNDERFUNDED.
+The 4 pure-USD ones (e.g. CR-07 Taipei Harbour, -$45) are intermediary lifting fees: they sent with SHA in MT103 field 71A, so a correspondent took its cut.
+
+[2025-07-28 10:44] @chloe.nguyen
+Can we just switch off the reminders for anything under $500?
+
+[2025-07-28 10:52] @minh.nguyen
+Not a flat dollar number. $500 is fine on a $1.2M call, but on a 25% call the same FX move is well over $1,000. It has to be a percentage of the call, and a written policy Tidewater can apply, because the LPA default clock runs on unpaid amounts.
+It also must not hide CR-08 Mirae Ocean: that one is $60,000 short (3.0%). That's a real shortfall.
+
+[2025-07-28 11:20] @elena.rostova
+LPA 3.4(a): a partner defaults after failing to pay within 10 Business Days of a second notice. 3.4(e) lets the GP treat de minimis shortfalls as paid if they're trued up in the next Capital Contribution.
+So a tolerance works if the GP adopts it in writing and the variance is carried forward, not forgiven. Until then, no more reminder emails please.
+
+[2025-07-28 14:05] @chloe.nguyen
+Reminders paused for the 22 FX/fee cases; Mirae still gets its notice. Personal apologies sent to Hokuto and Van Arkel. The GP agrees in principle, but Tidewater wants a number.
+
+[2025-07-29 16:40] @minh.nguyen
+Pulled 18 months of calls across 4 APAC/EU funds. Worst 48h FX variance on a JPY/EUR wire: 0.11% of the call. 99th percentile: 0.07%. Biggest single lifting fee: $65. Smallest genuine shortfall: 1.8%.
+Proposal: ±0.25% of the amount called. That's over 2x the worst FX move and still an order of magnitude under a real shortfall. Variance goes to a true-up ledger, settled on the next call. Draft attached.
+[attached] fx_settlement_tolerance_ops_policy.md
+
+[2025-07-31 10:15] @elena.rostova
+Reviewed with GP counsel. Two edits: section 3 must say the GP adopts the treatment under LPA 3.4(e), not that the administrator "waives" anything. And overpayments below USD 1,000 are credited to the next call, not refunded. Otherwise fine.
+
+[2025-08-01 17:30] @minh.nguyen ★
+Policy v1.1 adopted by the GP and acknowledged by Tidewater. Recon rule: WITHIN_TOLERANCE when |variance| <= 0.25% of the call; reminders suppressed only for those; every variance posted to the true-up ledger and listed on the GP's post-call report.
+Re-ran Call #1: 22 of 23 now WITHIN_TOLERANCE. Mirae stays OUTSIDE_TOLERANCE and its 3.4(a) notice went out on time.
+
+[2025-08-05 11:00] @chloe.nguyen
+Next one before Call #2 in October: Tidewater says 6 wires came through intermediaries that weren't on our notice, which added a day. Japanese banks route the USD leg through their own New York correspondents. Can the notice tell them which route to use?
+
+[2025-08-12 15:20] @minh.nguyen ★
+New dual-currency notice template. It shows the USD amount due plus an indicative JPY/EUR amount at the notice-date rate, prints the ±0.25% band, and adds an intermediary routing table per remitting currency (field 56A for the USD leg, 57A for our bank). It also instructs OUR in field 71A, so lifting fees stop eating the principal.
+Tidewater has approved it. Use it for any fund with a non-USD LP base.
+[attached] apac_multicurrency_wire_notice_template.pdf
+
+[2025-08-14 17:10] @chloe.nguyen
+Carrow IR confirmed Call #2 goes out on the new template, and Hokuto's treasury team said thanks for the indicative JPY line. Closing the case.

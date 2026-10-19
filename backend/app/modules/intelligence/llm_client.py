@@ -193,7 +193,7 @@ def _openrouter_headers() -> dict[str, str]:
         raise LLMError("OPENROUTER_API_KEY is not set")
     return {
         "Authorization": f"Bearer {settings.openrouter_api_key}",
-        "X-Title": "Dejavu by Anduin",
+        "X-Title": "Dejavu by Corvane",
         "HTTP-Referer": "http://localhost:3000",
     }
 

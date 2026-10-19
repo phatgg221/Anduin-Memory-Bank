@@ -21,7 +21,7 @@ export function AuthFrame({ children }: { children: ReactNode }) {
           </p>
         </div>
         <div className="flex items-end justify-between">
-          <span className="micro-label text-white/50">Anduin · Agent in the Shell 2026</span>
+          <span className="micro-label text-white/50">Agent in the Shell · 2026</span>
           <IsometricStack className="w-36 opacity-90" />
         </div>
       </aside>

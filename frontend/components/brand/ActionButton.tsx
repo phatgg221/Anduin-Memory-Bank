@@ -11,7 +11,7 @@ type ActionButtonProps = Omit<ComponentProps<typeof Button>, "variant" | "size" 
   icon?: keyof typeof ICONS;
 };
 
-/** `[ Run Dejavu Analysis  [↗] ]` — Anduin's action button with the boxed arrow. */
+/** `[ Run Dejavu Analysis  [↗] ]` — Corvane's action button with the boxed arrow. */
 export function ActionButton({ tone = "primary", icon = "arrow", className, children, ...props }: ActionButtonProps) {
   const Icon = ICONS[icon];
   const primary = tone === "primary";

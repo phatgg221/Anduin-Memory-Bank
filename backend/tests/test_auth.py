@@ -4,7 +4,7 @@ from app.core.config import settings
 from app.modules.auth.router import REFRESH_COOKIE
 
 REGISTER = {
-    "email": "Minh.Nguyen@Anduin.example",
+    "email": "Minh.Nguyen@Corvane.example",
     "name": "Minh Nguyen",
     "password": "cayman-feeder-iv",
     "confirm_password": "cayman-feeder-iv",
@@ -32,7 +32,7 @@ def test_register_signs_in_and_sets_httponly_refresh_cookie(client):
     body = response.json()
     assert body["token_type"] == "bearer"
     assert body["expires_in"] == settings.access_token_ttl_minutes * 60
-    assert body["user"]["email"] == "minh.nguyen@anduin.example"  # normalised
+    assert body["user"]["email"] == "minh.nguyen@corvane.example"  # normalised
     assert body["user"]["name"] == "Minh Nguyen"
     assert "password" not in str(body["user"]).lower()
 
@@ -49,7 +49,7 @@ def test_register_signs_in_and_sets_httponly_refresh_cookie(client):
 
 def test_register_rejects_duplicate_email_case_insensitively(client):
     assert register(client).status_code == 201
-    response = register(client, email="MINH.NGUYEN@anduin.example")
+    response = register(client, email="MINH.NGUYEN@corvane.example")
     assert response.status_code == 409
 
 
@@ -69,12 +69,12 @@ def test_register_validates_password_confirmation_and_length(client):
 def test_login_uses_one_message_for_wrong_password_and_unknown_email(client):
     register(client)
     wrong = client.post("/api/auth/login", json={"email": REGISTER["email"], "password": "not-it"})
-    unknown = client.post("/api/auth/login", json={"email": "nobody@anduin.example", "password": "not-it"})
+    unknown = client.post("/api/auth/login", json={"email": "nobody@corvane.example", "password": "not-it"})
 
     assert wrong.status_code == unknown.status_code == 401
     assert wrong.json() == unknown.json() == {"detail": "Invalid email or password"}
 
-    ok = client.post("/api/auth/login", json={"email": "MINH.nguyen@anduin.example", "password": REGISTER["password"]})
+    ok = client.post("/api/auth/login", json={"email": "MINH.nguyen@corvane.example", "password": REGISTER["password"]})
     assert ok.status_code == 200
     assert client.cookies.get(REFRESH_COOKIE)
 
@@ -86,7 +86,7 @@ def test_refresh_rotates_the_refresh_token(client):
     response = client.post("/api/auth/refresh")
 
     assert response.status_code == 200
-    assert response.json()["user"]["email"] == "minh.nguyen@anduin.example"
+    assert response.json()["user"]["email"] == "minh.nguyen@corvane.example"
     second = client.cookies.get(REFRESH_COOKIE)
     assert second and second != first
     assert client.get("/api/auth/me", headers=bearer(response.json()["access_token"])).status_code == 200
@@ -155,5 +155,5 @@ def test_register_with_role_and_department(client, sql):
     assert user["primary_department_id"] == user["active_department_id"] == "LEGAL_COMPLIANCE"
     assert user["role"] == "MEMBER"  # not self-assignable
 
-    unknown = register(client, email="other@anduin.example", department_id="NOPE")
+    unknown = register(client, email="other@corvane.example", department_id="NOPE")
     assert unknown.status_code == 422

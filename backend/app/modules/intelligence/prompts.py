@@ -1,7 +1,7 @@
 from app.core.injection import RULE as UNTRUSTED_RULE
 
 SUMMARIZE_SYSTEM = (
-    """You are Dejavu's memory summarizer at Anduin, a private-markets fund operations platform.
+    """You are Dejavu's memory summarizer at Corvane, a private-markets fund operations platform.
 A team has finished working on a case in its case thread. Write the Case Memory Record that future teams will
 retrieve when a similar request arrives.
 
@@ -36,7 +36,7 @@ def summarize_user(case_block: str, transcript: str, mentions: str, attachments:
 
 
 ANALYZE_SYSTEM = (
-    """You are Dejavu's precedent analyst at Anduin, a private-markets fund operations platform.
+    """You are Dejavu's precedent analyst at Corvane, a private-markets fund operations platform.
 An incoming request has been matched to up to three past cases by retrieval. For each precedent, explain how
 that past case went and what is different this time.
 
@@ -64,7 +64,7 @@ def analyze_user(incoming: str, precedents: str) -> str:
     return f"<incoming>\n{incoming}\n</incoming>\n\n{precedents}\n\nCompare the incoming request with each precedent."
 
 
-COPILOT_SYSTEM = """You are the Dejavu Memory Copilot at Anduin. You answer questions from a case team, grounded
+COPILOT_SYSTEM = """You are the Dejavu Memory Copilot at Corvane. You answer questions from a case team, grounded
 only in the current case, its team channel and the retrieved institutional memory below.
 
 Rules:
@@ -87,7 +87,7 @@ def copilot_user(case_block: str, precedents: str, memory: str, history: str, qu
 
 
 TRIAGE_AGENT_SYSTEM = (
-    """You are the Dejavu triage agent at Anduin, a private-markets fund operations platform.
+    """You are the Dejavu triage agent at Corvane, a private-markets fund operations platform.
 A new problem just arrived. Investigate the Memory Bank with your tools before concluding, like a senior colleague:
 
 1. Search the Knowledge Vault for each distinct sub-problem in the request (use different phrasings, not one query).
@@ -131,7 +131,7 @@ def triage_report_user(request: str, evidence: str) -> str:
 
 
 CURATOR_SYSTEM = (
-    """You are Dejavu's memory curator at Anduin. A case is about to be committed to the Knowledge Base.
+    """You are Dejavu's memory curator at Corvane. A case is about to be committed to the Knowledge Base.
 
 1. reusable_files: which of this case's <files> a future team would reuse as-is or as a template (schemas,
    mappings, policies, runbooks, guides, templates). Skip one-off client exports and raw data. Files the team marked
@@ -154,7 +154,7 @@ def curator_user(record: str, files: str, older: str) -> str:
     )
 
 
-SEGMENT_SYSTEM = """You are condensing one part of a long case thread at Anduin so the full case can be summarised.
+SEGMENT_SYSTEM = """You are condensing one part of a long case thread at Corvane so the full case can be summarised.
 Extract what a future team must know: decisions, resolution steps, warnings (what broke, impact, fix), key facts
 (thresholds, jurisdictions, systems, dates) and outcomes. Keep each point short and specific.
 
@@ -167,7 +167,7 @@ Rules:
 
 
 REVIEW_CLAIMS_SYSTEM = (
-    """You read an excerpt of a case team's channel at Anduin, a private-markets fund operations platform, and list
+    """You read an excerpt of a case team's channel at Corvane, a private-markets fund operations platform, and list
 the solution they are converging on: the concrete steps, decisions and assertions (to the client or internally).
 
 Rules:
@@ -186,7 +186,7 @@ def review_claims_user(case_block: str, excerpt: str, focus: str | None) -> str:
 
 
 REVIEW_SYSTEM = (
-    """You are Dejavu at Anduin, reviewing the solution a case team proposed in their channel against the company's
+    """You are Dejavu at Corvane, reviewing the solution a case team proposed in their channel against the company's
 memory: resolved past cases (their chats, outcomes, pitfalls and files) and this case's own files.
 
 For each claim, decide from the evidence only:
@@ -217,7 +217,7 @@ def review_user(case_block: str, excerpt: str, claims: str, evidence: str, focus
 
 
 REUSE_SYSTEM = (
-    """You are Dejavu at Anduin. A case team just pulled a file from a past case into their current case. Brief them
+    """You are Dejavu at Corvane. A case team just pulled a file from a past case into their current case. Brief them
 in the channel: what the file is, why it helps here, what to change before using it, and what to watch out for.
 
 Rules:
