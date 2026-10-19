@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, LogOut } from "lucide-react";
+import { ChevronDown, Compass, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,6 +15,7 @@ interface UserMenuProps {
   name: string;
   email: string;
   onSignOut: () => void;
+  onShowGuide: () => void;
   isSigningOut: boolean;
 }
 
@@ -23,7 +24,7 @@ function initials(name: string): string {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? (parts.at(-1)?.[0] ?? "") : "")).toUpperCase();
 }
 
-export function UserMenu({ name, email, onSignOut, isSigningOut }: UserMenuProps) {
+export function UserMenu({ name, email, onSignOut, onShowGuide, isSigningOut }: UserMenuProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -44,6 +45,10 @@ export function UserMenu({ name, email, onSignOut, isSigningOut }: UserMenuProps
           <span className="truncate text-xs font-normal text-muted-foreground">{email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onShowGuide}>
+          <Compass />
+          Product guide
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={onSignOut} disabled={isSigningOut}>
           <LogOut />
           {isSigningOut ? "Signing out…" : "Sign out"}

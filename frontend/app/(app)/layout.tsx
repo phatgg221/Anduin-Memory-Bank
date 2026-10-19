@@ -3,10 +3,12 @@
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
 import { SessionSplash } from "@/components/auth/SessionSplash";
+import { OnboardingGuide } from "@/components/shell/OnboardingGuide";
 import { DepartmentSwitcher } from "@/components/shell/DepartmentSwitcher";
 import { RoutedTopNav } from "@/components/shell/RoutedTopNav";
 import { TopNav, type NavItem } from "@/components/shell/TopNav";
 import { UserMenu } from "@/components/shell/UserMenu";
+import { useOnboarding } from "@/lib/useOnboarding";
 import { useLogout, useSession } from "@/store/auth";
 import { useDepartments, useSetActiveDepartment } from "@/store/org";
 
@@ -33,6 +35,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const signedOut = session.isSuccess && session.data === null;
   const departments = useDepartments(Boolean(user));
   const setDepartment = useSetActiveDepartment();
+  const onboarding = useOnboarding(user?.id);
 
   useEffect(() => {
     if (signedOut) router.replace("/login");
@@ -48,7 +51,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           error={setDepartment.error?.message}
         />
       )}
-      <UserMenu name={user.name} email={user.email} onSignOut={() => logout.mutate()} isSigningOut={logout.isPending} />
+      <UserMenu
+        name={user.name}
+        email={user.email}
+        onSignOut={() => logout.mutate()}
+        onShowGuide={onboarding.show}
+        isSigningOut={logout.isPending}
+      />
     </>
   );
 
@@ -64,6 +73,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </div>
       </main>
+      {user && <OnboardingGuide open={onboarding.open} userName={user.name} onDismiss={onboarding.dismiss} />}
     </>
   );
 }
