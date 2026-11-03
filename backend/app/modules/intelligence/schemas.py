@@ -10,6 +10,22 @@ from pydantic import BaseModel, BeforeValidator, Field, StringConstraints
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
+def _clip(limit: int) -> BeforeValidator:
+    """Over-long model output is cut to size instead of failing the whole job."""
+    return BeforeValidator(lambda value: value[:limit] if isinstance(value, str | list) else value)
+
+
+def _or_empty(value):
+    return "" if value is None else value
+
+
+def _status(value):
+    if not isinstance(value, str):
+        return value
+    value = value.strip().upper().replace(" ", "_").replace("-", "_")
+    return {"REUSE": "REUSABLE", "MODIFY": "MODIFIED", "NEW": "NET_NEW"}.get(value, value)
+
+
 class PitfallDraft(BaseModel):
     warning: Annotated[str, StringConstraints(strip_whitespace=True, min_length=10, max_length=600)] = Field(
         description="A concrete warning for the next team: what broke or nearly broke, the impact, and how to avoid it."
@@ -96,13 +112,19 @@ class ThreadContext:
 
 
 class DeltaItemDraft(BaseModel):
-    category: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=120)] = Field(
+    category: Annotated[str, _clip(120), StringConstraints(strip_whitespace=True, min_length=3)] = Field(
         description="The operational dimension, e.g. 'W-8BEN-E joint-signer routing'."
     )
-    past_approach: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1200)]
-    current_requirement: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1200)]
-    status: Literal["REUSABLE", "MODIFIED", "NET_NEW"]
-    action_recommendation: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1200)]
+    past_approach: Annotated[str, BeforeValidator(_or_empty), _clip(1200), StringConstraints(strip_whitespace=True)] = (
+        ""
+    )
+    current_requirement: Annotated[
+        str, BeforeValidator(_or_empty), _clip(1200), StringConstraints(strip_whitespace=True)
+    ]
+    status: Annotated[Literal["REUSABLE", "MODIFIED", "NET_NEW"], BeforeValidator(_status)]
+    action_recommendation: Annotated[
+        str, BeforeValidator(_or_empty), _clip(1200), StringConstraints(strip_whitespace=True)
+    ]
     source_artifact: str | None = Field(
         default=None,
         description="Exact file name from that precedent's <artifact> list, or null (always null for NET_NEW).",
@@ -111,15 +133,15 @@ class DeltaItemDraft(BaseModel):
 
 class PrecedentComparisonDraft(BaseModel):
     case_code: str = Field(description="One of the precedent case codes given in the context.")
-    how_past_case_went: Annotated[str, StringConstraints(strip_whitespace=True, min_length=10, max_length=2000)]
-    pitfall_warnings: list[Annotated[str, StringConstraints(strip_whitespace=True, max_length=800)]] = Field(
-        default_factory=list, max_length=6
-    )
-    delta_items: list[DeltaItemDraft] = Field(default_factory=list, max_length=8)
+    how_past_case_went: Annotated[str, _clip(2000), StringConstraints(strip_whitespace=True, min_length=10)]
+    pitfall_warnings: Annotated[
+        list[Annotated[str, _clip(800), StringConstraints(strip_whitespace=True)]], _clip(6)
+    ] = Field(default_factory=list, description="At most 6.")
+    delta_items: Annotated[list[DeltaItemDraft], _clip(8)] = Field(default_factory=list, description="At most 8.")
 
 
 class CaseComparisonReport(BaseModel):
-    comparisons: list[PrecedentComparisonDraft] = Field(min_length=1, max_length=3)
+    comparisons: Annotated[list[PrecedentComparisonDraft], _clip(3)] = Field(min_length=1)
 
 
 @dataclass
@@ -170,7 +192,7 @@ class CopilotAnswerDraft(BaseModel):
 
 # --- TRIAGE AGENT ------------------------------------------------------------------------------------------------
 
-Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=600)]
+Text = Annotated[str, _clip(600), StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class MissingInfoDraft(BaseModel):
@@ -192,14 +214,14 @@ class DuplicateDraft(BaseModel):
 class TriageReportDraft(BaseModel):
     """The agent's synthesis after investigating. Numbers, scores and IDs are checked or replaced by code."""
 
-    summary: Annotated[str, StringConstraints(strip_whitespace=True, min_length=20, max_length=1500)] = Field(
+    summary: Annotated[str, _clip(1500), StringConstraints(strip_whitespace=True, min_length=20)] = Field(
         description="Why the top precedent matches, what is different this time, and the recommended first move."
     )
-    risk_level: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
-    risk_reasons: list[Text] = Field(default_factory=list, max_length=5)
-    missing_info: list[MissingInfoDraft] = Field(default_factory=list, max_length=6)
-    team: list[TeamPickDraft] = Field(default_factory=list, max_length=5)
-    duplicates: list[DuplicateDraft] = Field(default_factory=list, max_length=3)
+    risk_level: Annotated[Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"], BeforeValidator(_status)]
+    risk_reasons: Annotated[list[Text], _clip(5)] = Field(default_factory=list)
+    missing_info: Annotated[list[MissingInfoDraft], _clip(6)] = Field(default_factory=list)
+    team: Annotated[list[TeamPickDraft], _clip(5)] = Field(default_factory=list)
+    duplicates: Annotated[list[DuplicateDraft], _clip(3)] = Field(default_factory=list)
 
 
 # --- MEMORY CURATOR ----------------------------------------------------------------------------------------------
@@ -237,11 +259,6 @@ class SegmentNotes(BaseModel):
 
 
 REVIEW_VERDICTS = ("SUPPORTED", "CONFLICTS", "NO_PRECEDENT", "MISSING")
-
-
-def _clip(limit: int) -> BeforeValidator:
-    """Over-long model output is cut to size instead of failing the whole review."""
-    return BeforeValidator(lambda value: value[:limit] if isinstance(value, str | list) else value)
 
 
 def _verdict(value):

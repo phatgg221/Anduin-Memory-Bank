@@ -75,6 +75,7 @@ async def complete_json[T: BaseModel](
         try:
             return schema.model_validate_json(_strip_fences(raw))
         except ValidationError as again:
+            logger.warning("LLM output failed %s validation again: %s", schema.__name__, again)
             raise LLMError(
                 f"The model never returned valid {schema.__name__} JSON: {again.error_count()} errors"
             ) from again
