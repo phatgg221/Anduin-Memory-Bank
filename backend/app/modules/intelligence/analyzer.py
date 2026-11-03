@@ -1,11 +1,13 @@
 """Incoming request → ranked top-3 precedents → structured delta per precedent, guarded."""
 
+import logging
 import re
 from collections.abc import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import injection
+from app.core.config import settings
 from app.modules.cases import service as cases
 from app.modules.intelligence import llm_client
 from app.modules.intelligence.prompts import ANALYZE_SYSTEM, analyze_user
@@ -16,6 +18,8 @@ from app.modules.intelligence.schemas import (
     PrecedentComparisonDraft,
     PrecedentContext,
 )
+
+logger = logging.getLogger("uvicorn.error")
 
 ANALYZE_STEPS = (
     "Reading the incoming request",
@@ -33,6 +37,10 @@ WORD = re.compile(r"[a-z0-9%$.]+")
 
 
 class NoPrecedentsError(Exception):
+    pass
+
+
+class EmptyComparisonError(ValueError):
     pass
 
 
@@ -112,12 +120,18 @@ async def compare(
         + "\n</precedent>"
         for i, p in enumerate(precedents, 1)
     )
+    prompt = analyze_user(incoming_block, precedent_blocks)
+    try:
+        report = await llm_client.complete_json(
+            ANALYZE_SYSTEM, prompt, CaseComparisonReport, fake=lambda: _fake_report(precedents), model=model
+        )
+        return guard_report(report, precedents)
+    except (llm_client.LLMError, EmptyComparisonError) as error:
+        if not model or model == settings.llm_model:
+            raise
+        logger.warning("Comparison with %s failed (%s), retrying with %s", model, error, settings.llm_model)
     report = await llm_client.complete_json(
-        ANALYZE_SYSTEM,
-        analyze_user(incoming_block, precedent_blocks),
-        CaseComparisonReport,
-        fake=lambda: _fake_report(precedents),
-        model=model,
+        ANALYZE_SYSTEM, prompt, CaseComparisonReport, fake=lambda: _fake_report(precedents)
     )
     return guard_report(report, precedents)
 
@@ -125,7 +139,7 @@ async def compare(
 def guard_report(report: CaseComparisonReport, precedents: list[PrecedentContext]) -> tuple[list[dict], list[str]]:
     """Retrieval decides which cases and scores; the model only fills text. Unverifiable files are dropped."""
     warnings: list[str] = []
-    drafts = {c.case_code: c for c in report.comparisons}
+    drafts = {c.case_code.strip().upper(): c for c in report.comparisons}
     for code in set(drafts) - {p.case_code for p in precedents}:
         warnings.append(f"Dropped a comparison for {code}: it wasn't one of the retrieved precedents.")
     results = []
@@ -180,7 +194,7 @@ def guard_report(report: CaseComparisonReport, precedents: list[PrecedentContext
         for i in r["deltaItems"]:
             i.pop("_net_new")
     if not any(r["deltaItems"] for r in results):
-        raise ValueError("The comparison produced no delta items")
+        raise EmptyComparisonError("The comparison produced no delta items")
     return results, warnings
 
 

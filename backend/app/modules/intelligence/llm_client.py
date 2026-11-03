@@ -65,7 +65,7 @@ async def complete_json[T: BaseModel](
         return schema.model_validate_json(_strip_fences(raw))
     except ValidationError as error:
         # One repair attempt: show the model its own output and the validation errors.
-        logger.warning("LLM output failed %s validation, retrying once: %s", schema.__name__, error.error_count())
+        logger.warning("LLM output failed %s validation, retrying once: %s", schema.__name__, error)
         repair = (
             f"{user}\n\nYour previous answer did not match the JSON schema.\n"
             f"<previous_answer>\n{raw}\n</previous_answer>\n"
@@ -264,7 +264,16 @@ async def _gemini_embedding(text: str) -> list[float]:
 
 
 def _strip_fences(raw: str) -> str:
-    return FENCE.sub("", raw.strip())
+    """The JSON object itself, even when the model wraps it in fences or prose."""
+    text = FENCE.sub("", raw.strip())
+    start = text.find("{")
+    if start >= 0:
+        try:
+            _, end = json.JSONDecoder().raw_decode(text, start)
+            return text[start:end]
+        except json.JSONDecodeError:
+            pass
+    return text
 
 
 def _fake_embedding(text: str) -> list[float]:
